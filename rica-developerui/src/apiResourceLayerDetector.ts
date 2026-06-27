@@ -100,8 +100,8 @@ export class APIResourceLayerAnalyzer {
 
         // Analyze each method
         for (const method of cls.methods) {
-          // Skip abstract methods
           if (method.methodType === 'abstract') continue;
+          const isEndpoint = method.accessModifier !== 'private';
 
           // Check method calls
           for (const call of method.calledMethods) {
@@ -185,60 +185,66 @@ export class APIResourceLayerAnalyzer {
           }
 
           // Check for exposing internal entities in return types
-          const exposesInternalEntity = this.checkForExposingInternalEntity(method);
-          if (exposesInternalEntity) {
-            violations.push({
-              type: 'exposing-internal-entity',
-              message: `API resource method '${method.name}' returns internal entity type '${exposesInternalEntity}'. Consider using DTOs for API responses to encapsulate internal structure.`,
-              className: cls.fullyQualifiedName,
-              methodName: method.name,
-              lineNumber: method.body?.linesOfCode,
-              range: method.startLine ? {
-                start: { line: method.startLine, character: method.startColumn || 0 },
-                end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
-              } : undefined,
-              severity: 'warning',
-              filePath: ast.filePath,
-              explanation: 'Your API resource method returns an internal entity type directly in its response. This leaks your persistence/domain model to external consumers — use Data Transfer Objects (DTOs) to decouple your internal schema from your API contract so changes to entities do not break clients.'
-            });
+          if (isEndpoint) {
+            const exposesInternalEntity = this.checkForExposingInternalEntity(method);
+            if (exposesInternalEntity) {
+              violations.push({
+                type: 'exposing-internal-entity',
+                message: `API resource method '${method.name}' returns internal entity type '${exposesInternalEntity}'. Consider using DTOs for API responses to encapsulate internal structure.`,
+                className: cls.fullyQualifiedName,
+                methodName: method.name,
+                lineNumber: method.body?.linesOfCode,
+                range: method.startLine ? {
+                  start: { line: method.startLine, character: method.startColumn || 0 },
+                  end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
+                } : undefined,
+                severity: 'warning',
+                filePath: ast.filePath,
+                explanation: 'Your API resource method returns an internal entity type directly in its response. This leaks your persistence/domain model to external consumers — use Data Transfer Objects (DTOs) to decouple your internal schema from your API contract so changes to entities do not break clients.'
+              });
+            }
           }
 
-          // Check for missing validation on parameters
-          const missingValidation = this.checkForMissingValidation(method);
-          if (missingValidation) {
-            violations.push({
-              type: 'missing-validation',
-              message: `API resource method '${method.name}' parameter '${missingValidation}' lacks validation annotations. Consider adding @Valid, @NotNull, etc. for input validation.`,
-              className: cls.fullyQualifiedName,
-              methodName: method.name,
-              lineNumber: method.body?.linesOfCode,
-              range: method.startLine ? {
-                start: { line: method.startLine, character: method.startColumn || 0 },
-                end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
-              } : undefined,
-              severity: 'info',
-              filePath: ast.filePath,
-              explanation: 'Your API resource method has a parameter that lacks validation annotations. Adding constraints like @Valid, @NotNull, or @Size ensures malformed input is caught early and produces clean error responses instead of cryptic failures deeper in the stack.'
-            });
+          // Check for missing validation on parameters (private helper methods are not endpoints)
+          if (isEndpoint) {
+            const missingValidation = this.checkForMissingValidation(method);
+            if (missingValidation) {
+              violations.push({
+                type: 'missing-validation',
+                message: `API resource method '${method.name}' parameter '${missingValidation}' lacks validation annotations. Consider adding @Valid, @NotNull, etc. for input validation.`,
+                className: cls.fullyQualifiedName,
+                methodName: method.name,
+                lineNumber: method.body?.linesOfCode,
+                range: method.startLine ? {
+                  start: { line: method.startLine, character: method.startColumn || 0 },
+                  end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
+                } : undefined,
+                severity: 'info',
+                filePath: ast.filePath,
+                explanation: 'Your API resource method has a parameter that lacks validation annotations. Adding constraints like @Valid, @NotNull, or @Size ensures malformed input is caught early and produces clean error responses instead of cryptic failures deeper in the stack.'
+              });
+            }
           }
 
-          // Check for improper error handling (exposing exceptions)
-          const improperErrorHandling = this.checkForImproperErrorHandling(method);
-          if (improperErrorHandling) {
-            violations.push({
-              type: 'improper-error-handling',
-              message: `API resource method '${method.name}' exposes internal exceptions or stack traces. Use proper exception handling and return appropriate error responses.`,
-              className: cls.fullyQualifiedName,
-              methodName: method.name,
-              lineNumber: method.body?.linesOfCode,
-              range: method.startLine ? {
-                start: { line: method.startLine, character: method.startColumn || 0 },
-                end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
-              } : undefined,
-              severity: 'warning',
-              filePath: ast.filePath,
-              explanation: 'Your API resource method exposes internal exceptions or stack traces. Catch exceptions at the boundary and translate them into meaningful HTTP error responses so internal implementation details do not leak to clients and users get actionable error information.'
-            });
+          // Check for improper error handling (exposing exceptions) — only for endpoint methods
+          if (isEndpoint) {
+            const improperErrorHandling = this.checkForImproperErrorHandling(method);
+            if (improperErrorHandling) {
+              violations.push({
+                type: 'improper-error-handling',
+                message: `API resource method '${method.name}' exposes internal exceptions or stack traces. Use proper exception handling and return appropriate error responses.`,
+                className: cls.fullyQualifiedName,
+                methodName: method.name,
+                lineNumber: method.body?.linesOfCode,
+                range: method.startLine ? {
+                  start: { line: method.startLine, character: method.startColumn || 0 },
+                  end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
+                } : undefined,
+                severity: 'warning',
+                filePath: ast.filePath,
+                explanation: 'Your API resource method exposes internal exceptions or stack traces. Catch exceptions at the boundary and translate them into meaningful HTTP error responses so internal implementation details do not leak to clients and users get actionable error information.'
+              });
+            }
           }
         }
       }

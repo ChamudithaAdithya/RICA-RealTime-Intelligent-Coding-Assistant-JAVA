@@ -1,46 +1,13 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ViolationManager = void 0;
-const vscode = __importStar(require("vscode"));
 const serviceLayerDetector_1 = require("./serviceLayerDetector");
 const controllerLayerDetector_1 = require("./controllerLayerDetector");
 const entityLayerDetector_1 = require("./entityLayerDetector");
 const apiResourceLayerDetector_1 = require("./apiResourceLayerDetector");
 const crossFileAnalyzer_1 = require("./crossFileAnalyzer");
 const dependencyGraph_1 = require("./dependencyGraph");
+const packageBoundaryDetector_1 = require("./packageBoundaryDetector");
 const impactAnalyzer_1 = require("./impactAnalyzer");
 const MITIGATION_HINTS = {
     'self-instantiation': 'Use dependency injection (@Autowired/@Inject) instead of directly instantiating with new()',
@@ -59,12 +26,11 @@ const MITIGATION_HINTS = {
     'direct-service-instantiation': 'Inject the Service via constructor instead of instantiating it',
     'missing-validation': 'Add validation annotations (@Valid, @NotNull, etc.) to API method parameters',
     'exposing-internal-structure': 'Refactor the API to return DTOs instead of internal domain objects',
-};
-const DETECTOR_SOURCE_MAP = {
-    'ServiceLayer': 'ServiceLayer',
-    'ControllerLayer': 'ControllerLayer',
-    'EntityLayer': 'EntityLayer',
-    'APIResourceLayer': 'APIResourceLayer',
+    'direct-http-call': 'Delegate HTTP calls to a dedicated gateway service class injected into the controller',
+    'file-io': 'Move file I/O operations to a service class injected into the controller',
+    'background-thread': 'Use Spring @Async or a TaskExecutor service instead of managing threads directly in the controller',
+    'static-cache': 'Replace static cache with a scoped cache service bean (@Cacheable or a dedicated cache manager)',
+    'raw-sql-access': 'Move all database access to repository or service layer classes',
 };
 const RULE_CODE_MAP = {
     'self-instantiation': 'RICA-V101',
@@ -83,6 +49,11 @@ const RULE_CODE_MAP = {
     'direct-service-instantiation': 'RICA-V205',
     'missing-validation': 'RICA-V206',
     'exposing-internal-structure': 'RICA-V207',
+    'direct-http-call': 'RICA-V110',
+    'file-io': 'RICA-V111',
+    'background-thread': 'RICA-V112',
+    'static-cache': 'RICA-V113',
+    'raw-sql-access': 'RICA-V114',
 };
 const CROSS_FILE_RULE_CODES = {
     'controller-bypass': 'RICA-V401',
@@ -113,9 +84,11 @@ function layerViolationToUnified(v, source) {
     };
 }
 class ViolationManager {
-    constructor(astManager, context) {
+    constructor(diagnosticReporter, parserService, configProvider, onIgnoreChanged, initialIgnoredIds) {
         // Unified violation cache for UI consumers
         this.activeViolations = [];
+        // Persisted set of ignored violation IDs
+        this.ignoredViolationIds = new Set();
         // Phase 5: Incremental revalidation state
         this.graph = new dependencyGraph_1.ProjectDependencyGraph();
         this.graphMaps = { dependencies: new Map(), dependents: new Map() };
@@ -127,54 +100,41 @@ class ViolationManager {
             enableBusinessLogicChecks: true,
             businessLogicThreshold: 3,
             excludePatterns: [],
+            layerBoundaries: {},
         };
-        this.astManager = astManager;
-        this.loadConfig();
-        this.serviceAnalyzer = new serviceLayerDetector_1.ServiceLayerAnalyzer();
+        this.diagnosticReporter = diagnosticReporter;
+        this.parserService = parserService;
+        this.configProvider = configProvider;
+        this.onIgnoreChanged = onIgnoreChanged;
         this.serviceAnalyzer = new serviceLayerDetector_1.ServiceLayerAnalyzer();
         this.controllerAnalyzer = new controllerLayerDetector_1.ControllerLayerAnalyzer();
         this.entityAnalyzer = new entityLayerDetector_1.EntityLayerAnalyzer();
         this.apiResourceAnalyzer = new apiResourceLayerDetector_1.APIResourceLayerAnalyzer();
         this.crossFileAnalyzer = new crossFileAnalyzer_1.CrossFileAnalyzer();
-        this.diagnosticCollection = vscode.languages.createDiagnosticCollection('java-layer-analyzer');
-        this.context = context;
-        this.localAnalyzers = {
-            service: this.serviceAnalyzer,
-            controller: this.controllerAnalyzer,
-            entity: this.entityAnalyzer,
-            api: this.apiResourceAnalyzer,
-        };
-        context.subscriptions.push(this.diagnosticCollection);
-        // Load persisted ignored violations
-        const saved = context.workspaceState.get('rica-ignored-violations', []);
-        this.ignoredViolationIds = new Set(saved);
-        // Listen for config changes
-        context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('javaAstAnalyzer')) {
-                this.loadConfig();
-                this.update();
-            }
-        }));
-    }
-    /** Reload user configuration from VS Code settings. */
-    loadConfig() {
-        const cfg = vscode.workspace.getConfiguration('javaAstAnalyzer');
-        this.config = {
-            enableArchitecturalChecks: cfg.get('enableArchitecturalChecks', true),
-            enableDesignPatternChecks: cfg.get('enableDesignPatternChecks', true),
-            enableBusinessLogicChecks: cfg.get('enableBusinessLogicChecks', true),
-            businessLogicThreshold: cfg.get('businessLogicThreshold', 3),
-            excludePatterns: cfg.get('excludePatterns', []),
-        };
+        this.packageBoundaryAnalyzer = new packageBoundaryDetector_1.PackageBoundaryAnalyzer(this.config);
+        if (initialIgnoredIds) {
+            this.ignoredViolationIds = new Set(initialIgnoredIds);
+        }
+        this.config = configProvider.getConfig();
+        this.packageBoundaryAnalyzer.setConfig(this.config);
+        configProvider.onConfigChange(() => {
+            this.config = configProvider.getConfig();
+            this.packageBoundaryAnalyzer.setConfig(this.config);
+            this.update();
+        });
     }
     ignoreViolation(id) {
         this.ignoredViolationIds.add(id);
-        this.context.workspaceState.update('rica-ignored-violations', Array.from(this.ignoredViolationIds));
+        if (this.onIgnoreChanged) {
+            this.onIgnoreChanged(Array.from(this.ignoredViolationIds));
+        }
         this.refreshDiagnostics();
     }
     unignoreViolation(id) {
         this.ignoredViolationIds.delete(id);
-        this.context.workspaceState.update('rica-ignored-violations', Array.from(this.ignoredViolationIds));
+        if (this.onIgnoreChanged) {
+            this.onIgnoreChanged(Array.from(this.ignoredViolationIds));
+        }
         this.refreshDiagnostics();
     }
     isIgnored(id) {
@@ -183,87 +143,27 @@ class ViolationManager {
     getIgnoredIds() {
         return Array.from(this.ignoredViolationIds);
     }
-    /** Re-creates VS Code diagnostics from cached violations, filtering out ignored ones. */
+    /** Re-creates diagnostics from cached violations, filtering out ignored ones. */
     refreshDiagnostics() {
-        this.diagnosticCollection.clear();
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0)
-            return;
-        const workspaceFolder = workspaceFolders[0];
-        const fileMap = new Map();
-        for (const v of this.activeViolations) {
-            if (!v.filePath)
-                continue;
-            if (this.ignoredViolationIds.has(v.id))
-                continue;
-            const arr = fileMap.get(v.filePath) || [];
-            arr.push(v);
-            fileMap.set(v.filePath, arr);
-        }
-        for (const [relativePath, vlist] of fileMap) {
-            const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, relativePath);
-            const diagnostics = [];
-            for (const v of vlist) {
-                let severity;
-                switch (v.severity) {
-                    case 'error':
-                        severity = vscode.DiagnosticSeverity.Error;
-                        break;
-                    case 'warning':
-                        severity = vscode.DiagnosticSeverity.Warning;
-                        break;
-                    default:
-                        severity = vscode.DiagnosticSeverity.Information;
-                        break;
-                }
-                // Use precise range when available, fall back to line-based
-                let range;
-                if (v.range) {
-                    range = new vscode.Range(v.range.start.line - 1, v.range.start.character, v.range.end.line - 1, v.range.end.character);
-                }
-                else if (v.lineNumber) {
-                    range = new vscode.Range(v.lineNumber - 1, 0, v.lineNumber - 1, 0);
-                }
-                else {
-                    range = new vscode.Range(0, 0, 0, 0);
-                }
-                const severityLabel = v.severity === 'error' ? '[Error]' : v.severity === 'warning' ? '[Warning]' : '[Info]';
-                const codePrefix = v.code ? `[${v.code}] ` : '';
-                const diag = new vscode.Diagnostic(range, `${codePrefix}${severityLabel} ${v.message}`, severity);
-                diag.source = 'Java Layer Analyzer';
-                diag.code = v.id;
-                diagnostics.push(diag);
-            }
-            this.diagnosticCollection.set(fileUri, diagnostics);
-        }
+        this.diagnosticReporter.report(this.activeViolations, this.ignoredViolationIds);
     }
     /**
      * Phase 5: Incremental delta pipeline for single-file changes.
-     * Instead of rebuilding everything, this method:
-     *   1. Re-parses only the changed file into the AST cache
-     *   2. Re-runs local (Stage 1) detectors only on that file
-     *   3. Patches the dependency graph incrementally
-     *   4. Computes blast radius via BFS
-     *   5. Re-runs cross-file analysis only on affected files
-     *   6. Merges delta violations, replacing stale entries for affected files
      */
     onFileSaved(filePath, fileContent) {
         // 1. Parse the changed file
-        const oldAst = this.astManager.getCachedAST(filePath);
-        const javaParser = this.astManager.javaParser;
+        const oldAst = this.filesMap[filePath];
         let newAst;
         try {
-            newAst = javaParser.parse(fileContent, filePath);
+            newAst = this.parserService.parse(fileContent, filePath);
         }
         catch (e) {
-            // Fall back to full rebuild on parse failure
             this.update();
             return;
         }
         // 2. Detect public signature change (short-circuit for internal-only changes)
         const sigChanged = impactAnalyzer_1.ImpactAnalyzer.signatureChanged(oldAst, newAst);
         // 3. Update the AST cache
-        this.astManager.fileASTCache.set(filePath, newAst);
         this.filesMap[filePath] = newAst;
         // 4. Run Stage 1 (local) detectors on the changed file only
         const fileAsts = [newAst];
@@ -275,43 +175,41 @@ class ViolationManager {
         ];
         // 5. Compute blast radius and update cross-file analysis
         let crossFileViolations = [];
+        let packageBoundaryViolations = [];
         const affectedFiles = new Set();
         if (sigChanged) {
-            // 5a. Patch the dependency graph
             (0, dependencyGraph_1.patchGraphForFile)(this.graph, filePath, oldAst, newAst, this.filesMap);
-            // 5b. Update invalidation maps
             impactAnalyzer_1.ImpactAnalyzer.updateMapsForFile(filePath, oldAst, newAst, this.filesMap, this.graphMaps);
-            // 5c. Compute blast radius
             const radius = impactAnalyzer_1.ImpactAnalyzer.computeBlastRadius(filePath, this.graphMaps);
             for (const f of radius)
                 affectedFiles.add(f);
             affectedFiles.add(filePath);
-            // 5d. Run cross-file analysis scoped to affected files
             const scopedFiles = {};
             for (const f of affectedFiles) {
-                const ast = this.filesMap[f] || this.astManager.getCachedAST(f);
+                const ast = this.filesMap[f];
                 if (ast)
                     scopedFiles[f] = ast;
             }
             crossFileViolations = this.crossFileAnalyzer.analyze(this.graph, scopedFiles);
+            packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(this.packageBoundaryAnalyzer.analyze(fileAsts, this.graph));
         }
         else {
-            // Signature unchanged — only the changed file itself can have new local violations
             affectedFiles.add(filePath);
         }
-        // 6. Merge violations: replace old entries for affected files, keep everything else
+        // 6. Merge violations
         const affectedSet = new Set(affectedFiles);
         const merged = [
             ...this.activeViolations.filter(v => !affectedSet.has(v.filePath)),
             ...newLocalViolations,
             ...crossFileViolations,
+            ...packageBoundaryViolations,
         ];
         this.activeViolations = this.filterByConfig(merged);
         this.refreshDiagnostics();
     }
     update() {
-        const allAsts = this.astManager.getAllCachedASTs();
-        // Rebuild the files map for graph construction
+        const allAsts = Object.values(this.filesMap);
+        // Rebuild the files map
         this.filesMap = {};
         for (const ast of allAsts) {
             if (ast.filePath) {
@@ -323,7 +221,6 @@ class ViolationManager {
         const controllerViolations = this.controllerAnalyzer.analyze(allAsts);
         const entityViolations = this.entityAnalyzer.analyze(allAsts);
         const apiResourceViolations = this.apiResourceAnalyzer.analyze(allAsts);
-        // Convert all local violations to unified format
         const unifiedViolations = [
             ...serviceViolations.map(v => layerViolationToUnified(v, 'ServiceLayer')),
             ...controllerViolations.map(v => layerViolationToUnified(v, 'ControllerLayer')),
@@ -342,11 +239,26 @@ class ViolationManager {
             this.graphMaps = impactAnalyzer_1.ImpactAnalyzer.buildFromAstMap(filesMap);
             const crossFileViolations = this.crossFileAnalyzer.analyze(this.graph, filesMap);
             unifiedViolations.push(...crossFileViolations);
+            // Stage 3: Run package boundary analysis
+            const packageViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(this.packageBoundaryAnalyzer.analyze(allAsts, this.graph));
+            unifiedViolations.push(...packageViolations);
         }
         this.activeViolations = this.filterByConfig(unifiedViolations);
         this.refreshDiagnostics();
     }
-    /** Returns all currently active violations in unified format for UI consumers. */
+    /** Seeds the AST cache with pre-parsed data (called by the framework adapter after parsing). */
+    seedCache(asts) {
+        for (const ast of asts) {
+            if (ast.filePath) {
+                this.filesMap[ast.filePath] = ast;
+            }
+        }
+    }
+    /** Seeds a single AST entry in the cache. */
+    seedFileCache(filePath, ast) {
+        this.filesMap[filePath] = ast;
+    }
+    /** Returns all currently active violations for UI consumers. */
     getActiveViolations() {
         return [...this.activeViolations];
     }
@@ -387,22 +299,20 @@ class ViolationManager {
         const designPatternTypes = new Set([
             'self-instantiation', 'uninjected-repository-access', 'uninjected-service-access',
             'anemic-service', 'package-violation', 'direct-layer-access', 'improper-data-access',
-            'direct-service-instantiation',
+            'direct-service-instantiation', 'direct-http-call', 'file-io', 'background-thread',
+            'static-cache', 'raw-sql-access',
         ]);
         const businessLogicTypes = new Set([
             'business-logic', 'anemic-entity', 'business-logic-in-resource',
         ]);
-        const architecturalSources = ['CrossFileAnalyzer', 'GraphAnalyzer'];
+        const architecturalSources = ['CrossFileAnalyzer', 'GraphAnalyzer', 'PackageBoundaryAnalyzer'];
         return violations.filter(v => {
-            // Architectural checks gate
             if (architecturalSources.includes(v.detectorSource) && !this.config.enableArchitecturalChecks) {
                 return false;
             }
-            // Design pattern checks gate
             if (v.legacyType && designPatternTypes.has(v.legacyType) && !this.config.enableDesignPatternChecks) {
                 return false;
             }
-            // Business logic checks gate
             if (v.legacyType && businessLogicTypes.has(v.legacyType) && !this.config.enableBusinessLogicChecks) {
                 return false;
             }
@@ -410,7 +320,7 @@ class ViolationManager {
         });
     }
     clear() {
-        this.diagnosticCollection.clear();
+        this.diagnosticReporter.clear();
         this.activeViolations = [];
     }
 }

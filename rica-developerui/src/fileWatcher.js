@@ -35,12 +35,14 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FileWatcher = void 0;
 const vscode = __importStar(require("vscode"));
+const path = __importStar(require("path"));
 class FileWatcher {
-    constructor(astManager, violationManager, outputChannel, debounceDelay) {
+    constructor(astManager, violationManager, sourceProvider, outputChannel, debounceDelay) {
         this.debounceTimers = new Map();
         this.disposables = [];
         this.astManager = astManager;
         this.violationManager = violationManager;
+        this.sourceProvider = sourceProvider;
         this.outputChannel = outputChannel;
         this.debounceDelay = debounceDelay;
     }
@@ -60,7 +62,7 @@ class FileWatcher {
         });
         createWatcher.onDidDelete(async (uri) => {
             this.outputChannel.appendLine(`File deleted: ${uri.fsPath}`);
-            await this.astManager.handleFileDeleted(uri);
+            await this.astManager.handleFileDeleted(uri.fsPath);
         });
         this.disposables.push(createWatcher);
         context.subscriptions.push(createWatcher);
@@ -70,11 +72,12 @@ class FileWatcher {
                 if (file.newUri.fsPath.endsWith('.java') || file.oldUri.fsPath.endsWith('.java')) {
                     this.outputChannel.appendLine(`File renamed: ${file.oldUri.fsPath} → ${file.newUri.fsPath}`);
                     if (file.newUri.fsPath.endsWith('.java')) {
-                        await this.astManager.handleFileRenamed(file.oldUri, file.newUri);
+                        const document = await vscode.workspace.openTextDocument(file.newUri);
+                        await this.astManager.handleFileRenamed(file.newUri.fsPath, document.getText(), file.oldUri.fsPath);
                     }
                     else {
                         // Renamed away from .java
-                        await this.astManager.handleFileDeleted(file.oldUri);
+                        await this.astManager.handleFileDeleted(file.oldUri.fsPath);
                     }
                 }
             }
@@ -104,12 +107,10 @@ class FileWatcher {
         }
         this.outputChannel.appendLine(`File saved: ${document.uri.fsPath}`);
         // Compute relative path from workspace root
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0)
-            return;
-        const relativePath = require('path').relative(workspaceFolders[0].uri.fsPath, document.uri.fsPath);
+        const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+        const relativePath = path.relative(workspaceRoot, document.uri.fsPath);
         // Phase 5: Use delta pipeline instead of full rebuild
-        await this.astManager.analyzeFile(document.uri, document.getText(), 'changed');
+        await this.astManager.analyzeFile(document.uri.fsPath, document.getText(), 'changed');
         this.violationManager.onFileSaved(relativePath, document.getText());
     }
     dispose() {
@@ -147,11 +148,9 @@ class FileWatcher {
             try {
                 // Phase 6: During editing, run a debounced local parse (not full rebuild)
                 // This gives the developer fast syntax-level feedback while typing
-                const workspaceFolders = vscode.workspace.workspaceFolders;
-                if (!workspaceFolders || workspaceFolders.length === 0)
-                    return;
-                const relativePath = require('path').relative(workspaceFolders[0].uri.fsPath, document.uri.fsPath);
-                await this.astManager.analyzeFile(document.uri, document.getText(), 'changed');
+                const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+                const relativePath = path.relative(workspaceRoot, document.uri.fsPath);
+                await this.astManager.analyzeFile(document.uri.fsPath, document.getText(), 'changed');
                 // Use delta pipeline for edit events too — faster than full rebuild
                 this.violationManager.onFileSaved(relativePath, document.getText());
             }
@@ -164,11 +163,9 @@ class FileWatcher {
     async handleFileEvent(uri, changeType) {
         try {
             const document = await vscode.workspace.openTextDocument(uri);
-            await this.astManager.analyzeFile(document.uri, document.getText(), changeType);
-            const workspaceFolders = vscode.workspace.workspaceFolders;
-            if (!workspaceFolders || workspaceFolders.length === 0)
-                return;
-            const relativePath = require('path').relative(workspaceFolders[0].uri.fsPath, document.uri.fsPath);
+            await this.astManager.analyzeFile(uri.fsPath, document.getText(), changeType);
+            const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+            const relativePath = path.relative(workspaceRoot, uri.fsPath);
             this.violationManager.onFileSaved(relativePath, document.getText());
         }
         catch (error) {
