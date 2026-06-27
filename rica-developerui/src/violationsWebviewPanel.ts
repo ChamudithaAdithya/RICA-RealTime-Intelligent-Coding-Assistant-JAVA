@@ -143,6 +143,20 @@ tr.clickable{cursor:pointer}
 ::-webkit-scrollbar{width:8px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--vscode-scrollbarSlider-background);border-radius:4px}
+/* Ignored badge bar */
+#ignoredBar{display:none;padding:4px 12px;border-top:1px solid var(--vscode-panel-border);background:var(--vscode-sideBar-background);font-size:11px;align-items:center;gap:6px;flex-shrink:0;cursor:pointer;user-select:none}
+#ignoredBar:hover{background:var(--vscode-list-hoverBackground)}
+#ignoredBar .label{opacity:.7;margin-right:4px}
+.ignored-dot{display:inline-flex;align-items:center;gap:3px;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;cursor:pointer}
+.ignored-dot:hover{filter:brightness(1.2)}
+.ignored-dot.error{background:#f48771;color:#fff}
+.ignored-dot.warning{background:#cca700;color:#000}
+.ignored-dot.info{background:#75beff;color:#000}
+.action-btn{padding:2px 10px;border-radius:4px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.action-btn.ignore{border-color:var(--vscode-errorForeground);color:var(--vscode-errorForeground);background:transparent}
+.action-btn.ignore:hover{background:var(--vscode-errorForeground);color:#fff}
+.action-btn.unignore{border-color:var(--vscode-textLink-foreground);color:var(--vscode-textLink-foreground);background:transparent}
+.action-btn.unignore:hover{background:var(--vscode-textLink-foreground);color:#fff}
 </style>
 </head>
 <body>
@@ -154,6 +168,7 @@ tr.clickable{cursor:pointer}
 <select id="severityFilter"><option value="all">All severities</option><option value="error">Errors</option><option value="warning">Warnings</option><option value="info">Info</option></select>
 <input type="text" id="searchInput" placeholder="Search violations..." style="width:180px">
 <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="showIgnored"> Show ignored</label>
+<span id="ignoredBadgeArea" style="display:none;font-size:12px;cursor:pointer" onclick="document.getElementById('showIgnored').checked=!document.getElementById('showIgnored').checked;renderTable()"></span>
 <button onclick="renderTable()">&#x21bb; Refresh</button>
 <button class="secondary" onclick="clearFilters()">Clear</button>
 </div>
@@ -174,6 +189,12 @@ tr.clickable{cursor:pointer}
 <div class="empty" id="emptyState">
 <span class="icon">&#x2713;</span>
 <span>No violations found</span>
+</div>
+<div id="ignoredBar" onclick="document.getElementById('showIgnored').checked=!document.getElementById('showIgnored').checked;renderTable()">
+<span class="label">Ignored:</span>
+<span id="ignoredErrorDot" class="ignored-dot error" onclick="event.stopPropagation();unignoreSeverity('error')" title="Click to unignore all errors">&#x25CF; E: 0</span>
+<span id="ignoredWarningDot" class="ignored-dot warning" onclick="event.stopPropagation();unignoreSeverity('warning')" title="Click to unignore all warnings">&#x25CF; W: 0</span>
+<span id="ignoredInfoDot" class="ignored-dot info" onclick="event.stopPropagation();unignoreSeverity('info')" title="Click to unignore all info">&#x25CF; I: 0</span>
 </div>
 <script id="violations-data" type="application/json">${dataJson}</script>
 <script id="ignored-data" type="application/json">${ignoredJson}</script>
@@ -247,6 +268,23 @@ function renderTable() {
 
     document.getElementById('violationCount').textContent = filteredRows.length + ' of ' + violations.length;
 
+    // Count ignored by severity for bottom bar
+    var ignoredCounts = { error: 0, warning: 0, info: 0 };
+    var totalIgnored = 0;
+    for (var i = 0; i < violations.length; i++) {
+        if (ignoredSet[violations[i].id] === true) {
+            var sev = violations[i].severity || 'info';
+            if (ignoredCounts[sev] !== undefined) ignoredCounts[sev]++;
+            totalIgnored++;
+        }
+    }
+    document.getElementById('ignoredErrorDot').textContent = '\u25CF E: ' + ignoredCounts.error;
+    document.getElementById('ignoredWarningDot').textContent = '\u25CF W: ' + ignoredCounts.warning;
+    document.getElementById('ignoredInfoDot').textContent = '\u25CF I: ' + ignoredCounts.info;
+    document.getElementById('ignoredBar').style.display = totalIgnored > 0 ? 'flex' : 'none';
+    document.getElementById('ignoredBadgeArea').textContent = totalIgnored > 0 ? '\u00b7 ' + totalIgnored + ' ignored' : '';
+    document.getElementById('ignoredBadgeArea').style.display = totalIgnored > 0 ? 'inline' : 'none';
+
     var tbody = document.getElementById('violationsBody');
     var empty = document.getElementById('emptyState');
 
@@ -268,8 +306,9 @@ function renderTable() {
         var ln = v.lineNumber || '';
         var fp = escapeAttr(v.filePath);
         var act = isIgnored
-            ? '<a href="#" onclick="return toggleIgnore(' + i + ')" title="Unignore this violation">Unignore</a>'
-            : '<a href="#" onclick="return toggleIgnore(' + i + ')" title="Stop showing this violation">Ignore</a>';
+            ? '<button class="action-btn unignore" onclick="return toggleIgnore(' + i + ')" title="Unignore this violation">\u21A9 Unignore</button>'
+            : '<button class="action-btn ignore" onclick="return toggleIgnore(' + i + ')" title="Stop showing this violation">\u2715 Ignore</button>';
+        var mit = v.mitigationHint ? escapeAttr(v.mitigationHint) : (v.explanation ? escapeAttr(v.explanation) : '');
         html += '<tr' + rowClass + '>';
         html += '<td><span class="' + cls + '">' + lbl + '</span></td>';
         html += '<td><span class="badge-source">' + escapeAttr(src) + '</span></td>';
@@ -277,7 +316,7 @@ function renderTable() {
         html += '<td class="message-cell" title="' + tip + '">' + escapeAttr(v.message) + '</td>';
         html += '<td class="file-cell"><span class="file-link" onclick="openViolationFile(' + i + ')">' + fp + '</span></td>';
         html += '<td>' + ln + '</td>';
-        html += '<td class="hint-cell">' + escapeAttr(v.mitigationHint || '') + '</td>';
+        html += '<td class="hint-cell">' + mit + '</td>';
         html += '<td>' + act + '</td>';
         html += '</tr>';
     }
@@ -293,6 +332,14 @@ function toggleIgnore(idx) {
         id: v.id
     });
     return false;
+}
+
+function unignoreSeverity(severity) {
+    for (var i = 0; i < violations.length; i++) {
+        if (violations[i].severity === severity && ignoredSet[violations[i].id] === true) {
+            _vscode.postMessage({ command: 'unignoreViolation', id: violations[i].id });
+        }
+    }
 }
 
 function openViolationFile(idx) {

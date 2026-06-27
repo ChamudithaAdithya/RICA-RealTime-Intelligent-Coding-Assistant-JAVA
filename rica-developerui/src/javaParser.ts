@@ -1242,7 +1242,8 @@ export class JavaParser {
             if (method.name.startsWith('set') && method.parameters.length === 1) {
                 const hasInjectAnnotation = method.annotations.some(a =>
                     a.name === 'Autowired' || a.fullyQualifiedName === 'Autowired' ||
-                    a.name === 'Inject' || a.fullyQualifiedName === 'Inject'
+                    a.name === 'Inject' || a.fullyQualifiedName === 'Inject' ||
+                    a.name === 'Resource' || a.fullyQualifiedName === 'Resource'
                 );
                 if (hasInjectAnnotation) {
                     const fieldName = method.name.charAt(3).toLowerCase() + method.name.slice(4);

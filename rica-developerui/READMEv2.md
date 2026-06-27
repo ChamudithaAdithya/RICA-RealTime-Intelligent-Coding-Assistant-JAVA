@@ -57,7 +57,7 @@ RICA organizes its rules into three categories, each controllable via settings:
 These require the full dependency graph and are re-run on the blast radius
 when a file changes (see Incremental Analysis below).
 
-### Design Pattern Checks (V101–V109, V205) — Single-File
+### Design Pattern Checks (V101–V114, V205) — Single-File
 
 | Code | Rule | Detection |
 |------|------|-----------|
@@ -68,6 +68,11 @@ when a file changes (see Incremental Analysis below).
 | V105 | Package Violation | Class is in the wrong package for its detected layer |
 | V107 | Direct Layer Access | Entity depends on a Service, Repository, or Infrastructure component |
 | V109 | Improper Data Access | Entity contains data-access logic |
+| V110 | Direct HTTP Call | Controller makes HTTP calls via HttpClient, RestTemplate, WebClient — should use a gateway service |
+| V111 | File I/O in Controller | Controller performs file read/write operations — should use a dedicated service |
+| V112 | Background Thread in Controller | Controller spawns threads or uses ExecutorService — should use @Async or TaskExecutor |
+| V113 | Static Cache in Controller | Controller holds static cache/Map state — should use a scoped cache service bean |
+| V114 | Raw SQL Access in Controller | Controller accesses the database directly via JDBC, JdbcTemplate, EntityManager — should go through repository |
 | V205 | Direct Service Instantiation | API resource creates a service via `new` instead of injection |
 
 ### Business Logic Checks (V106, V108, V204) — Single-File
@@ -97,7 +102,7 @@ All settings are under `File → Preferences → Settings → RICA Architecture 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `enableArchitecturalChecks` | boolean | `true` | Enable cross-file rules (V401–V404) |
-| `enableDesignPatternChecks` | boolean | `true` | Enable injection/layer-access rules (V101–V109, V205) |
+| `enableDesignPatternChecks` | boolean | `true` | Enable injection/layer-access/architectural-pattern rules (V101–V114, V205) |
 | `enableBusinessLogicChecks` | boolean | `true` | Enable business-logic-location rules (V106, V108, V204) |
 | `businessLogicThreshold` | number (1–20) | `3` | Higher values = fewer business-logic warnings (methods must be more complex to trigger) |
 | `excludePatterns` | string[] | `["**/node_modules/**", …]` | Glob patterns to exclude from analysis |

@@ -2,7 +2,8 @@ import { FullASTOutput, ClassInfo, Method, MethodCall, ObjectCreation, ImportInf
 import { DiagnosticRange } from './types/violations';
 
 export interface ControllerLayerViolation {
-  type: 'self-instantiation' | 'uninjected-service-access' | 'business-logic' | 'package-violation';
+  type: 'self-instantiation' | 'uninjected-service-access' | 'business-logic' | 'package-violation'
+      | 'direct-http-call' | 'file-io' | 'background-thread' | 'static-cache' | 'raw-sql-access';
   message: string;
   className: string;
   methodName?: string;
@@ -27,6 +28,45 @@ export class ControllerLayerAnalyzer {
   private repositoryPatterns = ['Repository', 'Dao', 'DAO', 'Persistence', 'PersistenceImpl', 'RepositoryImpl'];
   // Known infrastructure patterns
   private infrastructurePatterns = ['Client', 'Gateway', 'Connector', 'Producer', 'Consumer'];
+  // HTTP client types — controllers should delegate HTTP calls to gateway services
+  private httpClientPatterns = [
+    'HttpClient', 'RestTemplate', 'WebClient', 'OkHttpClient', 'RestClient',
+    'HttpURLConnection', 'URLConnection', 'CloseableHttpClient',
+    'HttpClients', 'HttpResponse', 'HttpRequest', 'HttpPost', 'HttpGet',
+    'HttpPut', 'HttpDelete', 'HttpPatch', 'HttpEntity', 'HttpHeaders'
+  ];
+  // File I/O types — controllers should not read/write files
+  private fileIOPatterns = [
+    'File', 'FileInputStream', 'FileOutputStream', 'FileReader', 'FileWriter',
+    'RandomAccessFile', 'BufferedReader', 'BufferedWriter', 'InputStreamReader',
+    'OutputStreamWriter', 'FileChannel', 'FileLock', 'FilePermission',
+    'Files', 'Paths', 'Path', 'FileSystem', 'FileStore', 'FileVisitOption',
+    'SimpleFileVisitor', 'FileVisitor', 'DirectoryStream', 'FileFilter',
+    'FilenameFilter', 'FileAttribute', 'BasicFileAttributes'
+  ];
+  // Thread / async patterns — controllers should not manage threads directly
+  private threadPatterns = [
+    'Thread', 'Runnable', 'Callable', 'Future', 'FutureTask',
+    'ExecutorService', 'Executor', 'Executors', 'ThreadPoolExecutor',
+    'ScheduledExecutorService', 'ScheduledThreadPoolExecutor',
+    'CompletableFuture', 'CompletionService', 'ExecutorCompletionService',
+    'Timer', 'TimerTask', 'Task', 'TaskScheduler', 'ThreadFactory'
+  ];
+  // Cache types for static fields — controllers should not hold static cache state
+  private cacheTypePatterns = [
+    'Cache', 'CacheManager', 'ConcurrentMapCache', 'CacheBuilder',
+    'LoadingCache', 'CacheLoader', 'Caffeine', 'Ehcache', 'RedisCacheManager'
+  ];
+  // SQL/JDBC types — controllers should not access databases directly
+  private rawSQLPatterns = [
+    'DataSource', 'Connection', 'Statement', 'PreparedStatement',
+    'CallableStatement', 'ResultSet', 'RowSet', 'JdbcTemplate',
+    'NamedParameterJdbcTemplate', 'SimpleJdbcInsert', 'SimpleJdbcCall',
+    'EntityManager', 'Session', 'SessionFactory', 'HibernateTemplate',
+    'SqlSession', 'SqlSessionFactory', 'DatabaseClient',
+    'R2dbcEntityTemplate', 'R2dbcDatabaseClient'
+  ];
+
   // Known business logic indicators in method bodies
   private businessLogicPatterns = [
     'if\\s*\\(',
@@ -149,8 +189,99 @@ export class ControllerLayerAnalyzer {
                   explanation: 'Your controller method calls an infrastructure component through an uninjected reference. Infrastructure dependencies should be provided by the container to keep your controller testable and free from manual object management.'
                 });
             }
-          }
 
+            // Architectural violation checks for controller-unsafe types
+            const simpleName = call.targetClass || call.receiverType || '';
+            if (this.isHttpClientType(simpleName)) {
+              violations.push({
+                type: 'direct-http-call',
+                message: `Controller method '${method.name}' makes an HTTP call via '${call.receiverVariableName || simpleName}' (${simpleName}). Delegate HTTP communication to a dedicated gateway service.`,
+                className: cls.fullyQualifiedName, methodName: method.name,
+                receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                severity: 'error', filePath: ast.filePath,
+                explanation: 'Your controller should not directly call HTTP endpoints. Move HTTP client logic into a service or gateway class that your controller injects.'
+              });
+            }
+            if (this.isFileIOType(simpleName)) {
+              violations.push({
+                type: 'file-io',
+                message: `Controller method '${method.name}' performs file I/O via '${call.receiverVariableName || simpleName}' (${simpleName}). Move file operations to a dedicated service.`,
+                className: cls.fullyQualifiedName, methodName: method.name,
+                receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                severity: 'error', filePath: ast.filePath,
+                explanation: 'Controllers should not read or write files. Extract file I/O operations into a service class that your controller injects.'
+              });
+            }
+            if (this.isThreadType(simpleName)) {
+              violations.push({
+                type: 'background-thread',
+                message: `Controller method '${method.name}' spawns or manages a thread via '${call.receiverVariableName || simpleName}' (${simpleName}). Use @Async or a TaskExecutor service instead.`,
+                className: cls.fullyQualifiedName, methodName: method.name,
+                receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                severity: 'warning', filePath: ast.filePath,
+                explanation: 'Controllers should not manage threads directly. Use Spring\'s @Async annotation or a dedicated TaskExecutor service to offload background work.'
+              });
+            }
+            if (this.isRawSQLType(simpleName)) {
+              violations.push({
+                type: 'raw-sql-access',
+                message: `Controller method '${method.name}' accesses the database directly via '${call.receiverVariableName || simpleName}' (${simpleName}). Move data access to a repository/service layer.`,
+                className: cls.fullyQualifiedName, methodName: method.name,
+                receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                severity: 'error', filePath: ast.filePath,
+                explanation: 'Controllers must not access the database directly. All data access should go through repository or service layer classes.'
+              });
+            }
+            // Also check via FQCN (when resolved through imports differs from simple name)
+            if (targetFQCN && targetFQCN !== simpleName) {
+              const fqcnSimple = targetFQCN.split('.').pop() || '';
+              if (this.isHttpClientType(fqcnSimple)) {
+                violations.push({
+                  type: 'direct-http-call',
+                  message: `Controller method '${method.name}' makes an HTTP call via '${targetFQCN}'. Delegate HTTP communication to a dedicated gateway service.`,
+                  className: cls.fullyQualifiedName, methodName: method.name,
+                  receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                  range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                  severity: 'error', filePath: ast.filePath,
+                  explanation: 'Your controller should not directly call HTTP endpoints. Move HTTP client logic into a service or gateway class that your controller injects.'
+                });
+              } else if (this.isFileIOType(fqcnSimple)) {
+                violations.push({
+                  type: 'file-io',
+                  message: `Controller method '${method.name}' performs file I/O via '${targetFQCN}'. Move file operations to a dedicated service.`,
+                  className: cls.fullyQualifiedName, methodName: method.name,
+                  receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                  range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                  severity: 'error', filePath: ast.filePath,
+                  explanation: 'Controllers should not read or write files. Extract file I/O operations into a service class that your controller injects.'
+                });
+              } else if (this.isThreadType(fqcnSimple)) {
+                violations.push({
+                  type: 'background-thread',
+                  message: `Controller method '${method.name}' spawns or manages a thread via '${targetFQCN}'. Use @Async or a TaskExecutor service instead.`,
+                  className: cls.fullyQualifiedName, methodName: method.name,
+                  receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                  range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                  severity: 'warning', filePath: ast.filePath,
+                  explanation: 'Controllers should not manage threads directly. Use Spring\'s @Async annotation or a dedicated TaskExecutor service to offload background work.'
+                });
+              } else if (this.isRawSQLType(fqcnSimple)) {
+                violations.push({
+                  type: 'raw-sql-access',
+                  message: `Controller method '${method.name}' accesses the database directly via '${targetFQCN}'. Move data access to a repository/service layer.`,
+                  className: cls.fullyQualifiedName, methodName: method.name,
+                  receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                  range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                  severity: 'error', filePath: ast.filePath,
+                  explanation: 'Controllers must not access the database directly. All data access should go through repository or service layer classes.'
+                });
+              }
+            }
+          }
           // Check object creations (self-instantiation)
           for (const creation of method.createdObjects) {
             const className = creation.className;
@@ -158,17 +289,54 @@ export class ControllerLayerAnalyzer {
               violations.push({
                   type: 'self-instantiation',
                   message: `Controller method '${method.name}' instantiates ${this.isServiceClassName(className) ? 'service' : this.isRepositoryClassName(className) ? 'repository' : 'infrastructure'} class '${className}' directly. Use dependency injection.`,
-                  className: cls.fullyQualifiedName,
-                  methodName: method.name,
+                  className: cls.fullyQualifiedName, methodName: method.name,
                   lineNumber: creation.lineNumber,
-                  range: creation.lineNumber ? {
-                    start: { line: creation.lineNumber, character: 0 },
-                    end: { line: creation.lineNumber, character: 80 },
-                  } : undefined,
-                  severity: 'error',
-                  filePath: ast.filePath,
+                  range: creation.lineNumber ? { start: { line: creation.lineNumber, character: 0 }, end: { line: creation.lineNumber, character: 80 } } : undefined,
+                  severity: 'error', filePath: ast.filePath,
                   explanation: 'Your controller method directly constructs a service, repository, or infrastructure class instead of receiving it through dependency injection. This couples your controller to a specific concrete type and lifecycle, making it harder to unit test and maintain.'
                 });
+            }
+            // Prohibited object creations (HTTP, file I/O, threads, raw SQL)
+            if (this.isHttpClientType(className)) {
+              violations.push({
+                type: 'direct-http-call',
+                message: `Controller method '${method.name}' directly creates an HTTP client '${className}'. Delegate HTTP communication to a dedicated gateway service.`,
+                className: cls.fullyQualifiedName, methodName: method.name,
+                lineNumber: creation.lineNumber,
+                range: creation.lineNumber ? { start: { line: creation.lineNumber, character: 0 }, end: { line: creation.lineNumber, character: 80 } } : undefined,
+                severity: 'error', filePath: ast.filePath,
+                explanation: 'Your controller directly instantiates an HTTP client. Move this to a service or gateway class and inject it instead.'
+              });
+            } else if (this.isFileIOType(className)) {
+              violations.push({
+                type: 'file-io',
+                message: `Controller method '${method.name}' directly creates file I/O object '${className}'. Move file operations to a dedicated service.`,
+                className: cls.fullyQualifiedName, methodName: method.name,
+                lineNumber: creation.lineNumber,
+                range: creation.lineNumber ? { start: { line: creation.lineNumber, character: 0 }, end: { line: creation.lineNumber, character: 80 } } : undefined,
+                severity: 'error', filePath: ast.filePath,
+                explanation: 'Your controller directly creates a file I/O object. Extract file operations into a service class.'
+              });
+            } else if (this.isThreadType(className)) {
+              violations.push({
+                type: 'background-thread',
+                message: `Controller method '${method.name}' directly creates a thread/executor '${className}'. Use Spring\'s @Async or a TaskExecutor service.`,
+                className: cls.fullyQualifiedName, methodName: method.name,
+                lineNumber: creation.lineNumber,
+                range: creation.lineNumber ? { start: { line: creation.lineNumber, character: 0 }, end: { line: creation.lineNumber, character: 80 } } : undefined,
+                severity: 'warning', filePath: ast.filePath,
+                explanation: 'Your controller directly creates a thread or executor. Use Spring\'s @Async annotation or a dedicated TaskExecutor service instead.'
+              });
+            } else if (this.isRawSQLType(className)) {
+              violations.push({
+                type: 'raw-sql-access',
+                message: `Controller method '${method.name}' directly creates a database object '${className}'. Move data access to a repository/service layer.`,
+                className: cls.fullyQualifiedName, methodName: method.name,
+                lineNumber: creation.lineNumber,
+                range: creation.lineNumber ? { start: { line: creation.lineNumber, character: 0 }, end: { line: creation.lineNumber, character: 80 } } : undefined,
+                severity: 'error', filePath: ast.filePath,
+                explanation: 'Your controller directly creates a database access object. All data access should go through repository or service layer classes.'
+              });
             }
           }
 
@@ -189,6 +357,31 @@ export class ControllerLayerAnalyzer {
               filePath: ast.filePath,
               explanation: 'Your controller method appears to contain significant business logic — things like conditionals, loops, or data manipulation — that belongs in the service layer. Controllers should only orchestrate HTTP concerns (parsing input, calling services, formatting responses); moving logic to a service keeps responsibilities clear and makes the logic reusable.'
             });
+          }
+        }
+
+        // Static cache detection: controllers should not hold static mutable state
+        for (const field of cls.attributes) {
+          if (field.isStatic) {
+            const rawType = field.dataType.replace(/<.*>/g, '').trim();
+            const isExplicitCache = this.isCacheType(rawType);
+            const isMapType = /^(HashMap|ConcurrentHashMap|Map|ConcurrentMap|LinkedHashMap|TreeMap|SortedMap)/.test(rawType);
+            const nameHint = /cache|store|pool|buffer/i.test(field.name);
+            if (isExplicitCache || (isMapType && nameHint)) {
+              violations.push({
+                type: 'static-cache',
+                message: `Controller class '${cls.className}' declares static ${isExplicitCache ? 'cache' : 'map-like'} field '${field.name}' (${field.dataType}). Static state in controllers causes issues with multiple instances and testability.`,
+                className: cls.fullyQualifiedName,
+                fieldName: field.name,
+                severity: 'warning',
+                filePath: ast.filePath,
+                range: field.startLine ? {
+                  start: { line: field.startLine, character: field.startColumn || 0 },
+                  end: { line: field.endLine || field.startLine, character: field.endColumn || (field.startColumn || 0) + 1 },
+                } : undefined,
+                explanation: 'Your controller holds static state, which persists across all instances and can lead to memory leaks, concurrency issues, and testing difficulties. Store cache data in a dedicated cache service bean instead.'
+              });
+            }
           }
         }
       }
@@ -275,6 +468,31 @@ export class ControllerLayerAnalyzer {
     // Strip generics and array brackets
     const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
     return this.isRepositoryClassName(raw);
+  }
+
+  private isHttpClientType(typeName: string): boolean {
+    const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    return this.httpClientPatterns.some(p => raw === p || raw.endsWith('.' + p));
+  }
+
+  private isFileIOType(typeName: string): boolean {
+    const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    return this.fileIOPatterns.some(p => raw === p || raw.endsWith('.' + p));
+  }
+
+  private isThreadType(typeName: string): boolean {
+    const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    return this.threadPatterns.some(p => raw === p || raw.endsWith('.' + p));
+  }
+
+  private isCacheType(typeName: string): boolean {
+    const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    return this.cacheTypePatterns.some(p => raw === p || raw.endsWith('.' + p));
+  }
+
+  private isRawSQLType(typeName: string): boolean {
+    const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    return this.rawSQLPatterns.some(p => raw === p || raw.endsWith('.' + p));
   }
 
   private calculateBusinessLogicScore(method: Method): number {

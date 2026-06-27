@@ -56,15 +56,27 @@ The extension activation process remains unchanged as the ViolationManager is in
   - Number of local variables (>5 = +1 point)
   - Flags methods with score > 3 as containing significant business logic
 
+#### Architectural Pattern Detection (V110–V114)
+- **Direct HTTP Calls**: Checks every method call's receiver type against a list of HTTP client types (`HttpClient`, `RestTemplate`, `WebClient`, `OkHttpClient`, `HttpURLConnection`, `CloseableHttpClient`, etc.). Also checks object creations (`new RestTemplate()`) against the same list. Both simple names and fully-qualified names (resolved through imports) are checked.
+- **File I/O**: Same dual-path (calls + creations) against file I/O types (`File`, `FileInputStream`, `FileWriter`, `Files`, `Path`, `BufferedReader`, etc.).
+- **Background Threads**: Same dual-path against thread/executor types (`Thread`, `ExecutorService`, `CompletableFuture`, `Timer`, `Runnable`, `Callable`, etc.).
+- **Raw SQL Access**: Same dual-path against database types (`DataSource`, `JdbcTemplate`, `EntityManager`, `Connection`, `Statement`, `Session`, `SqlSession`, etc.).
+- **Static Cache**: After method analysis completes, scans all class fields for `static` fields with cache-specific types (`Cache`, `CacheManager`, `LoadingCache`, `Caffeine`, etc.) or Map types (`HashMap`, `ConcurrentHashMap`, `Map`) whose name contains \"cache\", \"store\", \"pool\", or \"buffer\".
+
 ## Detected Violations
 
 ### Controller Layer Violations
 
-| Violation Type | Description | Severity | Trigger Conditions |
-|----------------|-------------|----------|-------------------|
-| `self-instantiation` | Controller directly instantiates service/repository/infrastructure classes | Error | `new ServiceImpl()`, `new UserDao()` in controller methods |
-| `uninjected-service-access` | Controller accesses services/repositories without proper injection | Error/Warning | Service method called on non-injected field/parameter |
-| `business-logic` | Controller method contains significant business logic | Warning | Method complexity score > 3 (long methods, many variables) |
+| Violation Type | Code | Description | Severity | Trigger Conditions |
+|----------------|------|-------------|----------|-------------------|
+| `self-instantiation` | V101 | Controller directly instantiates service/repository/infrastructure classes | Error | `new ServiceImpl()`, `new UserDao()` in controller methods |
+| `uninjected-service-access` | V103 | Controller accesses services/repositories without proper injection | Error/Warning | Service method called on non-injected field/parameter |
+| `business-logic` | V106 | Controller method contains significant business logic | Warning | Method complexity score > 3 (long methods, many variables) |
+| `direct-http-call` | V110 | Controller makes direct HTTP calls | Error | Calls on HttpClient, RestTemplate, WebClient, OkHttpClient, HttpURLConnection, or `new` of these types |
+| `file-io` | V111 | Controller performs file I/O | Error | Calls on File, FileInputStream, FileWriter, Files, Path, BufferedReader, or `new` of these types |
+| `background-thread` | V112 | Controller spawns/manages threads | Warning | Calls on Thread, ExecutorService, CompletableFuture, Timer, Runnable, or `new` of these types |
+| `static-cache` | V113 | Controller holds static cache/Map state | Warning | Static field with cache type (Cache, CacheManager, LoadingCache) or Map named \*cache\*/\*store\*/\*pool\* |
+| `raw-sql-access` | V114 | Controller accesses database directly | Error | Calls on DataSource, JdbcTemplate, EntityManager, Connection, Statement, Session, or `new` of these types |
 
 ### Service Layer Violations (Existing Functionality)
 
@@ -169,6 +181,90 @@ public class OrderController {
 }
 ```
 
+### Direct HTTP Call
+```java
+@RestController
+public class OrderController {
+    private final RestTemplate restTemplate; // Injected, but still an architectural concern
+
+    public OrderController(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
+    public OrderDto getOrder(int id) {
+        // VIOLATION: Direct HTTP call to another service — use a gateway service
+        ResponseEntity<InventoryDto> response = restTemplate.getForEntity(
+            "http://inventory-service/api/items/" + id, InventoryDto.class);
+        return mapToOrder(response.getBody());
+    }
+}
+```
+
+### File I/O
+```java
+@RestController
+public class ReportController {
+    @GetMapping("/report")
+    public ResponseEntity<byte[]> downloadReport() {
+        // VIOLATION: File I/O in controller — move to a service
+        File file = new File("/tmp/report.pdf");
+        byte[] data = Files.readAllBytes(file.toPath());
+        return ResponseEntity.ok(data);
+    }
+}
+```
+
+### Background Thread
+```java
+@RestController
+public class AsyncController {
+    @PostMapping("/process")
+    public ResponseEntity<String> startProcess() {
+        // VIOLATION: Controller spawns a thread — use @Async
+        new Thread(() -> {
+            // long running task
+        }).start();
+        return ResponseEntity.accepted().body("Processing started");
+    }
+}
+```
+
+### Static Cache
+```java
+@RestController
+public class CachingController {
+    // VIOLATION: Static cache state in controller
+    private static final Map<String, User> userCache = new ConcurrentHashMap<>();
+
+    @GetMapping("/users/{id}")
+    public User getUser(@PathVariable String id) {
+        return userCache.computeIfAbsent(id, this::fetchUser);
+    }
+}
+```
+
+### Raw SQL Access
+```java
+@RestController
+public class UserController {
+    @Autowired
+    private DataSource dataSource; // Injected, but controllers should not access DB
+
+    @GetMapping("/users/{id}")
+    public User getUser(@PathVariable long id) throws SQLException {
+        // VIOLATION: Raw SQL in controller — use a repository
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement("SELECT * FROM users WHERE id = ?")) {
+            ps.setLong(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return mapUser(rs);
+            }
+        }
+        return null;
+    }
+}
+```
+
 ## Limitations and Notes
 
 1. **Business Logic Detection**: Currently heuristic-based due to limited access to method body text in the AST structure. Future improvements could include actual method body analysis.
@@ -178,6 +274,12 @@ public class OrderController {
 3. **Injection Detection**: Relies on the AST parser marking fields/parameters as `isInjected` when they have `@Autowired`, `@Inject`, or `@Resource` annotations.
 
 4. **Performance**: Analysis runs on file changes and project scans, but is optimized to minimize impact on development workflow.
+
+5. **Architectural Pattern Detection (V110–V114)**: Relies on simple-name and import-resolved FQCN matching against type pattern lists. Standard library types with wildcard imports (e.g., `import java.net.http.*`) may not resolve to their FQCN, so the detector checks both raw simple names and resolved FQCNs to maximize coverage.
+
+6. **Static Cache Detection**: Only flags `static` fields with explicit cache types or Map types with cache-hinting names. Inline cache usage (e.g., `ConcurrentHashMap` created inside a method) is not detected at the field level.
+
+7. **Call Chain Coverage**: If a controller calls `helper.getHttpClient().send(...)`, the intermediate type `helper` may not be an HTTP client — the call is matched on receiver type. The current heuristic checks the final receiver type, which covers the most common pattern (`restTemplate.getForEntity()`, `httpClient.send()`).
 
 ## Future Improvements
 

@@ -28,6 +28,11 @@ const MITIGATION_HINTS: Record<string, string> = {
     'direct-service-instantiation': 'Inject the Service via constructor instead of instantiating it',
     'missing-validation': 'Add validation annotations (@Valid, @NotNull, etc.) to API method parameters',
     'exposing-internal-structure': 'Refactor the API to return DTOs instead of internal domain objects',
+    'direct-http-call': 'Delegate HTTP calls to a dedicated gateway service class injected into the controller',
+    'file-io': 'Move file I/O operations to a service class injected into the controller',
+    'background-thread': 'Use Spring @Async or a TaskExecutor service instead of managing threads directly in the controller',
+    'static-cache': 'Replace static cache with a scoped cache service bean (@Cacheable or a dedicated cache manager)',
+    'raw-sql-access': 'Move all database access to repository or service layer classes',
 };
 
 const DETECTOR_SOURCE_MAP: Record<string, Violation['detectorSource']> = {
@@ -54,6 +59,11 @@ const RULE_CODE_MAP: Record<string, string> = {
     'direct-service-instantiation': 'RICA-V205',
     'missing-validation': 'RICA-V206',
     'exposing-internal-structure': 'RICA-V207',
+    'direct-http-call': 'RICA-V110',
+    'file-io': 'RICA-V111',
+    'background-thread': 'RICA-V112',
+    'static-cache': 'RICA-V113',
+    'raw-sql-access': 'RICA-V114',
 };
 
 const CROSS_FILE_RULE_CODES: Record<string, string> = {
@@ -404,7 +414,8 @@ export class ViolationManager {
         const designPatternTypes = new Set([
             'self-instantiation', 'uninjected-repository-access', 'uninjected-service-access',
             'anemic-service', 'package-violation', 'direct-layer-access', 'improper-data-access',
-            'direct-service-instantiation',
+            'direct-service-instantiation', 'direct-http-call', 'file-io', 'background-thread',
+            'static-cache', 'raw-sql-access',
         ]);
         const businessLogicTypes = new Set([
             'business-logic', 'anemic-entity', 'business-logic-in-resource',
