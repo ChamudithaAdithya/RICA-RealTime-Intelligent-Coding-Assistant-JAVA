@@ -1,0 +1,128 @@
+{
+  "name": "rica-developerui",
+  "displayName": "RICA - developerUi",
+  "description": "violations detection and guidance to solve",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "engines": {
+    "vscode": "^1.110.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/*.java"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "javaAstAnalyzer.analyzeProject",
+        "title": "Java AST: Analyze Full Project"
+      },
+      {
+        "command": "javaAstAnalyzer.analyzeCurrentFile",
+        "title": "Java AST: Analyze Current File"
+      },
+      {
+        "command": "javaAstAnalyzer.showAstView",
+        "title": "Java AST: Show AST Viewer"
+      },
+      {
+        "command": "javaAstAnalyzer.openBrowserViewer",
+        "title": "Java AST: Open Browser Viewer"
+      },
+      {
+        "command": "javaAstAnalyzer.showStatus",
+        "title": "Java AST: Show Status"
+      },
+      {
+        "command": "javaAstAnalyzer.resetBackend",
+        "title": "Java AST: Reset Backend Data"
+      },
+      {
+        "command": "javaAstAnalyzer.showViolationsView",
+        "title": "Java AST: Show Architecture Violations"
+      }
+    ],
+    "configuration": {
+      "title": "RICA Architecture Analyzer",
+      "properties": {
+        "javaAstAnalyzer.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8082",
+          "description": "Backend server URL for the RICA engine and visualizer dashboard"
+        },
+        "javaAstAnalyzer.autoAnalyzeOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically analyze project when workspace opens"
+        },
+        "javaAstAnalyzer.debounceDelay": {
+          "type": "number",
+          "default": 1000,
+          "description": "Debounce delay in ms for file change events (edit buffer before delta analysis)"
+        },
+        "javaAstAnalyzer.enableArchitecturalChecks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable cross-file architectural rules: controller-bypass, cyclic-dependency, cross-layer-violation, entity-exposure (V401-V404)"
+        },
+        "javaAstAnalyzer.enableDesignPatternChecks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable dependency injection and layer-access pattern checks: self-instantiation, uninjected-service, uninjected-repository (V101-V109)"
+        },
+        "javaAstAnalyzer.enableBusinessLogicChecks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable business logic location checks: business-logic-in-controller, business-logic-in-resource, anemic-entity (V106, V108, V204)"
+        },
+        "javaAstAnalyzer.businessLogicThreshold": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Score threshold for business logic detection in methods; higher = fewer warnings"
+        },
+        "javaAstAnalyzer.excludePatterns": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/build/**",
+            "**/target/**",
+            "**/bin/**",
+            "**/.gradle/**",
+            "**/.idea/**",
+            "**/.settings/**",
+            "**/generated/**",
+            "**/test/**",
+            "**/tests/**"
+          ],
+          "description": "Glob patterns to exclude from analysis"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "mocha",
+    "test:parser": "mocha --grep 'JavaParser' src/test/parser.test.js",
+    "test:analyzers": "mocha --grep 'LayerAnalyzer|Multi-layer' src/test/analyzers.test.js",
+    "test:crossfile": "mocha --grep 'CrossFile' src/test/crossFile.test.js"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.110.0",
+    "mocha": "^11.7.5",
+    "typescript": "^5.2.0"
+  },
+  "dependencies": {
+    "java-parser": "^2.2.0"
+  }
+}

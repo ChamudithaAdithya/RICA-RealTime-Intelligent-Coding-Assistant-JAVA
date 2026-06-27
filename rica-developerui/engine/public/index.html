@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RICA — Architectural Observatory</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+#topbar { display: flex; align-items: center; gap: 24px; padding: 12px 20px; background: #161b22; border-bottom: 1px solid #30363d; flex-shrink: 0; }
+#topbar h1 { font-size: 16px; font-weight: 600; color: #58a6ff; }
+.stat { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.stat .label { color: #8b949e; }
+.stat .value { color: #c9d1d9; font-weight: 600; }
+.dot-error { width: 10px; height: 10px; border-radius: 50%; background: #f85149; display: inline-block; }
+.dot-warning { width: 10px; height: 10px; border-radius: 50%; background: #d29922; display: inline-block; }
+.dot-info { width: 10px; height: 10px; border-radius: 50%; background: #58a6ff; display: inline-block; }
+.dot-pass { width: 10px; height: 10px; border-radius: 50%; background: #3fb950; display: inline-block; }
+#status-msg { margin-left: auto; font-size: 12px; color: #8b949e; }
+
+#main { display: flex; flex: 1; overflow: hidden; }
+#graph-panel { flex: 1; position: relative; }
+#graph-panel svg { width: 100%; height: 100%; }
+#graph-legend { position: absolute; bottom: 16px; left: 16px; background: rgba(22,27,34,0.9); border: 1px solid #30363d; border-radius: 6px; padding: 10px 14px; font-size: 12px; }
+#graph-legend .legend-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+#graph-legend .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+#violations-panel { width: 380px; min-width: 380px; border-left: 1px solid #30363d; display: flex; flex-direction: column; background: #0d1117; }
+#violations-panel .panel-header { padding: 10px 14px; border-bottom: 1px solid #30363d; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+#violations-panel .panel-header select { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px; padding: 3px 8px; font-size: 12px; margin-left: auto; }
+#violations-list { flex: 1; overflow-y: auto; padding: 8px; }
+.violation-item { padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; cursor: pointer; transition: background 0.15s; border-left: 3px solid transparent; }
+.violation-item:hover { background: #161b22; }
+.violation-item.active { background: #1c2128; border-left-color: #58a6ff; }
+.violation-item .v-header { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.violation-item .v-code { color: #8b949e; font-family: monospace; font-size: 11px; }
+.violation-item .v-severity { font-size: 11px; font-weight: 600; }
+.violation-item .v-severity.error { color: #f85149; }
+.violation-item .v-severity.warning { color: #d29922; }
+.violation-item .v-severity.info { color: #58a6ff; }
+.violation-item .v-source { font-size: 11px; color: #8b949e; }
+.violation-item .v-message { font-size: 12px; margin-top: 3px; line-height: 1.4; }
+.violation-item .v-file { font-size: 11px; color: #58a6ff; margin-top: 3px; }
+.violation-item .v-line { font-size: 11px; color: #8b949e; }
+
+#diff-panel { height: 0; border-top: 1px solid #30363d; background: #0d1117; transition: height 0.25s; overflow: hidden; flex-shrink: 0; }
+#diff-panel.open { height: 220px; }
+#diff-panel .diff-header { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #30363d; font-size: 13px; font-weight: 600; }
+#diff-panel .diff-header .close-btn { margin-left: auto; background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px; padding: 2px 6px; }
+#diff-panel .diff-body { display: flex; height: calc(100% - 36px); }
+.diff-source, .diff-target { flex: 1; padding: 10px 14px; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; overflow-y: auto; white-space: pre; background: #161b22; }
+.diff-source { border-right: 1px solid #30363d; }
+.diff-source .diff-label, .diff-target .diff-label { font-size: 11px; color: #8b949e; margin-bottom: 6px; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+.diff-line { display: flex; }
+.diff-line .ln { color: #484f58; width: 32px; flex-shrink: 0; text-align: right; padding-right: 10px; user-select: none; }
+.diff-line .hl { background: rgba(248,81,73,0.15); border-radius: 2px; }
+
+.node-tooltip { position: absolute; background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 8px 12px; font-size: 12px; pointer-events: none; display: none; line-height: 1.5; max-width: 300px; }
+
+/* Legend colors */
+.layer-controller { fill: #d29922; }
+.layer-service { fill: #58a6ff; }
+.layer-repository { fill: #3fb950; }
+.layer-entity { fill: #f85149; }
+.layer-dto { fill: #bc8cff; }
+.layer-config { fill: #f0883e; }
+.layer-utility { fill: #8b949e; }
+.layer-unknown { fill: #484f58; }
+
+.link { stroke: #30363d; stroke-opacity: 0.6; }
+.link.highlight { stroke: #58a6ff; stroke-opacity: 0.9; stroke-width: 2; }
+
+.node circle { stroke: #fff; stroke-width: 1.5; cursor: pointer; }
+.node text { font-size: 10px; fill: #c9d1d9; pointer-events: none; }
+
+#loading { display: flex; align-items: center; justify-content: center; height: 100vh; flex-direction: column; gap: 16px; }
+#loading .spinner { width: 48px; height: 48px; border: 3px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="loading"><div class="spinner"></div><div style="color:#8b949e">Loading RICA Observatory...</div></div>
+
+<div id="app" style="display:none;flex-direction:column;height:100vh">
+  <div id="topbar">
+    <h1>RICA Observatory</h1>
+    <div class="stat"><span class="label">Files</span><span class="value" id="stat-files">—</span></div>
+    <div class="stat"><span class="label">Nodes</span><span class="value" id="stat-nodes">—</span></div>
+    <div class="stat"><span class="label">Edges</span><span class="value" id="stat-edges">—</span></div>
+    <div class="stat"><span class="dot-error"></span><span class="value" id="stat-errors">—</span></div>
+    <div class="stat"><span class="dot-warning"></span><span class="value" id="stat-warnings">—</span></div>
+    <div class="stat"><span class="dot-info"></span><span class="value" id="stat-infos">—</span></div>
+    <span id="status-msg">Connected</span>
+  </div>
+
+  <div id="main">
+    <div id="graph-panel">
+      <svg></svg>
+      <div class="node-tooltip" id="tooltip"></div>
+      <div id="graph-legend">
+        <div class="legend-row"><span class="legend-dot" style="background:#d29922"></span> Controller</div>
+        <div class="legend-row"><span class="legend-dot" style="background:#58a6ff"></span> Service</div>
+        <div class="legend-row"><span class="legend-dot" style="background:#3fb950"></span> Repository</div>
+        <div class="legend-row"><span class="legend-dot" style="background:#f85149"></span> Entity</div>
+        <div class="legend-row"><span class="legend-dot" style="background:#bc8cff"></span> DTO</div>
+        <div class="legend-row"><span class="legend-dot" style="background:#8b949e"></span> Other</div>
+      </div>
+    </div>
+
+    <div id="violations-panel">
+      <div class="panel-header">
+        Violations
+        <select id="filter-severity">
+          <option value="all">All</option>
+          <option value="error">Errors</option>
+          <option value="warning">Warnings</option>
+          <option value="info">Info</option>
+        </select>
+      </div>
+      <div id="violations-list"></div>
+    </div>
+  </div>
+
+  <div id="diff-panel">
+    <div class="diff-header">
+      Cross-File Trace
+      <button class="close-btn" id="diff-close">&times;</button>
+    </div>
+    <div class="diff-body">
+      <div class="diff-source" id="diff-source">Select a violation to view the cross-file trace.</div>
+      <div class="diff-target" id="diff-target"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Layer Color Map ─────────────────────────────────────────────────────────
+const LAYER_COLORS = {
+  controller: '#d29922',
+  service: '#58a6ff',
+  repository: '#3fb950',
+  dao: '#3fb950',
+  entity: '#f85149',
+  dto: '#bc8cff',
+  config: '#f0883e',
+  utility: '#8b949e',
+  unknown: '#484f58',
+};
+
+const LAYER_ORDER = ['controller', 'service', 'repository', 'dao', 'entity', 'dto', 'config', 'utility', 'unknown'];
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let graphData = { nodes: [], edges: [] };
+let violations = [];
+let selectedViolation = null;
+let simulation = null;
+let svg, gLink, gNode;
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+document.getElementById('app').style.display = 'flex';
+document.getElementById('loading').style.display = 'none';
+
+svg = d3.select('#graph-panel svg');
+const width = () => document.getElementById('graph-panel').clientWidth;
+const height = () => document.getElementById('graph-panel').clientHeight;
+
+svg.attr('width', width()).attr('height', height());
+
+const defs = svg.append('defs');
+const arrowMarker = defs.append('marker')
+  .attr('id', 'arrow')
+  .attr('viewBox', '0 -5 10 10')
+  .attr('refX', 20)
+  .attr('refY', 0)
+  .attr('markerWidth', 6)
+  .attr('markerHeight', 6)
+  .attr('orient', 'auto')
+  .append('path')
+  .attr('d', 'M0,-5L10,0L0,5')
+  .attr('fill', '#30363d');
+
+// ─── Fetch Data ──────────────────────────────────────────────────────────────
+async function fetchData() {
+  try {
+    const [graphRes, violRes, statsRes] = await Promise.all([
+      fetch('/api/v1/graph'),
+      fetch('/api/v1/violations'),
+      fetch('/api/v1/stats'),
+    ]);
+    graphData = await graphRes.json();
+    const violData = await violRes.json();
+    violations = violData.violations || [];
+    const stats = await statsRes.json();
+
+    document.getElementById('stat-files').textContent = stats.files;
+    document.getElementById('stat-nodes').textContent = stats.nodes;
+    document.getElementById('stat-edges').textContent = stats.edges;
+    document.getElementById('stat-errors').textContent = violData.summary.errors;
+    document.getElementById('stat-warnings').textContent = violData.summary.warnings;
+    document.getElementById('stat-infos').textContent = violData.summary.info;
+
+    renderGraph();
+    renderViolations();
+  } catch (err) {
+    document.getElementById('status-msg').textContent = 'Disconnected — ' + err.message;
+    setTimeout(fetchData, 3000);
+  }
+}
+
+// ─── Render Graph ────────────────────────────────────────────────────────────
+function renderGraph() {
+  svg.selectAll('g').remove();
+
+  if (!graphData.nodes || graphData.nodes.length === 0) return;
+
+  const w = width();
+  const h = height();
+
+  const links = graphData.edges.map(e => ({
+    source: e.source,
+    target: e.target,
+    type: e.type,
+  }));
+
+  const nodes = graphData.nodes.map(n => ({ ...n }));
+
+  const nodeMap = {};
+  nodes.forEach(n => nodeMap[n.id] = n);
+
+  // Filter links to only those referencing existing nodes
+  const validLinks = links.filter(l => nodeMap[l.source] && nodeMap[l.target]);
+
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(validLinks).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-300))
+    .force('center', d3.forceCenter(w / 2, h / 2))
+    .force('collision', d3.forceCollide().radius(30))
+    .alphaDecay(0.02);
+
+  const zoom = d3.zoom()
+    .scaleExtent([0.1, 4])
+    .on('zoom', (event) => g.attr('transform', event.transform));
+
+  svg.call(zoom);
+
+  const g = svg.append('g');
+
+  gLink = g.append('g').selectAll('line');
+  gNode = g.append('g').selectAll('g');
+
+  gLink = g.append('g')
+    .attr('class', 'links')
+    .selectAll('line')
+    .data(validLinks)
+    .join('line')
+    .attr('class', 'link')
+    .attr('marker-end', 'url(#arrow)');
+
+  gNode = g.append('g')
+    .attr('class', 'nodes')
+    .selectAll('g')
+    .data(nodes)
+    .join('g')
+    .attr('class', 'node');
+
+  gNode.append('circle')
+    .attr('r', d => Math.max(5, Math.min(14, 12 - (LAYER_ORDER.indexOf(d.layer) * 0.5))))
+    .attr('fill', d => LAYER_COLORS[d.layer] || '#484f58');
+
+  gNode.append('text')
+    .text(d => d.simpleName || d.id.split('.').pop())
+    .attr('x', 14)
+    .attr('y', 4);
+
+  // Tooltip
+  const tooltip = d3.select('#tooltip');
+  gNode.on('mouseover', (event, d) => {
+    tooltip.style('display', 'block')
+      .html(`<strong>${d.simpleName || d.id}</strong><br>Layer: ${d.layer}<br>Package: ${d.packageName || '—'}<br>File: ${d.filePath || '—'}`)
+      .style('left', (event.offsetX + 12) + 'px')
+      .style('top', (event.offsetY - 10) + 'px');
+  }).on('mouseout', () => tooltip.style('display', 'none'));
+
+  // Click highlight
+  gNode.on('click', (event, d) => {
+    const connected = new Set();
+    connected.add(d.id);
+    validLinks.forEach(l => {
+      if (l.source.id === d.id) connected.add(l.target.id || l.target);
+      if (l.target.id === d.id) connected.add(l.source.id || l.source);
+    });
+
+    gNode.style('opacity', n => connected.has(n.id) ? 1 : 0.15);
+    gLink.style('opacity', l => {
+      const srcId = l.source.id || l.source;
+      const tgtId = l.target.id || l.target;
+      return (srcId === d.id || tgtId === d.id) ? 1 : 0.08;
+    }).attr('class', l => {
+      const srcId = l.source.id || l.source;
+      const tgtId = l.target.id || l.target;
+      return (srcId === d.id || tgtId === d.id) ? 'link highlight' : 'link';
+    });
+
+    // Reset on click outside
+    d3.select('body').on('click.reset', (e) => {
+      if (!e.target.closest('.node')) {
+        gNode.style('opacity', 1);
+        gLink.style('opacity', 0.6).attr('class', 'link');
+        d3.select('body').on('click.reset', null);
+      }
+    });
+  });
+
+  simulation.on('tick', () => {
+    gLink
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+    gNode.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  // Zoom to fit
+  setTimeout(() => {
+    const bounds = g.node()?.getBBox();
+    if (bounds) {
+      const scale = Math.min(w / bounds.width, h / bounds.height) * 0.9;
+      const tx = w / 2 - (bounds.x + bounds.width / 2) * scale;
+      const ty = h / 2 - (bounds.y + bounds.height / 2) * scale;
+      svg.transition().duration(750).call(
+        zoom.transform,
+        d3.zoomIdentity.translate(tx, ty).scale(scale)
+      );
+    }
+  }, 500);
+}
+
+// ─── Render Violations ───────────────────────────────────────────────────────
+function renderViolations() {
+  const container = document.getElementById('violations-list');
+  const filter = document.getElementById('filter-severity').value;
+  let data = violations;
+  if (filter !== 'all') data = data.filter(v => v.severity === filter);
+
+  if (data.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:#8b949e;font-size:13px">No violations found</div>';
+    return;
+  }
+
+  container.innerHTML = '';
+  data.forEach((v, i) => {
+    const item = document.createElement('div');
+    item.className = 'violation-item' + (selectedViolation === v ? ' active' : '');
+    item.innerHTML = `
+      <div class="v-header">
+        <span class="v-severity ${v.severity}">${v.severity.toUpperCase()}</span>
+        <span class="v-code">${v.code || ''}</span>
+        <span class="v-source">${v.detectorSource || ''}</span>
+      </div>
+      <div class="v-message">${escapeHtml(v.message)}</div>
+      <div class="v-file">${escapeHtml(v.filePath)}${v.lineNumber ? ':' + v.lineNumber : ''}</div>
+    `;
+    item.addEventListener('click', () => selectViolation(v, item));
+    container.appendChild(item);
+  });
+}
+
+function selectViolation(v, el) {
+  selectedViolation = v;
+  document.querySelectorAll('.violation-item').forEach(e => e.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  // Show diff panel
+  const diffPanel = document.getElementById('diff-panel');
+  diffPanel.classList.add('open');
+
+  const srcPane = document.getElementById('diff-source');
+  const tgtPane = document.getElementById('diff-target');
+
+  const filePath = v.filePath || 'unknown';
+  const lineInfo = v.lineNumber ? ` at line ${v.lineNumber}` : '';
+  const rangeInfo = v.range ? ` (col ${v.range.start.character}-${v.range.end.character})` : '';
+
+  srcPane.innerHTML = `<div class="diff-label">Source: ${escapeHtml(filePath)}${lineInfo}${rangeInfo}</div>`;
+  srcPane.innerHTML += `<div class="diff-line"><span class="ln"></span><span>${escapeHtml(v.message)}</span></div>`;
+  srcPane.innerHTML += `<div style="margin-top:6px;color:#8b949e;font-family:sans-serif;font-size:11px">${v.mitigationHint || ''}</div>`;
+
+  // Cross-file trace: show related info or target component
+  const targetComponent = v.contextMetadata?.targetComponent;
+  const layerInvolved = v.contextMetadata?.layerInvolved;
+
+  let targetHtml = `<div class="diff-label">Target`;
+  if (targetComponent) targetHtml += `: ${escapeHtml(targetComponent)}`;
+  if (layerInvolved) targetHtml += ` (${escapeHtml(layerInvolved)} layer)`;
+  targetHtml += '</div>';
+
+  if (targetComponent) {
+    // Try to find the target node in the graph
+    const targetNode = graphData.nodes.find(n => n.id === targetComponent || n.simpleName === targetComponent);
+    if (targetNode) {
+      targetHtml += `<div class="diff-line"><span class="ln"></span><span>File: ${escapeHtml(targetNode.filePath || '—')}</span></div>`;
+      targetHtml += `<div class="diff-line"><span class="ln"></span><span>Type: ${targetNode.type} · Layer: ${targetNode.layer}</span></div>`;
+    } else {
+      targetHtml += `<div class="diff-line"><span class="ln"></span><span>Class: ${escapeHtml(targetComponent)}</span></div>`;
+    }
+  }
+
+  targetHtml += `<div style="margin-top:12px;color:#8b949e;font-family:sans-serif;font-size:11px">${v.explanation || 'This violation indicates a structural issue in the layered architecture.'}</div>`;
+
+  tgtPane.innerHTML = targetHtml;
+}
+
+// ─── Filter ──────────────────────────────────────────────────────────────────
+document.getElementById('filter-severity').addEventListener('change', renderViolations);
+document.getElementById('diff-close').addEventListener('click', () => {
+  document.getElementById('diff-panel').classList.remove('open');
+  selectedViolation = null;
+});
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function escapeHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Resize ──────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  if (svg) {
+    svg.attr('width', width()).attr('height', height());
+    if (simulation) {
+      simulation.force('center', d3.forceCenter(width() / 2, height() / 2));
+      simulation.alpha(0.3).restart();
+    }
+  }
+});
+
+// ─── Auto Refresh ────────────────────────────────────────────────────────────
+fetchData();
+setInterval(fetchData, 10000);
+</script>
+</body>
+</html>
