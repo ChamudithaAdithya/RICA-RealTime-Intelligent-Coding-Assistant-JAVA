@@ -36,14 +36,20 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const path = __importStar(require("path"));
 const astManager_1 = require("./astManager");
 const apiClient_1 = require("./apiClient");
 const fileWatcher_1 = require("./fileWatcher");
-const javaParser_1 = require("./javaParser");
+const javaParser_1 = require("./infrastructure/javaParser");
 const webviewPanel_1 = require("./webviewPanel");
 const violationsWebviewPanel_1 = require("./violationsWebviewPanel");
 const violationManager_1 = require("./violationManager");
+const javaParserAdapter_1 = require("./infrastructure/javaParserAdapter");
+const vscodeDiagnosticReporter_1 = require("./infrastructure/vscodeDiagnosticReporter");
+const vscodeConfigProvider_1 = require("./infrastructure/vscodeConfigProvider");
+const vscodeSourceProvider_1 = require("./infrastructure/vscodeSourceProvider");
 let astManager;
+let sourceProvider;
 let apiClient;
 let fileWatcher;
 let javaParser;
@@ -58,12 +64,20 @@ async function activate(context) {
     const debounceDelay = config.get('debounceDelay', 1000);
     const autoAnalyze = config.get('autoAnalyzeOnOpen', true);
     const excludePatterns = config.get('excludePatterns', []);
-    // Initialize components
+    // Initialize domain-level infrastructure
     javaParser = new javaParser_1.JavaParser(outputChannel);
     apiClient = new apiClient_1.ApiClient(backendUrl, outputChannel);
-    astManager = new astManager_1.ASTManager(javaParser, apiClient, outputChannel, excludePatterns);
-    violationManager = new violationManager_1.ViolationManager(astManager, context);
-    fileWatcher = new fileWatcher_1.FileWatcher(astManager, violationManager, outputChannel, debounceDelay);
+    sourceProvider = new vscodeSourceProvider_1.VscodeSourceProvider(outputChannel);
+    astManager = new astManager_1.ASTManager(javaParser, apiClient, sourceProvider, outputChannel, excludePatterns);
+    // Clean Architecture wiring: ports → adapters
+    const diagnosticCollection = vscode.languages.createDiagnosticCollection('java-layer-analyzer');
+    context.subscriptions.push(diagnosticCollection);
+    const diagnosticReporter = new vscodeDiagnosticReporter_1.VscodeDiagnosticReporter(diagnosticCollection);
+    const parserService = new javaParserAdapter_1.JavaParserAdapter(javaParser);
+    const configProvider = new vscodeConfigProvider_1.VscodeConfigProvider();
+    const savedIgnoredIds = context.workspaceState.get('rica-ignored-violations', []);
+    violationManager = new violationManager_1.ViolationManager(diagnosticReporter, parserService, configProvider, (ids) => context.workspaceState.update('rica-ignored-violations', ids), savedIgnoredIds);
+    fileWatcher = new fileWatcher_1.FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
     // Re-run analysis when relevant settings change
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('javaAstAnalyzer')) {
@@ -118,7 +132,7 @@ async function activate(context) {
             const workspaceFolders = vscode.workspace.workspaceFolders;
             if (!workspaceFolders || workspaceFolders.length === 0)
                 return;
-            const relativePath = require('path').relative(workspaceFolders[0].uri.fsPath, activeEditor.document.uri.fsPath);
+            const relativePath = path.relative(workspaceFolders[0].uri.fsPath, activeEditor.document.uri.fsPath);
             await violationManager.onFileSaved(relativePath, activeEditor.document.getText());
             updateStatusBar('ready');
         }
@@ -177,7 +191,7 @@ async function analyzeFullProject() {
     }, async (progress, token) => {
         try {
             progress.report({ message: 'Scanning for Java files...' });
-            const result = await astManager.analyzeFullProject(workspaceFolders[0], (current, total, fileName) => {
+            const result = await astManager.analyzeFullProject(workspaceFolders[0].uri.fsPath, workspaceFolders[0].name, (current, total, fileName) => {
                 const pct = Math.round((current / total) * 100);
                 progress.report({
                     message: `Parsing ${fileName} (${current}/${total})`,
@@ -188,7 +202,10 @@ async function analyzeFullProject() {
                 updateStatusBar('cancelled');
                 return;
             }
-            // Update violations
+            // Seed the violation manager's AST cache from the AST manager
+            const allAsts = astManager.getAllCachedASTs();
+            violationManager.seedCache(allAsts);
+            // Run analysis
             violationManager.update();
             updateStatusBar('ready', result.fileCount, violationManager.getActiveViolations().length);
             vscode.window.showInformationMessage(`Java AST: Analyzed ${result.fileCount} files (${result.nodeCount} nodes) in ${result.duration}ms`);
@@ -203,7 +220,16 @@ async function analyzeFullProject() {
 async function analyzeSingleFile(document) {
     try {
         updateStatusBar('parsing');
-        await astManager.analyzeFile(document.uri, document.getText(), 'changed');
+        await astManager.analyzeFile(document.uri.fsPath, document.getText(), 'changed');
+        // Seed the single-file AST into the violation manager
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders && workspaceFolders.length > 0) {
+            const relativePath = path.relative(workspaceFolders[0].uri.fsPath, document.uri.fsPath);
+            const ast = astManager.getCachedAST(relativePath);
+            if (ast) {
+                violationManager.seedFileCache(relativePath, ast);
+            }
+        }
         violationManager.update();
         updateStatusBar('ready', undefined, violationManager.getActiveViolations().length);
     }

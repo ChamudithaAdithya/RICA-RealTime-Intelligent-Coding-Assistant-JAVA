@@ -34,28 +34,24 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ASTManager = void 0;
-const vscode = __importStar(require("vscode"));
 const path = __importStar(require("path"));
 class ASTManager {
-    constructor(javaParser, apiClient, outputChannel, excludePatterns) {
+    constructor(javaParser, backendService, sourceProvider, outputChannel, excludePatterns) {
         this.fileASTCache = new Map();
         this.javaParser = javaParser;
-        this.apiClient = apiClient;
+        this.backendService = backendService;
+        this.sourceProvider = sourceProvider;
         this.outputChannel = outputChannel;
         this.excludePatterns = excludePatterns;
     }
     /**
      * Analyze the full project: find all Java files, parse them, send to backend.
      */
-    async analyzeFullProject(workspaceFolder, progressCallback, token) {
+    async analyzeFullProject(workspaceRoot, projectName, progressCallback, token) {
         const startTime = Date.now();
         const errors = [];
-        // Build exclude pattern
-        const excludeGlob = this.excludePatterns.length > 0
-            ? `{${this.excludePatterns.join(',')}}`
-            : undefined;
         // Find all Java files
-        const javaFiles = await vscode.workspace.findFiles(new vscode.RelativePattern(workspaceFolder, '**/*.java'), excludeGlob);
+        const javaFiles = await this.sourceProvider.findJavaFiles(this.excludePatterns);
         this.outputChannel.appendLine(`Found ${javaFiles.length} Java files`);
         if (javaFiles.length === 0) {
             return { fileCount: 0, nodeCount: 0, duration: Date.now() - startTime, errors: [] };
@@ -64,16 +60,17 @@ class ASTManager {
         let totalNodes = 0;
         // Parse each file
         for (let i = 0; i < javaFiles.length; i++) {
-            if (token.isCancellationRequested) {
+            if (token?.isCancellationRequested) {
                 break;
             }
-            const fileUri = javaFiles[i];
-            const relativePath = path.relative(workspaceFolder.uri.fsPath, fileUri.fsPath);
-            const fileName = path.basename(fileUri.fsPath);
-            progressCallback(i + 1, javaFiles.length, fileName);
+            const fsPath = javaFiles[i];
+            const relativePath = path.relative(workspaceRoot, fsPath);
+            const fileName = path.basename(fsPath);
+            if (progressCallback) {
+                progressCallback(i + 1, javaFiles.length, fileName);
+            }
             try {
-                const document = await vscode.workspace.openTextDocument(fileUri);
-                const sourceCode = document.getText();
+                const sourceCode = await this.sourceProvider.readFile(fsPath);
                 const ast = this.javaParser.parse(sourceCode, relativePath);
                 files[relativePath] = ast;
                 this.fileASTCache.set(relativePath, ast);
@@ -93,10 +90,8 @@ class ASTManager {
             }
         }
         // Send to backend
-        const projectName = workspaceFolder.name;
-        const workspacePath = workspaceFolder.uri.fsPath;
         try {
-            await this.apiClient.sendFullAST(projectName, workspacePath, files);
+            await this.backendService.sendFullAST(projectName, workspaceRoot, files);
             this.outputChannel.appendLine(`Full AST sent to backend: ${Object.keys(files).length} files`);
         }
         catch (error) {
@@ -116,12 +111,9 @@ class ASTManager {
     /**
      * Analyze a single file and send the change to backend.
      */
-    async analyzeFile(fileUri, content, changeType, oldUri) {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders)
-            return;
-        const workspaceRoot = workspaceFolders[0].uri.fsPath;
-        const relativePath = path.relative(workspaceRoot, fileUri.fsPath);
+    async analyzeFile(filePath, content, changeType, oldFilePath) {
+        const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+        const relativePath = path.relative(workspaceRoot, filePath);
         // Check if excluded
         if (this.isExcluded(relativePath)) {
             return;
@@ -129,7 +121,7 @@ class ASTManager {
         if (changeType === 'deleted') {
             this.fileASTCache.delete(relativePath);
             try {
-                await this.apiClient.sendFileChange('deleted', relativePath, null);
+                await this.backendService.sendFileChange('deleted', relativePath, null);
             }
             catch (error) {
                 this.outputChannel.appendLine(`Failed to send delete: ${error.message}`);
@@ -139,10 +131,10 @@ class ASTManager {
         try {
             const ast = this.javaParser.parse(content, relativePath);
             this.fileASTCache.set(relativePath, ast);
-            const oldRelativePath = oldUri
-                ? path.relative(workspaceRoot, oldUri.fsPath)
+            const oldRelPath = oldFilePath
+                ? path.relative(workspaceRoot, oldFilePath)
                 : undefined;
-            await this.apiClient.sendFileChange(changeType, relativePath, ast, oldRelativePath);
+            await this.backendService.sendFileChange(changeType, relativePath, ast, oldRelPath);
             this.outputChannel.appendLine(`${changeType.toUpperCase()}: ${relativePath} sent to backend`);
         }
         catch (error) {
@@ -152,16 +144,15 @@ class ASTManager {
     /**
      * Handle file deletion.
      */
-    async handleFileDeleted(fileUri) {
-        await this.analyzeFile(fileUri, '', 'deleted');
+    async handleFileDeleted(filePath) {
+        await this.analyzeFile(filePath, '', 'deleted');
     }
     /**
      * Handle file rename.
      */
-    async handleFileRenamed(oldUri, newUri) {
+    async handleFileRenamed(newFilePath, content, oldFilePath) {
         try {
-            const document = await vscode.workspace.openTextDocument(newUri);
-            await this.analyzeFile(newUri, document.getText(), 'renamed', oldUri);
+            await this.analyzeFile(newFilePath, content, 'renamed', oldFilePath);
         }
         catch (error) {
             this.outputChannel.appendLine(`Error handling rename: ${error.message}`);

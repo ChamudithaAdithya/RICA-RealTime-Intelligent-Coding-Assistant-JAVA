@@ -64,7 +64,8 @@ export class ControllerLayerAnalyzer {
     'NamedParameterJdbcTemplate', 'SimpleJdbcInsert', 'SimpleJdbcCall',
     'EntityManager', 'Session', 'SessionFactory', 'HibernateTemplate',
     'SqlSession', 'SqlSessionFactory', 'DatabaseClient',
-    'R2dbcEntityTemplate', 'R2dbcDatabaseClient'
+    'R2dbcEntityTemplate', 'R2dbcDatabaseClient',
+    'DriverManager'
   ];
 
   // Known business logic indicators in method bodies
@@ -153,7 +154,10 @@ export class ControllerLayerAnalyzer {
             const isRepoByName = this.isRepositoryClassName(targetFQCN.split('.').pop() || '');
             const isInfrastructure = this.isInfrastructureClassName(targetFQCN.split('.').pop() || '');
 
-            if ((isServiceByLayer || isServiceByName) || (isRepoByLayer || isRepoByName)) {
+            // Skip standard library types (they look like services via suffix matching but aren't)
+            const isStandardLib = /^(java\.|javax\.|jakarta\.|com\.sun\.|org\.apache\.|org\.springframework\.)/.test(targetFQCN);
+
+            if (!isStandardLib && ((isServiceByLayer || isServiceByName) || (isRepoByLayer || isRepoByName))) {
               if (!call.receiverIsInjected) {
                 violations.push({
                   type: 'uninjected-service-access',
@@ -171,7 +175,7 @@ export class ControllerLayerAnalyzer {
                   explanation: 'Your controller method accesses a service or repository through a field or parameter that was not injected by the DI container. Relying on injection keeps your controller focused on HTTP concerns and leaves object wiring to the framework.'
                 });
               }
-            } else if (isInfrastructure && !call.receiverIsInjected) {
+            } else if (!isStandardLib && isInfrastructure && !call.receiverIsInjected) {
               // Infrastructure clients should also be injected
               violations.push({
                   type: 'uninjected-service-access',
@@ -387,7 +391,13 @@ export class ControllerLayerAnalyzer {
       }
     }
 
-    return violations;
+    const seen = new Set<string>();
+    return violations.filter(v => {
+      const key = `${v.type}:${v.className}:${v.methodName}:${v.lineNumber}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   private buildClassMaps(astOutputs: FullASTOutput[]): void {
