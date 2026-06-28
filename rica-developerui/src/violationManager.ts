@@ -237,12 +237,14 @@ export class ViolationManager {
                 if (ast) scopedFiles[f] = ast;
             }
             crossFileViolations = this.crossFileAnalyzer.analyze(this.graph, scopedFiles);
-            packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(
-                this.packageBoundaryAnalyzer.analyze(fileAsts, this.graph)
-            );
         } else {
             affectedFiles.add(filePath);
         }
+        // Package boundary analysis always runs — it only needs the single-file AST (filePath + imports),
+        // not the dependency graph. This ensures V501 violations re-appear after undo.
+        packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(
+            this.packageBoundaryAnalyzer.analyze(fileAsts, undefined, this.buildClassAnnotationsMap())
+        );
 
         // 6. Merge violations
         const affectedSet = new Set(affectedFiles);
@@ -296,7 +298,7 @@ export class ViolationManager {
 
             // Stage 3: Run package boundary analysis
             const packageViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(
-                this.packageBoundaryAnalyzer.analyze(allAsts, this.graph)
+                this.packageBoundaryAnalyzer.analyze(allAsts, this.graph, this.buildClassAnnotationsMap())
             );
             unifiedViolations.push(...packageViolations);
         }
@@ -384,5 +386,16 @@ export class ViolationManager {
     public clear(): void {
         this.diagnosticReporter.clear();
         this.activeViolations = [];
+    }
+
+    private buildClassAnnotationsMap(): Map<string, string[]> {
+        const map = new Map<string, string[]>();
+        for (const ast of Object.values(this.filesMap)) {
+            for (const cls of ast.classes) {
+                const fqcn = cls.fullyQualifiedName || cls.className;
+                map.set(fqcn, (cls.annotations || []).map(a => a.name));
+            }
+        }
+        return map;
     }
 }

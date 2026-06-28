@@ -31,7 +31,7 @@ export class PackageBoundaryAnalyzer {
     };
   }
 
-  analyze(astOutputs: FullASTOutput[], _graph?: ProjectDependencyGraph): LayerBoundaryViolation[] {
+  analyze(astOutputs: FullASTOutput[], _graph?: ProjectDependencyGraph, classAnnotations?: Map<string, string[]>): LayerBoundaryViolation[] {
     const violations: LayerBoundaryViolation[] = [];
     const boundaries = this.config.layerBoundaries;
     if (!boundaries) return violations;
@@ -47,6 +47,15 @@ export class PackageBoundaryAnalyzer {
       for (const imp of (fileAst.imports || [])) {
         const targetLayer = this.matchLayerByFqn(imp.qualifiedName, boundaries, layers);
         if (!targetLayer) continue;
+
+        // If the target is in a controller package but annotated @Component (not @Controller/@RestController),
+        // treat it as a generic component, not a controller-layer class.
+        if (targetLayer === 'presentation' && classAnnotations) {
+          const anns = classAnnotations.get(imp.qualifiedName);
+          if (anns && anns.includes('Component') && !anns.some(a => a === 'Controller' || a === 'RestController')) {
+            continue;
+          }
+        }
 
         const allowed = boundaries[fileLayer].allowedDeps;
         if (targetLayer === fileLayer) continue;

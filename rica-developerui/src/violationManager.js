@@ -191,11 +191,13 @@ class ViolationManager {
                     scopedFiles[f] = ast;
             }
             crossFileViolations = this.crossFileAnalyzer.analyze(this.graph, scopedFiles);
-            packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(this.packageBoundaryAnalyzer.analyze(fileAsts, this.graph));
         }
         else {
             affectedFiles.add(filePath);
         }
+        // Package boundary analysis always runs — it only needs the single-file AST (filePath + imports),
+        // not the dependency graph. This ensures V501 violations re-appear after undo.
+        packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(this.packageBoundaryAnalyzer.analyze(fileAsts, undefined, this.buildClassAnnotationsMap()));
         // 6. Merge violations
         const affectedSet = new Set(affectedFiles);
         const merged = [
@@ -240,7 +242,7 @@ class ViolationManager {
             const crossFileViolations = this.crossFileAnalyzer.analyze(this.graph, filesMap);
             unifiedViolations.push(...crossFileViolations);
             // Stage 3: Run package boundary analysis
-            const packageViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(this.packageBoundaryAnalyzer.analyze(allAsts, this.graph));
+            const packageViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(this.packageBoundaryAnalyzer.analyze(allAsts, this.graph, this.buildClassAnnotationsMap()));
             unifiedViolations.push(...packageViolations);
         }
         this.activeViolations = this.filterByConfig(unifiedViolations);
@@ -322,6 +324,16 @@ class ViolationManager {
     clear() {
         this.diagnosticReporter.clear();
         this.activeViolations = [];
+    }
+    buildClassAnnotationsMap() {
+        const map = new Map();
+        for (const ast of Object.values(this.filesMap)) {
+            for (const cls of ast.classes) {
+                const fqcn = cls.fullyQualifiedName || cls.className;
+                map.set(fqcn, (cls.annotations || []).map(a => a.name));
+            }
+        }
+        return map;
     }
 }
 exports.ViolationManager = ViolationManager;
