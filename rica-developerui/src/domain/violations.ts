@@ -41,7 +41,7 @@ export interface Violation {
     /** Original detector type for backward compatibility (e.g. 'business-logic', 'package-violation') */
     legacyType?: string;
     /** Original detector source identifier */
-    detectorSource?: 'ServiceLayer' | 'ControllerLayer' | 'EntityLayer' | 'APIResourceLayer' | 'CrossFileAnalyzer' | 'GraphAnalyzer' | 'PackageBoundaryAnalyzer';
+    detectorSource?: 'ServiceLayer' | 'ControllerLayer' | 'EntityLayer' | 'APIResourceLayer' | 'CrossFileAnalyzer' | 'GraphAnalyzer' | 'PackageBoundaryAnalyzer' | 'DesignPatternAnalyzer';
 }
 
 export interface ViolationSummary {

@@ -5,6 +5,7 @@ import { APIResourceLayerAnalyzer, APIResourceLayerViolation } from './apiResour
 import { CrossFileAnalyzer } from './crossFileAnalyzer';
 import { buildGraphFromFiles, patchGraphForFile, ProjectDependencyGraph } from './dependencyGraph';
 import { PackageBoundaryAnalyzer } from './packageBoundaryDetector';
+import { DesignPatternAnalyzer } from './designPatternAnalyzer';
 import { Violation, ViolationSummary } from './domain/violations';
 import { AnalyzerConfig } from './domain/analyzerConfig';
 import { FullASTOutput } from './domain/astTypes';
@@ -104,6 +105,7 @@ export class ViolationManager {
     private readonly apiResourceAnalyzer: APIResourceLayerAnalyzer;
     private readonly crossFileAnalyzer: CrossFileAnalyzer;
     private readonly packageBoundaryAnalyzer: PackageBoundaryAnalyzer;
+    private readonly designPatternAnalyzer: DesignPatternAnalyzer;
 
     // Callback for persisting ignored violations (wired by the framework adapter)
     private readonly onIgnoreChanged?: (ignoredIds: string[]) => void;
@@ -147,6 +149,7 @@ export class ViolationManager {
         this.apiResourceAnalyzer = new APIResourceLayerAnalyzer();
         this.crossFileAnalyzer = new CrossFileAnalyzer();
         this.packageBoundaryAnalyzer = new PackageBoundaryAnalyzer(this.config);
+        this.designPatternAnalyzer = new DesignPatternAnalyzer(this.config);
 
         if (initialIgnoredIds) {
             this.ignoredViolationIds = new Set(initialIgnoredIds);
@@ -246,6 +249,12 @@ export class ViolationManager {
             this.packageBoundaryAnalyzer.analyze(fileAsts, undefined, this.buildClassAnnotationsMap())
         );
 
+        // Design pattern analysis — runs on every change
+        let dpViolations: Violation[] = [];
+        if (this.config.enableDesignPatternChecks) {
+            dpViolations = this.designPatternAnalyzer.analyze(fileAsts, this.graph, this.filesMap);
+        }
+
         // 6. Merge violations
         const affectedSet = new Set(affectedFiles);
         const merged: Violation[] = [
@@ -253,6 +262,7 @@ export class ViolationManager {
             ...newLocalViolations,
             ...crossFileViolations,
             ...packageBoundaryViolations,
+            ...dpViolations,
         ];
 
         this.activeViolations = this.filterByConfig(merged);
@@ -301,6 +311,12 @@ export class ViolationManager {
                 this.packageBoundaryAnalyzer.analyze(allAsts, this.graph, this.buildClassAnnotationsMap())
             );
             unifiedViolations.push(...packageViolations);
+
+            // Stage 4: Run design pattern checks
+            if (this.config.enableDesignPatternChecks) {
+                const dpViolations = this.designPatternAnalyzer.analyze(allAsts, this.graph, this.filesMap);
+                unifiedViolations.push(...dpViolations);
+            }
         }
 
         this.activeViolations = this.filterByConfig(unifiedViolations);

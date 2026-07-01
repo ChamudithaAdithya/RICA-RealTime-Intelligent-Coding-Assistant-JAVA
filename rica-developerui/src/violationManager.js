@@ -8,6 +8,7 @@ const apiResourceLayerDetector_1 = require("./apiResourceLayerDetector");
 const crossFileAnalyzer_1 = require("./crossFileAnalyzer");
 const dependencyGraph_1 = require("./dependencyGraph");
 const packageBoundaryDetector_1 = require("./packageBoundaryDetector");
+const designPatternAnalyzer_1 = require("./designPatternAnalyzer");
 const impactAnalyzer_1 = require("./impactAnalyzer");
 const MITIGATION_HINTS = {
     'self-instantiation': 'Use dependency injection (@Autowired/@Inject) instead of directly instantiating with new()',
@@ -112,6 +113,7 @@ class ViolationManager {
         this.apiResourceAnalyzer = new apiResourceLayerDetector_1.APIResourceLayerAnalyzer();
         this.crossFileAnalyzer = new crossFileAnalyzer_1.CrossFileAnalyzer();
         this.packageBoundaryAnalyzer = new packageBoundaryDetector_1.PackageBoundaryAnalyzer(this.config);
+        this.designPatternAnalyzer = new designPatternAnalyzer_1.DesignPatternAnalyzer(this.config);
         if (initialIgnoredIds) {
             this.ignoredViolationIds = new Set(initialIgnoredIds);
         }
@@ -198,6 +200,11 @@ class ViolationManager {
         // Package boundary analysis always runs — it only needs the single-file AST (filePath + imports),
         // not the dependency graph. This ensures V501 violations re-appear after undo.
         packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(this.packageBoundaryAnalyzer.analyze(fileAsts, undefined, this.buildClassAnnotationsMap()));
+        // Design pattern analysis — runs on every change
+        let dpViolations = [];
+        if (this.config.enableDesignPatternChecks) {
+            dpViolations = this.designPatternAnalyzer.analyze(fileAsts, this.graph, this.filesMap);
+        }
         // 6. Merge violations
         const affectedSet = new Set(affectedFiles);
         const merged = [
@@ -205,6 +212,7 @@ class ViolationManager {
             ...newLocalViolations,
             ...crossFileViolations,
             ...packageBoundaryViolations,
+            ...dpViolations,
         ];
         this.activeViolations = this.filterByConfig(merged);
         this.refreshDiagnostics();
@@ -244,6 +252,11 @@ class ViolationManager {
             // Stage 3: Run package boundary analysis
             const packageViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(this.packageBoundaryAnalyzer.analyze(allAsts, this.graph, this.buildClassAnnotationsMap()));
             unifiedViolations.push(...packageViolations);
+            // Stage 4: Run design pattern checks
+            if (this.config.enableDesignPatternChecks) {
+                const dpViolations = this.designPatternAnalyzer.analyze(allAsts, this.graph, this.filesMap);
+                unifiedViolations.push(...dpViolations);
+            }
         }
         this.activeViolations = this.filterByConfig(unifiedViolations);
         this.refreshDiagnostics();
