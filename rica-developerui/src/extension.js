@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const astManager_1 = require("./astManager");
 const apiClient_1 = require("./apiClient");
@@ -48,6 +49,10 @@ const javaParserAdapter_1 = require("./infrastructure/javaParserAdapter");
 const vscodeDiagnosticReporter_1 = require("./infrastructure/vscodeDiagnosticReporter");
 const vscodeConfigProvider_1 = require("./infrastructure/vscodeConfigProvider");
 const vscodeSourceProvider_1 = require("./infrastructure/vscodeSourceProvider");
+const aiAdvisoryCoordinator_1 = require("./application/ai/aiAdvisoryCoordinator");
+const ollamaAiAdapter_1 = require("./infrastructure/ai/ollamaAiAdapter");
+const openaiCompatibleAiAdapter_1 = require("./infrastructure/ai/openaiCompatibleAiAdapter");
+const fileAuditLogger_1 = require("./infrastructure/ai/fileAuditLogger");
 let astManager;
 let sourceProvider;
 let apiClient;
@@ -56,6 +61,8 @@ let javaParser;
 let statusBarItem;
 let outputChannel;
 let violationManager;
+let aiCoordinator;
+let workspaceRoot;
 async function activate(context) {
     outputChannel = vscode.window.createOutputChannel('Java AST Analyzer');
     outputChannel.appendLine('Java AST Analyzer is activating...');
@@ -77,12 +84,17 @@ async function activate(context) {
     const configProvider = new vscodeConfigProvider_1.VscodeConfigProvider();
     const savedIgnoredIds = context.workspaceState.get('rica-ignored-violations', []);
     violationManager = new violationManager_1.ViolationManager(diagnosticReporter, parserService, configProvider, (ids) => context.workspaceState.update('rica-ignored-violations', ids), savedIgnoredIds);
+    // AI Reasoning advisory wiring (M5 core pipeline, no UI yet)
+    workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? context.globalStorageUri.fsPath;
+    aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
     fileWatcher = new fileWatcher_1.FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
     // Re-run analysis when relevant settings change
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('javaAstAnalyzer')) {
             outputChannel.appendLine('Configuration changed — re-analyzing...');
+            aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
             violationManager.update();
+            runAiAdvisory();
             updateStatusBar('ready');
         }
     }));
@@ -134,11 +146,14 @@ async function activate(context) {
                 return;
             const relativePath = path.relative(workspaceFolders[0].uri.fsPath, activeEditor.document.uri.fsPath);
             await violationManager.onFileSaved(relativePath, activeEditor.document.getText());
+            runAiAdvisory();
             updateStatusBar('ready');
         }
         else {
             vscode.window.showWarningMessage('No Java file is currently open');
         }
+    }), vscode.commands.registerCommand('rica.aiReview', async () => {
+        await runAiAdvisory('onDemand');
     }), vscode.commands.registerCommand('rica.showStatusSummary', () => {
         const stats = violationManager.getActiveViolationsSummary();
         vscode.window.showInformationMessage(`RICA Audit: ${stats.errors} errors, ${stats.warnings} warnings, ${stats.info} info across active layer topology`);
@@ -207,6 +222,7 @@ async function analyzeFullProject() {
             violationManager.seedCache(allAsts);
             // Run analysis
             violationManager.update();
+            runAiAdvisory('onFullScan');
             updateStatusBar('ready', result.fileCount, violationManager.getActiveViolations().length);
             vscode.window.showInformationMessage(`Java AST: Analyzed ${result.fileCount} files (${result.nodeCount} nodes) in ${result.duration}ms`);
         }
@@ -215,6 +231,68 @@ async function analyzeFullProject() {
             updateStatusBar('error');
             vscode.window.showErrorMessage(`AST Analysis failed: ${error.message}`);
         }
+    });
+}
+/**
+ * Fire-and-forget advisory pass. Config off, provider off, or events below the
+ * configured trigger yield a no-op; every failure is logged and never throws.
+ */
+async function runAiAdvisory(trigger = 'onSave') {
+    if (!aiCoordinator)
+        return;
+    const ai = aiCoordinator['deps'].config.ai;
+    if (!ai.enableAiAdvisory || ai.aiProvider === 'off')
+        return;
+    if (trigger === 'onDemand' || triggerRank(trigger) >= triggerRank(ai.aiTrigger)) {
+        try {
+            const result = await aiCoordinator.run(violationManager.getDeterministicViolations());
+            violationManager.setAdvisoryViolations(result.advisoryViolations);
+            if (ai.aiTrigger === 'onDemand' && trigger === 'onDemand') {
+                outputChannel.appendLine(`AI Review: ${result.annotatedCount} annotated, ${result.advisoryCount} advisory findings (${result.outcome})`);
+            }
+        }
+        catch (error) {
+            outputChannel.appendLine(`AI advisory pass failed: ${error.message}`);
+        }
+    }
+}
+/** event hierarchy: manual (0) < onSave (1) < onFullScan (2). */
+function triggerRank(t) {
+    return t === 'onDemand' ? 0 : t === 'onSave' ? 1 : 2;
+}
+/** Rebuild the AI coordinator from the current 'javaAstAnalyzer' workspace config. */
+function createAiCoordinator(cfg) {
+    const resolved = new vscodeConfigProvider_1.VscodeConfigProvider().getConfig();
+    const aiConfig = {
+        enableAiAdvisory: cfg.get('enableAiAdvisory', false),
+        aiProvider: cfg.get('aiProvider', 'ollama'),
+        aiEndpoint: cfg.get('aiEndpoint', 'http://localhost:11434'),
+        aiModel: cfg.get('aiModel', 'qwen2.5-coder:7b'),
+        aiMaxTokensPerRequest: cfg.get('aiMaxTokensPerRequest', 2000),
+        aiTimeoutMs: cfg.get('aiTimeoutMs', 30000),
+        aiMaxCandidatesPerRun: cfg.get('aiMaxCandidatesPerRun', 8),
+        aiTrigger: cfg.get('aiTrigger', 'onDemand'),
+        aiAuditLogEnabled: cfg.get('aiAuditLogEnabled', true),
+    };
+    const timeout = { timeoutMs: aiConfig.aiTimeoutMs, maxTokensPerRequest: aiConfig.aiMaxTokensPerRequest };
+    const provider = aiConfig.aiProvider === 'openai-compatible'
+        ? new openaiCompatibleAiAdapter_1.OpenAICompatibleAiAdapter(aiConfig.aiEndpoint, aiConfig.aiModel, timeout)
+        : new ollamaAiAdapter_1.OllamaAiAdapter(aiConfig.aiEndpoint, aiConfig.aiModel, timeout);
+    const auditLogger = new fileAuditLogger_1.FileAuditLogger(workspaceRoot);
+    return new aiAdvisoryCoordinator_1.AiAdvisoryCoordinator({
+        config: { ...resolved, ai: aiConfig },
+        provider,
+        auditLogger,
+        getFilesMap: () => violationManager.getFilesMap(),
+        getGraph: () => violationManager.getProjectGraph(),
+        readSource: (relativePath) => {
+            try {
+                return fs.readFileSync(path.join(workspaceRoot, relativePath), 'utf8');
+            }
+            catch {
+                return undefined;
+            }
+        },
     });
 }
 async function analyzeSingleFile(document) {

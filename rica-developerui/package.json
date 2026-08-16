@@ -105,12 +105,116 @@
         "javaAstAnalyzer.layerBoundaries": {
           "type": "object",
           "default": {
-            "domain": { "packages": ["**/domain/**", "**/entity/**"], "allowedDeps": [] },
-            "application": { "packages": ["**/application/**", "**/service/**", "**/useCase/**"], "allowedDeps": ["domain"] },
-            "infrastructure": { "packages": ["**/infrastructure/**", "**/dao/**", "**/repository/**", "**/adapter/**"], "allowedDeps": ["domain", "application"] },
-            "presentation": { "packages": ["**/controller/**", "**/view/**", "**/ui/**", "**/presentation/**"], "allowedDeps": ["domain", "application", "infrastructure"] }
+            "domain": {
+              "packages": [
+                "**/domain/**",
+                "**/entity/**"
+              ],
+              "allowedDeps": []
+            },
+            "application": {
+              "packages": [
+                "**/application/**",
+                "**/service/**",
+                "**/useCase/**"
+              ],
+              "allowedDeps": [
+                "domain"
+              ]
+            },
+            "infrastructure": {
+              "packages": [
+                "**/infrastructure/**",
+                "**/dao/**",
+                "**/repository/**",
+                "**/adapter/**"
+              ],
+              "allowedDeps": [
+                "domain",
+                "application"
+              ]
+            },
+            "presentation": {
+              "packages": [
+                "**/controller/**",
+                "**/view/**",
+                "**/ui/**",
+                "**/presentation/**"
+              ],
+              "allowedDeps": [
+                "domain",
+                "application",
+                "infrastructure"
+              ]
+            }
           },
           "description": "Layer boundary definitions for package-violation rule (V501). Each layer lists package patterns and allowed dependency layers."
+        },
+        "javaAstAnalyzer.enableAiAdvisory": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the optional AI Reasoning advisory. Non-blocking: AI findings annotate deterministic violations (RICA-V000) and never delete them"
+        },
+        "javaAstAnalyzer.aiProvider": {
+          "type": "string",
+          "enum": [
+            "off",
+            "ollama",
+            "openai-compatible"
+          ],
+          "default": "ollama",
+          "description": "AI provider. 'ollama' targets an Ollama server (e.g. hosted on Google Colab); 'openai-compatible' targets any OpenAI-compatible /chat/completions API"
+        },
+        "javaAstAnalyzer.aiEndpoint": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "AI provider endpoint. Set to your Colab/tunnel Ollama URL when running the model remotely"
+        },
+        "javaAstAnalyzer.aiModel": {
+          "type": "string",
+          "default": "qwen2.5-coder:7b",
+          "description": "Model name/tag served by the configured provider (e.g. qwen2.5-coder:7b, llama3.1:8b)"
+        },
+        "javaAstAnalyzer.aiMaxTokensPerRequest": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 256,
+          "maximum": 8192,
+          "description": "Maximum output tokens per AI reasoning request"
+        },
+        "javaAstAnalyzer.aiTimeoutMs": {
+          "type": "number",
+          "default": 30000,
+          "minimum": 5000,
+          "maximum": 120000,
+          "description": "Request timeout in ms for AI reasoning calls; failures are logged and never block the deterministic pipeline"
+        },
+        "javaAstAnalyzer.aiMaxCandidatesPerRun": {
+          "type": "number",
+          "default": 8,
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Maximum ambiguity candidates triaged into a single AI reasoning run"
+        },
+        "javaAstAnalyzer.aiTrigger": {
+          "type": "string",
+          "enum": [
+            "onDemand",
+            "onSave",
+            "onFullScan"
+          ],
+          "default": "onDemand",
+          "description": "When AI reasoning triggers: 'onDemand' via the rica.aiReview command, 'onSave' after delta analysis, 'onFullScan' after full project analysis"
+        },
+        "javaAstAnalyzer.aiAuditLogEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Append AI reasoning requests and decisions to the ai-audit log file"
+        },
+        "javaAstAnalyzer.documentationBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:5173",
+          "description": "Base URL for the RICA docs site. The violations webview opens `<base>/violations/<CODE>.html` when you click Docs on a violation row"
         }
       }
     }
@@ -125,14 +229,22 @@
     "test:analyzers": "mocha --grep 'LayerAnalyzer|Multi-layer' src/test/analyzers.test.js",
     "test:crossfile": "mocha --grep 'CrossFile' src/test/crossFile.test.js",
     "rica:check": "node src/ricaLayerCheck.js",
-    "rica:check:self": "node src/ricaLayerCheck.js && node test-lms-analyzer.js"
+    "rica:check:self": "node src/ricaLayerCheck.js && node test-lms-analyzer.js",
+    "generate:docs": "node scripts/generate-docs.cjs",
+    "docs:verify": "node scripts/generate-docs.cjs --verify",
+    "predocs:dev": "npm run generate:docs",
+    "docs:dev": "vitepress dev docs --port 5173",
+    "predocs:build": "npm run generate:docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs --port 5173"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.110.0",
     "mocha": "^11.7.5",
-    "typescript": "^5.2.0"
+    "typescript": "^5.2.0",
+    "vitepress": "^1.6.4"
   },
   "dependencies": {
     "java-parser": "^2.2.0"

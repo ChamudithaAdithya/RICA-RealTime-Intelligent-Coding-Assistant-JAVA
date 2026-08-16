@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ControllerLayerAnalyzer = void 0;
 class ControllerLayerAnalyzer {
     constructor() {
+        this.businessLogicThreshold = 3;
         // Map of fully qualified class name to its layer and class info
         this.classLayers = new Map();
         this.classMap = new Map();
@@ -53,35 +54,9 @@ class ControllerLayerAnalyzer {
             'R2dbcEntityTemplate', 'R2dbcDatabaseClient',
             'DriverManager'
         ];
-        // Known business logic indicators in method bodies
-        this.businessLogicPatterns = [
-            'if\\s*\\(',
-            'for\\s*\\(',
-            'while\\s*\\(',
-            'switch\\s*\\(',
-            '\\|\\|',
-            '&&',
-            '==',
-            '!=',
-            '<',
-            '>',
-            '<=',
-            '>=',
-            '\\+\\+',
-            '--',
-            '\\+=',
-            '-=',
-            '\\*=',
-            '/=',
-            '%=',
-            'new\\s+java\\.sql\\.',
-            'EntityManager',
-            'CriteriaQuery',
-            'Query\\s*\\(',
-            'prepareStatement',
-            'executeQuery',
-            'executeUpdate'
-        ];
+    }
+    setBusinessLogicThreshold(value) {
+        this.businessLogicThreshold = value;
     }
     analyze(astOutputs) {
         const violations = [];
@@ -329,8 +304,8 @@ class ControllerLayerAnalyzer {
                         }
                     }
                     // Check for business logic in controller methods
-                    const businessLogicScore = this.calculateBusinessLogicScore(method);
-                    if (businessLogicScore > 3) { // Threshold for significant business logic
+                    const businessLogicScore = method.body?.businessLogicScore ?? 0;
+                    if (businessLogicScore >= this.businessLogicThreshold) { // Threshold for significant business logic
                         violations.push({
                             type: 'business-logic',
                             message: `Controller method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer.`,
@@ -472,25 +447,6 @@ class ControllerLayerAnalyzer {
     isRawSQLType(typeName) {
         const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
         return this.rawSQLPatterns.some(p => raw === p || raw.endsWith('.' + p));
-    }
-    calculateBusinessLogicScore(method) {
-        let score = 0;
-        const methodBody = method.body;
-        if (!methodBody)
-            return score;
-        // We don't have direct access to method body text in the current AST structure
-        // In a real implementation, we would analyze the actual method body
-        // For now, we'll use a heuristic based on complexity indicators
-        // Check method complexity based on available metrics
-        if (methodBody.linesOfCode > 20) {
-            score += 2; // Long methods often contain business logic
-        }
-        if (methodBody.localVariables.length > 5) {
-            score += 1; // Many local variables suggest complex logic
-        }
-        // Since we don't have the actual method body text, we'll return a basic score
-        // In a full implementation, we would parse the method body for business logic patterns
-        return score;
     }
 }
 exports.ControllerLayerAnalyzer = ControllerLayerAnalyzer;

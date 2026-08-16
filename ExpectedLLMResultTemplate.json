@@ -1,0 +1,32 @@
+{
+  "id": "ARCH-001",
+  "type": "ARCHITECTURAL",
+  "category": "LAYER_DEPENDENCY",
+  "severity": "HIGH",
+
+  "location": {
+    "file": "OrderService.java",
+    "line": 42
+  },
+
+  "source": "application",
+  "target": "infrastructure",
+
+  "rule": "Application must not depend directly on Infrastructure",
+
+  "evidence": [
+    "OrderService imports PostgresOrderRepository",
+    "OrderService instantiates PostgresOrderRepository"
+  ],
+
+  "confidence": 0.98,
+
+  "explanation": "...",
+
+  "suggested_fix": "...",
+
+  "fix": {
+    "type": "PATCH",
+    "diff": "..."
+  }
+}

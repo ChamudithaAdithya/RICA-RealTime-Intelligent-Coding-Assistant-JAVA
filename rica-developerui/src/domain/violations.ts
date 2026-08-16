@@ -1,5 +1,7 @@
 export type ViolationSeverity = 'error' | 'warning' | 'info';
 
+import { AiInsights, AiQuickFix } from './ai';
+
 export interface DiagnosticRange {
   start: { line: number; character: number };
   end: { line: number; character: number };
@@ -31,6 +33,8 @@ export interface Violation {
     columnNumber?: number;
     /** Standardized diagnostic code (e.g. 'RICA-V401') */
     code?: string;
+    /** Relative docs page slug derived from the violation catalog (e.g. '/violations/RICA-V401'). */
+    documentationUrl?: string;
     /** Precise source range for editor highlighting */
     range?: DiagnosticRange;
     /** Cross-file trace links */
@@ -41,7 +45,11 @@ export interface Violation {
     /** Original detector type for backward compatibility (e.g. 'business-logic', 'package-violation') */
     legacyType?: string;
     /** Original detector source identifier */
-    detectorSource?: 'ServiceLayer' | 'ControllerLayer' | 'EntityLayer' | 'APIResourceLayer' | 'CrossFileAnalyzer' | 'GraphAnalyzer' | 'PackageBoundaryAnalyzer' | 'DesignPatternAnalyzer';
+    detectorSource?: 'ServiceLayer' | 'ControllerLayer' | 'EntityLayer' | 'APIResourceLayer' | 'CrossFileAnalyzer' | 'GraphAnalyzer' | 'PackageBoundaryAnalyzer' | 'DesignPatternAnalyzer' | 'AiAdvisory';
+    /** Advisory marks attached by the AI Reasoning pass (RICA-V000). Never deletes the violation. */
+    aiInsights?: AiInsights;
+    /** Optional actionable fix proposed by the advisory pass */
+    quickFix?: AiQuickFix;
 }
 
 export interface ViolationSummary {
