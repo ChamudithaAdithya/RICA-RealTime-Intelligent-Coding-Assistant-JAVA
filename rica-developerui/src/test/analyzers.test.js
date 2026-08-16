@@ -156,6 +156,44 @@ public class MyService {
             }
         }
     });
+
+    it('should detect anemic service (delegation-only methods)', () => {
+        const code = `package com.example;
+import org.springframework.stereotype.Service;
+@Service
+public class ThinService {
+    private SomeRepository someRepository;
+    public String findA() { return someRepository.findA(); }
+    public String findB() { return someRepository.findB(); }
+    public String findC() { return someRepository.findC(); }
+}`;
+        const ast = parse(code, 'ThinService.java');
+        const violations = analyzer.analyze([ast]);
+        const anemic = violations.find(v => v.type === 'anemic-service');
+        assert.ok(anemic, 'should detect anemic service');
+        assert.strictEqual(anemic.severity, 'warning');
+    });
+
+    it('should NOT flag service with real business logic as anemic', () => {
+        const code = `package com.example;
+import org.springframework.stereotype.Service;
+@Service
+public class SmartService {
+    public double compute(double a, double b) {
+        double total = 0;
+        for (int i = 0; i < 10; i++) { total += a * i + b; }
+        return total;
+    }
+    public String classify(double total) {
+        if (total > 100) { return "high"; }
+        return "low";
+    }
+}`;
+        const ast = parse(code, 'SmartService.java');
+        const violations = analyzer.analyze([ast]);
+        const anemic = violations.find(v => v.type === 'anemic-service');
+        assert.ok(!anemic, 'should not flag service with business logic');
+    });
 });
 
 describe('ControllerLayerAnalyzer', () => {
@@ -321,6 +359,37 @@ public class MyEntity {
         const directAccess = violations.find(v => v.type === 'direct-layer-access');
         assert.ok(directAccess, 'should detect direct-layer-access when entity instantiates repository');
     });
+
+    it('should detect improper-data-access when entity uses raw JDBC/JPA', () => {
+        const code = `package com.example;
+import jakarta.persistence.Entity;
+@Entity
+public class BadEntity {
+    public String fetch() {
+        JdbcTemplate jt = new JdbcTemplate();
+        return jt.queryForObject("select ...", String.class);
+    }
+}`;
+        const ast = parse(code, 'BadEntity.java');
+        const violations = analyzer.analyze([ast]);
+        const improper = violations.find(v => v.type === 'improper-data-access');
+        assert.ok(improper, 'should detect improper data access');
+        assert.strictEqual(improper.severity, 'error');
+    });
+
+    it('should NOT flag plain data entity as improper-data-access', () => {
+        const code = `package com.example;
+import jakarta.persistence.Entity;
+@Entity
+public class GoodEntity {
+    private Long id;
+    public Long getId() { return id; }
+}`;
+        const ast = parse(code, 'GoodEntity.java');
+        const violations = analyzer.analyze([ast]);
+        const improper = violations.find(v => v.type === 'improper-data-access');
+        assert.ok(!improper, 'should not flag plain data entity');
+    });
 });
 
 describe('APIResourceLayerAnalyzer', () => {
@@ -413,6 +482,66 @@ public class MyResource {
         const violations = analyzer.analyze([ast]);
         const exposing = violations.find(v => v.type === 'exposing-internal-entity');
         assert.ok(exposing, 'should detect exposing-internal-entity when entity type is returned');
+    });
+
+    it('should detect missing-dto-usage when endpoint takes an internal domain/entity param', () => {
+        const orderCode = `package com.example;
+import jakarta.persistence.Entity;
+@Entity
+public class Order {
+    private Long id;
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+}`;
+        const apiCode = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+@RestController
+public class OrderResource {
+    @PostMapping
+    public String create(@RequestBody Order order) {
+        return "created";
+    }
+}`;
+        const allAsts = [parse(orderCode, 'Order.java'), parse(apiCode, 'OrderResource.java')];
+        const violations = analyzer.analyze(allAsts);
+        const missingDto = violations.find(v => v.type === 'missing-dto-usage');
+        assert.ok(missingDto, 'should detect missing DTO usage');
+    });
+
+    it('should detect exposing-internal-structure when endpoint returns a non-DTO domain object', () => {
+        const invoiceCode = `package com.example;
+public class Invoice {
+    public String getTotal() { return "0.00"; }
+}`;
+        const apiCode = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public class InvoiceResource {
+    public Invoice getInvoice(String id) {
+        return new Invoice();
+    }
+}`;
+        const allAsts = [parse(invoiceCode, 'Invoice.java'), parse(apiCode, 'InvoiceResource.java')];
+        const violations = analyzer.analyze(allAsts);
+        const exposing = violations.find(v => v.type === 'exposing-internal-structure');
+        assert.ok(exposing, 'should detect exposing internal structure');
+    });
+
+    it('should detect improper-error-handling when endpoint throws a broad exception', () => {
+        const code = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public class ErrResource {
+    public String get(String id) throws Exception {
+        throw new Exception("boom");
+    }
+}`;
+        const ast = parse(code, 'ErrResource.java');
+        const violations = analyzer.analyze([ast]);
+        const improper = violations.find(v => v.type === 'improper-error-handling');
+        assert.ok(improper, 'should detect improper error handling for broad throws');
     });
 });
 

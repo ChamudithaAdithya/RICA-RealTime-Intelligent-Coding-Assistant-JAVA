@@ -67,8 +67,7 @@ RICA is a **VS Code extension** that performs live, real-time architectural anal
 | V101 | Self-instantiation of service/repo | Service, Controller, API Resource | error | — |
 | V102 | Uninjected repository field access | Service | error | — |
 | V103 | Uninjected service field access | Controller | error | — |
-| V104 | Anemic service class | Service | info | — |
-| V105 | Package violation | Service | error | — |
+| V104 | Anemic service class | Service | warning | — |
 | V106 | Business logic in wrong layer | Controller, Entity | warning | — |
 | V107 | Direct layer access from entity | Entity | error | — |
 | V108 | Anemic entity | Entity | info | — |
@@ -275,7 +274,7 @@ rica-developerui/
 │   │   ├── vscodeConfigProvider.ts
 │   │   ├── vscodeSourceProvider.ts
 │   │   └── apiClientAdapter.ts    # Adapter: HTTP client → BackendService
-│   ├── serviceLayerDetector.ts    # V101-V105 service layer rules
+│   ├── serviceLayerDetector.ts    # V101-V104 service layer rules
 │   ├── controllerLayerDetector.ts # V103, V106, V110-V114 controller rules
 │   ├── entityLayerDetector.ts     # V106-V109 entity rules
 │   ├── apiResourceLayerDetector.ts # V201-V207 API resource rules

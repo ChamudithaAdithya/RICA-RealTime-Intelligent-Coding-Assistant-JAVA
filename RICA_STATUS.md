@@ -61,12 +61,7 @@ Stage 4 — Design Pattern Compliance
 
 | Code | Status |
 |---|---|
-| V104 (`anemic-service`) | Defined in `RULE_CODE_MAP`, **never emitted** — `ServiceLayerAnalyzer` only produces `self-instantiation`, `uninjected-repository-access` |
-| V105 (`package-violation`) | Defined in `RULE_CODE_MAP`, **never emitted** — produced by `PackageBoundaryAnalyzer` under `RICA-V501` code instead |
-| V109 (`improper-data-access`) | Defined in `RULE_CODE_MAP`, **never emitted** — `EntityLayerAnalyzer` does not produce this type |
-| V202 (`missing-dto-usage`) | Defined in `RULE_CODE_MAP`, **never emitted** — `APIResourceLayerAnalyzer` does not produce this type |
-| V203 (`improper-error-handling`) | Defined in `RULE_CODE_MAP`, **never emitted** — `APIResourceLayerAnalyzer` does not produce this type |
-| V207 (`exposing-internal-structure`) | Defined in `RULE_CODE_MAP`, **never emitted** — `APIResourceLayerAnalyzer` does not produce this type |
+| *(none)* | All previously dead codes are now live: V104 (`anemic-service`) emitted by `ServiceLayerAnalyzer`, V109 (`improper-data-access`) by `EntityLayerAnalyzer`, V202/V203/V207 (`missing-dto-usage` / `improper-error-handling` / `exposing-internal-structure`) by `APIResourceLayerAnalyzer`. V105 (`package-violation`) was removed — replaced by V501 |
 
 #### Infrastructure Components Not Mentioned
 
@@ -173,14 +168,14 @@ The Real-Time Intelligent Coding Assistant (RICA) has been implemented as a full
 
 ### 2.5 Section 9 — Revised Work Plan (Add)
 
-The following rule codes are defined in the code registry but have **no emitter** — they represent known gaps for future implementation:
+The previously emitter-less rule codes are now **implemented**:
 
-- **V104 Anemic Service**: Service classes should contain business logic, not just pass-through delegations
-- **V109 Improper Data Access**: Entities should not access repositories or databases
-- **V202 Missing DTO Usage**: API methods should use DTOs instead of domain entities
-- **V203 Improper Error Handling**: API methods should declare or catch exceptions
-- **V207 Exposing Internal Structure**: API return types should not be internal domain objects
-- **V105 Package Violation** (old code): Replaced by V501; remove from `RULE_CODE_MAP`
+- **V104 Anemic Service**: emitted by `ServiceLayerAnalyzer` when a service has ≥2 concrete methods that are only accessors/pure delegation
+- **V109 Improper Data Access**: emitted by `EntityLayerAnalyzer` for JDBC/JPA/Datasource usage in entity fields, method calls, or object creations
+- **V202 Missing DTO Usage**: emitted by `APIResourceLayerAnalyzer` when an endpoint parameter is an internal domain/entity class instead of a DTO
+- **V203 Improper Error Handling**: emitted by `APIResourceLayerAnalyzer` for raw generic throws, `throw new Exception(...)`, or `printStackTrace()` in endpoints
+- **V207 Exposing Internal Structure**: emitted by `APIResourceLayerAnalyzer` when an endpoint returns a non-DTO internal project class (entity returns remain V201)
+- **V105 Package Violation** (old code): removed from `RULE_CODE_MAP` and the layer detectors — fully replaced by V501
 
 ---
 

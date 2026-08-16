@@ -2,7 +2,7 @@ import { FullASTOutput, ClassInfo, Method, MethodCall, ObjectCreation, ImportInf
 import { DiagnosticRange } from './types/violations';
 
 export interface ControllerLayerViolation {
-  type: 'self-instantiation' | 'uninjected-service-access' | 'business-logic' | 'package-violation'
+  type: 'self-instantiation' | 'uninjected-service-access' | 'business-logic'
       | 'direct-http-call' | 'file-io' | 'background-thread' | 'static-cache' | 'raw-sql-access';
   message: string;
   className: string;

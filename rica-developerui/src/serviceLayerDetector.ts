@@ -2,7 +2,7 @@ import { FullASTOutput, ClassInfo, Method, MethodCall, ObjectCreation, ImportInf
 import { DiagnosticRange } from './types/violations';
 
 export interface ServiceLayerViolation {
-  type: 'self-instantiation' | 'uninjected-repository-access' | 'anemic-service' | 'package-violation';
+  type: 'self-instantiation' | 'uninjected-repository-access' | 'anemic-service';
   message: string;
   className: string;
   methodName?: string;
@@ -137,6 +137,22 @@ export class ServiceLayerAnalyzer {
             }
           }
         }
+
+        // Check for anemic service (once per class)
+        if (this.isAnemicService(cls)) {
+          violations.push({
+            type: 'anemic-service',
+            message: `Service class '${cls.className}' is anemic: its methods are trivial accessors or pure delegation with no business logic. Consider moving domain logic into this service.`,
+            className: cls.fullyQualifiedName,
+            severity: 'warning',
+            filePath: ast.filePath,
+            range: cls.startLine ? {
+              start: { line: cls.startLine, character: cls.startColumn || 0 },
+              end: { line: cls.endLine || cls.startLine, character: cls.endColumn || (cls.startColumn || 0) + 1 },
+            } : undefined,
+            explanation: 'Your service class contains no meaningful business logic — just getters/setters or pass-through delegation. Services are the natural home for business rules; move behavior (validation, calculations, orchestration) into this class so the logic is testable and reusable, instead of living in controllers or entities.'
+          });
+        }
       }
     }
 
@@ -211,5 +227,58 @@ export class ServiceLayerAnalyzer {
     // Strip generics and array brackets
     const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
     return this.isRepositoryClassName(raw);
+  }
+
+  private isAnemicService(cls: ClassInfo): boolean {
+    if (cls.classType !== 'class') {
+      return false;
+    }
+    const concrete = cls.methods.filter(m => m.methodType !== 'abstract' && m.methodType !== 'native');
+    // An empty (marker-only) service has no business logic by definition.
+    if (concrete.length === 0) {
+      return true;
+    }
+    // Require multiple methods before calling it anemic to avoid noise on thin 1-method pass-throughs.
+    if (concrete.length < 2) {
+      return false;
+    }
+    return concrete.every(m => this.isTrivialServiceMethod(m));
+  }
+
+  private isTrivialServiceMethod(method: Method): boolean {
+    if (this.isAccessor(method)) {
+      return true;
+    }
+    if ((method.createdObjects || []).length > 0) {
+      return false;
+    }
+    if ((method.calledMethods || []).length > 1) {
+      return false;
+    }
+    const body = method.body;
+    if (!body) {
+      return true;
+    }
+    if (body.linesOfCode > 5) {
+      return false;
+    }
+    if (body.localVariables.length > 3) {
+      return false;
+    }
+    if (body.cyclomaticComplexity !== undefined && body.cyclomaticComplexity > 1) {
+      return false;
+    }
+    if (body.businessLogicScore !== undefined && body.businessLogicScore > 0) {
+      return false;
+    }
+    return true;
+  }
+
+  private isAccessor(method: Method): boolean {
+    const isGetter = method.name.startsWith('get') && method.name.length > 3 &&
+      method.parameters.length === 0 && !method.returnType.startsWith('void');
+    const isSetter = method.name.startsWith('set') && method.name.length > 3 &&
+      method.parameters.length === 1 && method.returnType.startsWith('void');
+    return isGetter || isSetter;
   }
 }
