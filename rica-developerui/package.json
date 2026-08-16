@@ -44,6 +44,10 @@
       {
         "command": "javaAstAnalyzer.showViolationsView",
         "title": "Java AST: Show Architecture Violations"
+      },
+      {
+        "command": "javaAstAnalyzer.openDocumentation",
+        "title": "Java AST: Open RICA Documentation"
       }
     ],
     "configuration": {
@@ -230,6 +234,7 @@
     "test:crossfile": "mocha --grep 'CrossFile' src/test/crossFile.test.js",
     "rica:check": "node src/ricaLayerCheck.js",
     "rica:check:self": "node src/ricaLayerCheck.js && node test-lms-analyzer.js",
+    "ai:smoke": "node scripts/aiSmokeTest.js",
     "generate:docs": "node scripts/generate-docs.cjs",
     "docs:verify": "node scripts/generate-docs.cjs --verify",
     "predocs:dev": "npm run generate:docs",

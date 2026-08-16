@@ -1,0 +1,9 @@
+{
+    "javaAstAnalyzer.enableAiAdvisory": true,
+    "javaAstAnalyzer.aiProvider": "ollama",
+    "javaAstAnalyzer.aiEndpoint": "https://disclose-scout-flood-killing.trycloudflare.com",
+    "javaAstAnalyzer.aiModel": "qwen2.5-coder:7b",
+    "javaAstAnalyzer.aiTimeoutMs": 120000,
+    "javaAstAnalyzer.aiTrigger": "onDemand",
+    "javaAstAnalyzer.aiMaxCandidatesPerRun": 4
+}

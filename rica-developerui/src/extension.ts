@@ -19,6 +19,8 @@ import { AiAdvisoryCoordinator } from './application/ai/aiAdvisoryCoordinator';
 import { OllamaAiAdapter } from './infrastructure/ai/ollamaAiAdapter';
 import { OpenAICompatibleAiAdapter } from './infrastructure/ai/openaiCompatibleAiAdapter';
 import { FileAuditLogger } from './infrastructure/ai/fileAuditLogger';
+import { AiQuickFixCodeActionProvider } from './codeActionProvider';
+import { DocumentationCodeActionProvider } from './documentationCodeActionProvider';
 
 let astManager: ASTManager;
 let sourceProvider: SourceProvider;
@@ -49,9 +51,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Clean Architecture wiring: ports → adapters
     const diagnosticCollection = vscode.languages.createDiagnosticCollection('java-layer-analyzer');
-    context.subscriptions.push(diagnosticCollection);
+    const advisoryDiagnosticCollection = vscode.languages.createDiagnosticCollection('rica-ai-advisory');
+    context.subscriptions.push(diagnosticCollection, advisoryDiagnosticCollection);
 
-    const diagnosticReporter = new VscodeDiagnosticReporter(diagnosticCollection);
+    const diagnosticReporter = new VscodeDiagnosticReporter(diagnosticCollection, advisoryDiagnosticCollection);
     const parserService = new JavaParserAdapter(javaParser);
     const configProvider = new VscodeConfigProvider();
 
@@ -65,9 +68,34 @@ export async function activate(context: vscode.ExtensionContext) {
         savedIgnoredIds,
     );
 
-    // AI Reasoning advisory wiring (M5 core pipeline, no UI yet)
+    // AI Reasoning advisory wiring — pipeline (M5) + M6 quick-fix surface
     workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? context.globalStorageUri.fsPath;
     aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
+
+    // AI Quick-Fix lightbulb actions (M6): reads violation.quickFix edits
+    context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider(
+            'java',
+            new AiQuickFixCodeActionProvider(() => violationManager.getActiveViolations()),
+            { providedCodeActionKinds: AiQuickFixCodeActionProvider.providedCodeActionKinds },
+        ),
+    );
+
+    // Docs lightbulb: "Open RICA documentation" on every deterministic violation
+    context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider(
+            'java',
+            new DocumentationCodeActionProvider(),
+            { providedCodeActionKinds: DocumentationCodeActionProvider.providedCodeActionKinds },
+        ),
+    );
+    context.subscriptions.push(
+        vscode.commands.registerCommand('javaAstAnalyzer.openDocumentation', (url?: string) => {
+            if (url) {
+                vscode.env.openExternal(vscode.Uri.parse(url));
+            }
+        }),
+    );
 
     fileWatcher = new FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
 

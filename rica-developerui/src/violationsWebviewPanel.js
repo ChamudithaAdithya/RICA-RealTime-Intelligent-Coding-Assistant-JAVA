@@ -73,7 +73,7 @@ class ViolationsWebviewPanel {
                     break;
                 case 'openViolationDocs':
                     if (message.url) {
-                        const cfg = vscode.workspace.getConfiguration('rica');
+                        const cfg = vscode.workspace.getConfiguration('javaAstAnalyzer');
                         const base = cfg.get('documentationBaseUrl', 'http://localhost:5173');
                         const target = base.replace(/\/+$/, '') + message.url;
                         vscode.env.openExternal(vscode.Uri.parse(target));

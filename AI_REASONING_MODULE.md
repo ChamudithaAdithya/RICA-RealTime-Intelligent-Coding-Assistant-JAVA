@@ -350,8 +350,8 @@ AI coordinator and re-flags the pipeline — the same wiring already used by
 | M3 | Adapters `OllamaAiAdapter`, `OpenAICompatibleAiAdapter`, `FileAuditLogger`, HTTP/parse/prompt helpers | ✅ shipped |
 | M4 | `triage.ts`, `contextBuilder.ts`, `heuristicAdvisor.ts` | ✅ shipped |
 | M5 | `AiAdvisoryCoordinator`, ViolationManager advisory channel, extension wiring + `rica.aiReview` command | ✅ shipped |
-| M6 | UI: quick-fix code action, advisory markers in diagnostics/webview | pending (follow-up) |
-| M7 | Tests (fixture-based, mock provider) | ✅ shipped — 88 passing |
+| M6 | Quick-fix code actions, `[RICA-AI]` marker differentiation, reviewed/OK policy | ✅ shipped |
+| M7 | Tests (fixture-based, mock provider) | ✅ shipped — 90 passing |
 | M8 | Docs (this file) | ✅ this update |
 
 **Shipped files added by the implementation**
@@ -370,6 +370,7 @@ rica-developerui/src/infrastructure/ai/parseDecisions.ts
 rica-developerui/src/infrastructure/ai/ollamaAiAdapter.ts
 rica-developerui/src/infrastructure/ai/openaiCompatibleAiAdapter.ts
 rica-developerui/src/infrastructure/ai/fileAuditLogger.ts
+rica-developerui/src/codeActionProvider.ts          (M6)
 rica-developerui/src/test/aiAdvisory.test.js
 rica-developerui/src/test/mocks/mockAiDecisionProvider.js
 ```
@@ -387,6 +388,17 @@ rica-developerui/src/test/mocks/mockAiDecisionProvider.js
   same `Violation` object references; net-new probe findings become `detectorSource:
   'AiAdvisory'` violations coded `RICA-V000` — `RICA_VIOLATION_LIST.md` stays untouched.
 
-**Remaining (M6 follow-up)**: code-action provider applying `quickFix.edits`, a distinct
-`RICA-AI` marker in diagnostics, advisory rows in the violations webview, and the
-ambiguity "reviewed/ok" rendering decision.
+**M6 UI decisions**
+
+- **Quick fixes**: `AiQuickFixCodeActionProvider` reads `violation.quickFix` /
+  `aiInsights.quickFix` and surfaces a preferred Quick-Fix lightbulb on the exact
+  diagnostic (`diag.code === violation.id`). Edits apply cross-file; `insertBefore`
+  / `insertAfter` auto-add newlines so annotations land on their own line.
+- **Marker differentiation**: advisory findings render in a **separate** diagnostic
+  collection (`rica-ai-advisory`, source `RICA-AI`) with a `[RICA-AI]` message prefix;
+  deterministic rules stay in `java-layer-analyzer` with source `Java Layer Analyzer`.
+- **Reviewed / OK policy**: a `NO_VIOLATION` clean review emits **no diagnostic** — it
+  annotates only the in-memory `aiInsights` and is recorded in `.rica/ai-audit.jsonl`
+  (avoids diagnostic clutter; the audit trail is the source of truth).
+- Deliberately **not** wired: advisory rows in the violations webview (violations remain
+  deterministic there) and an explicit "dismiss tag" — both deferred unless wanted.

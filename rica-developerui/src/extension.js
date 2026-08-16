@@ -53,6 +53,8 @@ const aiAdvisoryCoordinator_1 = require("./application/ai/aiAdvisoryCoordinator"
 const ollamaAiAdapter_1 = require("./infrastructure/ai/ollamaAiAdapter");
 const openaiCompatibleAiAdapter_1 = require("./infrastructure/ai/openaiCompatibleAiAdapter");
 const fileAuditLogger_1 = require("./infrastructure/ai/fileAuditLogger");
+const codeActionProvider_1 = require("./codeActionProvider");
+const documentationCodeActionProvider_1 = require("./documentationCodeActionProvider");
 let astManager;
 let sourceProvider;
 let apiClient;
@@ -78,15 +80,25 @@ async function activate(context) {
     astManager = new astManager_1.ASTManager(javaParser, apiClient, sourceProvider, outputChannel, excludePatterns);
     // Clean Architecture wiring: ports → adapters
     const diagnosticCollection = vscode.languages.createDiagnosticCollection('java-layer-analyzer');
-    context.subscriptions.push(diagnosticCollection);
-    const diagnosticReporter = new vscodeDiagnosticReporter_1.VscodeDiagnosticReporter(diagnosticCollection);
+    const advisoryDiagnosticCollection = vscode.languages.createDiagnosticCollection('rica-ai-advisory');
+    context.subscriptions.push(diagnosticCollection, advisoryDiagnosticCollection);
+    const diagnosticReporter = new vscodeDiagnosticReporter_1.VscodeDiagnosticReporter(diagnosticCollection, advisoryDiagnosticCollection);
     const parserService = new javaParserAdapter_1.JavaParserAdapter(javaParser);
     const configProvider = new vscodeConfigProvider_1.VscodeConfigProvider();
     const savedIgnoredIds = context.workspaceState.get('rica-ignored-violations', []);
     violationManager = new violationManager_1.ViolationManager(diagnosticReporter, parserService, configProvider, (ids) => context.workspaceState.update('rica-ignored-violations', ids), savedIgnoredIds);
-    // AI Reasoning advisory wiring (M5 core pipeline, no UI yet)
+    // AI Reasoning advisory wiring — pipeline (M5) + M6 quick-fix surface
     workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? context.globalStorageUri.fsPath;
     aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
+    // AI Quick-Fix lightbulb actions (M6): reads violation.quickFix edits
+    context.subscriptions.push(vscode.languages.registerCodeActionsProvider('java', new codeActionProvider_1.AiQuickFixCodeActionProvider(() => violationManager.getActiveViolations()), { providedCodeActionKinds: codeActionProvider_1.AiQuickFixCodeActionProvider.providedCodeActionKinds }));
+    // Docs lightbulb: "Open RICA documentation" on every deterministic violation
+    context.subscriptions.push(vscode.languages.registerCodeActionsProvider('java', new documentationCodeActionProvider_1.DocumentationCodeActionProvider(), { providedCodeActionKinds: documentationCodeActionProvider_1.DocumentationCodeActionProvider.providedCodeActionKinds }));
+    context.subscriptions.push(vscode.commands.registerCommand('javaAstAnalyzer.openDocumentation', (url) => {
+        if (url) {
+            vscode.env.openExternal(vscode.Uri.parse(url));
+        }
+    }));
     fileWatcher = new fileWatcher_1.FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
     // Re-run analysis when relevant settings change
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {

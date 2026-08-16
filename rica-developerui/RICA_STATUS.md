@@ -157,6 +157,15 @@ onFileSaved(file):
   strict no-op — today's pipeline is byte-identical.
 - Every pass is appended to `.rica/ai-audit.jsonl` (`aiAuditLogEnabled`, default on).
 
+### M6 UI surface
+- **Quick fixes**: `rica-developerui/src/codeActionProvider.ts` turns `violation.quickFix`
+  into a preferred VS Code Quick-Fix lightbulb on the exact diagnostic.
+- **Marker differentiation**: advisory findings are rendered in a separate
+  `rica-ai-advisory` diagnostic collection (source `RICA-AI`, `[RICA-AI]` prefix);
+  deterministic rules stay in `java-layer-analyzer`.
+- **Reviewed / OK**: clean `NO_VIOLATION` reviews stay silent in the editor (no
+  diagnostic) and are recorded in the audit log — no diagnostic clutter.
+
 ### 5. Standalone Engine + Dashboard
 ```
 GET /api/v1/violations?severity=error&source=ControllerLayer
@@ -175,7 +184,7 @@ GET /view                  → D3.js force-directed graph dashboard
 |--------|-------|
 | TypeScript source files | 40 |
 | Lines of TypeScript | ~10,300 |
-| Mocha unit tests | 88 (passing) |
+| Mocha unit tests | 90 (passing) |
 | Pending tests | 3 |
 | Cross-layer violations (self-check) | 0 |
 
@@ -343,4 +352,4 @@ rica-developerui/
 
 ## Status: Production-Ready for Pilot
 
-RICA has been validated against **806 Java files** across 2 projects (49-file LMS + 757-file Simlea microservices) with **88 passing unit tests**, **zero type errors**, and **zero self-check violations** in Clean Architecture layering. The delta pipeline processes single-file changes in `O(Δ)` time, the D3.js dashboard provides real-time architectural visualization, and the optional AI Reasoning advisory (M0–M5 core) is implemented — deterministic triage/context/heuristic pipeline with an Ollama/OpenAI-compatible adapter and audit log; UI surface (M6: quick-fix code actions, advisory markers) is the next follow-up.
+RICA has been validated against **806 Java files** across 2 projects (49-file LMS + 757-file Simlea microservices) with **90 passing unit tests**, **zero type errors**, and **zero self-check violations** in Clean Architecture layering. The delta pipeline processes single-file changes in `O(Δ)` time, the D3.js dashboard provides real-time architectural visualization, and the AI Reasoning module (M0–M8) is fully implemented: deterministic triage/context/heuristic pipeline, Ollama/OpenAI-compatible adapter, audit log, plus the M6 UI surface (quick-fix lightbulbs and `[RICA-AI]` marker differentiation).

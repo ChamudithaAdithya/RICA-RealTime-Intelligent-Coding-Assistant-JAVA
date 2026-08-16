@@ -33,7 +33,7 @@ export class OllamaAiAdapter implements AiDecisionProvider {
     const body = {
       model: this.model,
       messages: buildMessages(context),
-      stream: false,
+      stream: true,
       format: 'json',
       options: { num_predict: this.options.maxTokensPerRequest, temperature: 0.2 },
     };
@@ -44,13 +44,38 @@ export class OllamaAiAdapter implements AiDecisionProvider {
     if (res.status < 200 || res.status >= 300) {
       throw new Error(`Ollama returned HTTP ${res.status}: ${res.body.slice(0, 200)}`);
     }
-    const json = JSON.parse(res.body) as { message?: { content?: string } };
-    const content = json.message?.content;
-    if (!content) throw new Error('Ollama response had no message content');
-    return parseDecisions(content);
+    return parseDecisions(extractOllamaContent(res.body));
   }
 
   private stripSlash(url: string): string {
     return url.replace(/\/+$/, '');
+  }
+}
+
+/**
+ * Streaming responses are NDJSON: one object per line {...,"message":{"content":...},"done":false}.
+ * Accumulate the content deltas. Falls back to a single JSON object for layered gateways
+ * (e.g. tunnels/proxies) that buffer the stream into one non-streamed reply.
+ */
+function extractOllamaContent(body: string): string {
+  const lines = body.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length > 1) {
+    let content = '';
+    for (const line of lines) {
+      try {
+        const chunk = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
+        content += chunk.message?.content ?? '';
+        if (chunk.done) break;
+      } catch {
+        // Non-JSON line — ignore (blank keepalives etc.).
+      }
+    }
+    if (content) return content;
+  }
+  try {
+    const json = JSON.parse(body) as { message?: { content?: string } };
+    return json.message?.content ?? '';
+  } catch {
+    return '';
   }
 }

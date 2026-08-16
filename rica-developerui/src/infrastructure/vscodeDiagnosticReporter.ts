@@ -55,6 +55,10 @@ function workspaceUri(workspaceFolder: vscode.WorkspaceFolder, relativePath: str
 
 function toDiagnostics(vlist: Violation[], advisory: boolean): vscode.Diagnostic[] {
   const diagnostics: vscode.Diagnostic[] = [];
+  const docBase = vscode.workspace
+    .getConfiguration('javaAstAnalyzer')
+    .get<string>('documentationBaseUrl', 'http://localhost:5173')
+    .replace(/\/+$/, '');
   for (const v of vlist) {
     let severity: vscode.DiagnosticSeverity;
     switch (v.severity) {
@@ -78,7 +82,14 @@ function toDiagnostics(vlist: Violation[], advisory: boolean): vscode.Diagnostic
     const tag = advisory ? '[RICA-AI] ' : '';
     const diag = new vscode.Diagnostic(range, `${tag}${codePrefix}${severityLabel} ${v.message}`, severity);
     diag.source = advisory ? 'RICA-AI' : 'Java Layer Analyzer';
-    diag.code = v.id;
+    // Render the Problems-panel code as a clickable link to the matching docs page
+    // when a per-violation documentationUrl is available (advisory findings have none).
+    if (!advisory && v.documentationUrl) {
+      const target = vscode.Uri.parse(`${docBase}${v.documentationUrl}.html`);
+      diag.code = { value: v.id, target };
+    } else {
+      diag.code = v.id;
+    }
     diagnostics.push(diag);
   }
   return diagnostics;

@@ -3,6 +3,11 @@ import * as path from 'path';
 import { Violation } from './domain/violations';
 import { AiQuickFix } from './domain/ai';
 
+/** Diagnostics with a clickable doc link carry the violation id in `code.value`. */
+function diagnosticCode(diag: vscode.Diagnostic): string | number | undefined {
+  return typeof diag.code === 'object' ? diag.code.value : diag.code;
+}
+
 /**
  * Surfaces violation `quickFix` edits (produced by the AI Reasoning module) as
  * standard VS Code Quick-Fix lightbulb actions on the offending diagnostic.
@@ -19,7 +24,7 @@ export class AiQuickFixCodeActionProvider implements vscode.CodeActionProvider {
   ): vscode.CodeAction[] {
     const actions: vscode.CodeAction[] = [];
     for (const diag of context.diagnostics) {
-      const violation = this.getViolations().find(v => v.id === diag.code);
+      const violation = this.getViolations().find(v => v.id === diagnosticCode(diag));
       const quickFix = violation?.quickFix ?? violation?.aiInsights?.quickFix;
       if (!quickFix?.edits?.length) continue;
 
@@ -27,10 +32,9 @@ export class AiQuickFixCodeActionProvider implements vscode.CodeActionProvider {
         `AI Quick Fix: ${quickFix.title}`,
         vscode.CodeActionKind.QuickFix,
       );
-      action.isPreferred = true;
+action.isPreferred = true;
       action.diagnostics = [diag];
       action.edit = this.buildWorkspaceEdit(document, quickFix);
-      action.detail = quickFix.description;
       actions.push(action);
     }
     return actions;
@@ -41,23 +45,30 @@ export class AiQuickFixCodeActionProvider implements vscode.CodeActionProvider {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 
     for (const e of quickFix.edits) {
-      const uri = this.isSameFile(document, e.filePath)
+      const sameFile = this.isSameFile(document, e.filePath);
+      const uri = sameFile
         ? document.uri
         : root
           ? vscode.Uri.from({ scheme: 'file', path: path.join(root, e.filePath) })
           : document.uri;
 
       const zeroBased = Math.max(0, e.line - 1);
+      // Line-end position: exact for the current document, best-effort otherwise.
+      const endOfLine = () => {
+        if (sameFile) return document.lineAt(zeroBased).range.end;
+        return new vscode.Position(zeroBased, 100000);
+      };
+
       switch (e.kind) {
         case 'insertBefore':
           // Prepend a newline so annotation text lands on its own line.
           edit.insert(uri, new vscode.Position(zeroBased, 0), `${e.text}\n`);
           break;
         case 'insertAfter':
-          edit.insert(uri, new vscode.Position(zeroBased, Number.MAX_SAFE_INTEGER), `\n${e.text}`);
+          edit.insert(uri, endOfLine(), `\n${e.text}`);
           break;
         case 'replace':
-          edit.replace(uri, new vscode.Range(zeroBased, 0, zeroBased, Number.MAX_SAFE_INTEGER), e.text);
+          edit.replace(uri, new vscode.Range(new vscode.Position(zeroBased, 0), endOfLine()), e.text);
           break;
       }
     }
