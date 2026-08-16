@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PackageBoundaryAnalyzer = void 0;
 const analyzerConfig_1 = require("./domain/analyzerConfig");
+const violationCatalog_1 = require("./violationCatalog");
 class PackageBoundaryAnalyzer {
     constructor(config) {
         this.config = {
@@ -11,10 +12,11 @@ class PackageBoundaryAnalyzer {
             businessLogicThreshold: 3,
             excludePatterns: [],
             layerBoundaries: { ...analyzerConfig_1.DEFAULT_LAYER_BOUNDARIES },
+            ai: { ...analyzerConfig_1.DEFAULT_AI_CONFIG },
             ...config,
         };
     }
-    analyze(astOutputs, _graph) {
+    analyze(astOutputs, _graph, classAnnotations) {
         const violations = [];
         const boundaries = this.config.layerBoundaries;
         if (!boundaries)
@@ -29,6 +31,14 @@ class PackageBoundaryAnalyzer {
                 const targetLayer = this.matchLayerByFqn(imp.qualifiedName, boundaries, layers);
                 if (!targetLayer)
                     continue;
+                // If the target is in a controller package but annotated @Component (not @Controller/@RestController),
+                // treat it as a generic component, not a controller-layer class.
+                if (targetLayer === 'presentation' && classAnnotations) {
+                    const anns = classAnnotations.get(imp.qualifiedName);
+                    if (anns && anns.includes('Component') && !anns.some(a => a === 'Controller' || a === 'RestController')) {
+                        continue;
+                    }
+                }
                 const allowed = boundaries[fileLayer].allowedDeps;
                 if (targetLayer === fileLayer)
                     continue;
@@ -118,6 +128,7 @@ class PackageBoundaryAnalyzer {
             },
             legacyType: 'package-violation',
             detectorSource: 'PackageBoundaryAnalyzer',
+            documentationUrl: (0, violationCatalog_1.violationDocSlug)('RICA-V501'),
         }));
     }
 }

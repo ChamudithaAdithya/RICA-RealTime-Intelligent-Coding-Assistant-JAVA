@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.APIResourceLayerAnalyzer = void 0;
 class APIResourceLayerAnalyzer {
     constructor() {
+        this.businessLogicThreshold = 3;
         // Map of fully qualified class name to its layer and class info
         this.classLayers = new Map();
         this.classMap = new Map();
@@ -18,39 +19,21 @@ class APIResourceLayerAnalyzer {
         this.dtoPatterns = ['DTO', 'Request', 'Response', 'VO'];
         // Known infrastructure patterns
         this.infrastructurePatterns = ['Client', 'Gateway', 'Connector', 'Producer', 'Consumer'];
+        // Primitive/wrapper/JDK types — never internal domain types
+        this.simpleTypes = new Set([
+            'int', 'long', 'short', 'byte', 'char', 'boolean', 'float', 'double',
+            'Integer', 'Long', 'Short', 'Byte', 'Character', 'Boolean', 'Float', 'Double',
+            'String', 'BigDecimal', 'BigInteger', 'LocalDate', 'LocalTime', 'LocalDateTime',
+            'Instant', 'Date', 'Duration', 'Period', 'UUID', 'Object', 'Void', 'void',
+            'List', 'Set', 'Map', 'Collection', 'Optional', 'Iterable'
+        ]);
         // Known exception patterns
         this.exceptionPatterns = ['Exception', 'Error'];
         // Known validation annotations
         this.validationAnnotations = ['Valid', 'NotNull', 'Size', 'Min', 'Max', 'Pattern', 'Email', 'NotEmpty', 'NotBlank'];
-        // Known business logic indicators in method bodies
-        this.businessLogicPatterns = [
-            'if\\s*\\(',
-            'for\\s*\\(',
-            'while\\s*\\(',
-            'switch\\s*\\(',
-            '\\|\\|',
-            '&&',
-            '==',
-            '!=',
-            '<',
-            '>',
-            '<=',
-            '>=',
-            '\\+\\+',
-            '--',
-            '\\+=',
-            '-=',
-            '\\*=',
-            '/=',
-            '%=',
-            'new\\s+java\\.sql\\.',
-            'EntityManager',
-            'CriteriaQuery',
-            'Query\\s*\\(',
-            'prepareStatement',
-            'executeQuery',
-            'executeUpdate'
-        ];
+    }
+    setBusinessLogicThreshold(value) {
+        this.businessLogicThreshold = value;
     }
     analyze(astOutputs) {
         const violations = [];
@@ -146,8 +129,8 @@ class APIResourceLayerAnalyzer {
                         }
                     }
                     // Check for business logic in API resource methods
-                    const businessLogicScore = this.calculateBusinessLogicScore(method);
-                    if (businessLogicScore > 3) { // Threshold for significant business logic
+                    const businessLogicScore = method.body?.businessLogicScore ?? 0;
+                    if (businessLogicScore >= this.businessLogicThreshold) { // Threshold for significant business logic
                         violations.push({
                             type: 'business-logic-in-resource',
                             message: `API resource method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer.`,
@@ -180,6 +163,45 @@ class APIResourceLayerAnalyzer {
                                 severity: 'warning',
                                 filePath: ast.filePath,
                                 explanation: 'Your API resource method returns an internal entity type directly in its response. This leaks your persistence/domain model to external consumers — use Data Transfer Objects (DTOs) to decouple your internal schema from your API contract so changes to entities do not break clients.'
+                            });
+                        }
+                    }
+                    // V202: missing DTO usage — endpoint consumes internal domain types instead of DTOs
+                    if (isEndpoint) {
+                        const domParam = method.parameters.find(param => this.isInternalDomainType(this.unwrapContainer(param.dataType), ast.imports, ast.packageInfo?.name));
+                        if (domParam) {
+                            violations.push({
+                                type: 'missing-dto-usage',
+                                message: `API resource method '${method.name}' uses internal domain type '${domParam.dataType}' for parameter '${domParam.name}' instead of a DTO.`,
+                                className: cls.fullyQualifiedName,
+                                methodName: method.name,
+                                lineNumber: method.body?.linesOfCode,
+                                range: method.startLine ? {
+                                    start: { line: method.startLine, character: method.startColumn || 0 },
+                                    end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
+                                } : undefined,
+                                severity: 'warning',
+                                filePath: ast.filePath,
+                                explanation: 'Your API method accepts an internal domain object as a parameter instead of a DTO. Input payloads should be validated DTOs so the API contract stays decoupled from your internal model — change the parameter to a request DTO and map it to the domain object in the service layer.'
+                            });
+                        }
+                        // V207: exposing internal structure — endpoint returns internal domain objects instead of DTOs
+                        const returnType = this.unwrapContainer(method.returnType);
+                        if (returnType && !this.isEntityClassName(this.stripGenerics(returnType)) &&
+                            this.isInternalDomainType(returnType, ast.imports, ast.packageInfo?.name)) {
+                            violations.push({
+                                type: 'exposing-internal-structure',
+                                message: `API resource method '${method.name}' returns internal domain type '${method.returnType}'. Use a DTO for the response contract.`,
+                                className: cls.fullyQualifiedName,
+                                methodName: method.name,
+                                lineNumber: method.body?.linesOfCode,
+                                range: method.startLine ? {
+                                    start: { line: method.startLine, character: method.startColumn || 0 },
+                                    end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
+                                } : undefined,
+                                severity: 'warning',
+                                filePath: ast.filePath,
+                                explanation: 'Your API method returns an internal domain object instead of a DTO. Returning domain/persistence objects in responses leaks internal structure into the API contract — introduce a response DTO and map the domain object to it before returning, so internal changes do not break external clients.'
                             });
                         }
                     }
@@ -359,29 +381,70 @@ class APIResourceLayerAnalyzer {
         return null;
     }
     checkForImproperErrorHandling(method) {
-        // This would require analyzing method body for try/catch patterns
-        // Since we don't have direct access to method body text, we'll return false for now
-        // In a full implementation, we would look for:
-        // - Exception.printStackTrace()
-        // - Throwing exceptions directly without wrapping
-        // - Returning exception details in response
+        // (a) Endpoint throws a raw generic exception that the framework would surface
+        //     as a bare 500 — internal details leak to clients.
+        const rawThrows = (method.throwsExceptions || []).some(ex => {
+            const raw = this.stripGenerics(ex);
+            if (['Exception', 'RuntimeException', 'Throwable', 'IOException', 'SQLException', 'Error'].includes(raw)) {
+                return true;
+            }
+            return this.isStandardLibraryType(raw) && /\.(Exception|Error)$/.test(raw);
+        });
+        if (rawThrows)
+            return true;
+        // (b) Endpoint constructs a raw generic exception (e.g. `throw new Exception(...)`).
+        const rawCreated = (method.createdObjects || []).some(o => ['Exception', 'RuntimeException', 'Throwable', 'IOException', 'SQLException', 'Error'].includes(o.className));
+        if (rawCreated)
+            return true;
+        // (c) Endpoint leaks stack traces to the client via printStackTrace().
+        if ((method.calledMethods || []).some(call => call.calledMethodName === 'printStackTrace'))
+            return true;
         return false;
     }
-    calculateBusinessLogicScore(method) {
-        let score = 0;
-        const methodBody = method.body;
-        if (!methodBody)
-            return score;
-        // Check method complexity based on available metrics
-        if (methodBody.linesOfCode > 20) {
-            score += 2; // Long methods often contain business logic
+    // V202/V207 helpers
+    unwrapContainer(typeName) {
+        if (!typeName)
+            return '';
+        let raw = typeName.trim().replace(/\s*\[\]\s*$/g, '');
+        const m = raw.match(/^[A-Za-z_$][\w$]*(?:<(.+)>)$/);
+        if (m && m[1]) {
+            const args = m[1].split(',').map(s => s.trim());
+            return args[0] || raw;
         }
-        if (methodBody.localVariables.length > 5) {
-            score += 1; // Many local variables suggest complex logic
+        return raw;
+    }
+    stripGenerics(typeName) {
+        if (!typeName)
+            return '';
+        return typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    }
+    isStandardLibraryType(typeName) {
+        return /^(java\.|javax\.|jakarta\.|org\.springframework\.|org\.apache\.|com\.sun\.|com\.fasterxml\.|lombok\.|org\.hibernate\.)/.test(typeName);
+    }
+    isSimpleType(typeName) {
+        return this.simpleTypes.has(typeName);
+    }
+    isInternalDomainType(typeName, imports, currentPackage) {
+        if (!typeName)
+            return false;
+        const raw = this.stripGenerics(typeName);
+        if (this.isSimpleType(raw))
+            return false;
+        if (this.isDTOClassName(raw))
+            return false;
+        if (this.isStandardLibraryType(raw))
+            return false;
+        const fqcn = this.resolveTypeName(raw, imports, currentPackage);
+        if (fqcn) {
+            if (this.isStandardLibraryType(fqcn))
+                return false;
+            if (this.classMap.has(fqcn))
+                return true;
+            return this.isEntityClassName(raw);
         }
-        // Since we don't have the actual method body text, we'll return a basic score
-        // In a full implementation, we would parse the method body for business logic patterns
-        return score;
+        // Unresolvable type — only rely on entity naming so unparsed framework or
+        // third-party types are not falsely flagged.
+        return this.isEntityClassName(raw);
     }
 }
 exports.APIResourceLayerAnalyzer = APIResourceLayerAnalyzer;

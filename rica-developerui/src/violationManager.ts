@@ -5,20 +5,21 @@ import { APIResourceLayerAnalyzer, APIResourceLayerViolation } from './apiResour
 import { CrossFileAnalyzer } from './crossFileAnalyzer';
 import { buildGraphFromFiles, patchGraphForFile, ProjectDependencyGraph } from './dependencyGraph';
 import { PackageBoundaryAnalyzer } from './packageBoundaryDetector';
+import { DesignPatternAnalyzer } from './designPatternAnalyzer';
 import { Violation, ViolationSummary } from './domain/violations';
-import { AnalyzerConfig } from './domain/analyzerConfig';
+import { AnalyzerConfig, DEFAULT_AI_CONFIG } from './domain/analyzerConfig';
 import { FullASTOutput } from './domain/astTypes';
 import { ImpactAnalyzer, InvalidationMaps } from './impactAnalyzer';
 import { DiagnosticReporter } from './application/ports/diagnosticReporter';
 import { ParserService } from './application/ports/parserService';
 import { ConfigProvider } from './application/ports/configProvider';
+import { VIOLATION_DOC_BY_CODE, violationDocSlug } from './violationCatalog';
 
 const MITIGATION_HINTS: Record<string, string> = {
     'self-instantiation': 'Use dependency injection (@Autowired/@Inject) instead of directly instantiating with new()',
     'uninjected-repository-access': 'Annotate the field with @Autowired or use constructor injection',
     'uninjected-service-access': 'Annotate the field with @Autowired or use constructor injection',
     'anemic-service': 'Move business logic from controllers/entities into this service class',
-    'package-violation': 'Move the class to the correct package following the layered architecture',
     'business-logic': 'Business logic should be in the Service layer, not in Controllers or Entities',
     'direct-layer-access': 'Access external layers through the Service layer instead of directly',
     'anemic-entity': 'Add behavior (methods) to the entity instead of keeping it as a pure data holder',
@@ -42,7 +43,6 @@ const RULE_CODE_MAP: Record<string, string> = {
     'uninjected-repository-access': 'RICA-V102',
     'uninjected-service-access': 'RICA-V103',
     'anemic-service': 'RICA-V104',
-    'package-violation': 'RICA-V105',
     'business-logic': 'RICA-V106',
     'direct-layer-access': 'RICA-V107',
     'anemic-entity': 'RICA-V108',
@@ -73,9 +73,10 @@ function layerViolationToUnified(
     source: Violation['detectorSource'],
 ): Violation {
     const type = 'type' in v ? v.type : 'unknown';
+    const code = RULE_CODE_MAP[type] || `RICA-V000`;
     return {
         id: `${source}-${v.className}-${v.methodName || ''}-${v.fieldName || ''}-${type}-${v.lineNumber || 0}`,
-        code: RULE_CODE_MAP[type] || `RICA-V000`,
+        code,
         ruleName: `${source}: ${type.replace(/-/g, ' ')}`,
         severity: v.severity,
         message: v.message,
@@ -83,7 +84,8 @@ function layerViolationToUnified(
         lineNumber: v.lineNumber,
         range: v.range,
         explanation: 'explanation' in v ? v.explanation : undefined,
-        mitigationHint: MITIGATION_HINTS[type] || 'Review the architectural guidelines for this layer',
+        mitigationHint: VIOLATION_DOC_BY_CODE[code]?.mitigationHint || MITIGATION_HINTS[type] || 'Review the architectural guidelines for this layer',
+        documentationUrl: violationDocSlug(code),
         legacyType: type,
         detectorSource: source,
         contextMetadata: {
@@ -104,12 +106,17 @@ export class ViolationManager {
     private readonly apiResourceAnalyzer: APIResourceLayerAnalyzer;
     private readonly crossFileAnalyzer: CrossFileAnalyzer;
     private readonly packageBoundaryAnalyzer: PackageBoundaryAnalyzer;
+    private readonly designPatternAnalyzer: DesignPatternAnalyzer;
 
     // Callback for persisting ignored violations (wired by the framework adapter)
     private readonly onIgnoreChanged?: (ignoredIds: string[]) => void;
 
     // Unified violation cache for UI consumers
     private activeViolations: Violation[] = [];
+
+    // Optional AI Reasoning advisory findings (RICA-V000). Never part of the
+    // deterministic audit; surfaced separately to the UI and combined on read.
+    private advisoryViolations: Violation[] = [];
 
     // Persisted set of ignored violation IDs
     private ignoredViolationIds: Set<string> = new Set();
@@ -127,6 +134,7 @@ export class ViolationManager {
         businessLogicThreshold: 3,
         excludePatterns: [],
         layerBoundaries: {},
+        ai: DEFAULT_AI_CONFIG,
     };
 
     constructor(
@@ -147,18 +155,28 @@ export class ViolationManager {
         this.apiResourceAnalyzer = new APIResourceLayerAnalyzer();
         this.crossFileAnalyzer = new CrossFileAnalyzer();
         this.packageBoundaryAnalyzer = new PackageBoundaryAnalyzer(this.config);
+        this.designPatternAnalyzer = new DesignPatternAnalyzer(this.config);
 
         if (initialIgnoredIds) {
             this.ignoredViolationIds = new Set(initialIgnoredIds);
         }
 
         this.config = configProvider.getConfig();
+        this.applyBusinessLogicThreshold();
         this.packageBoundaryAnalyzer.setConfig(this.config);
         configProvider.onConfigChange(() => {
             this.config = configProvider.getConfig();
+            this.applyBusinessLogicThreshold();
             this.packageBoundaryAnalyzer.setConfig(this.config);
             this.update();
         });
+    }
+
+    private applyBusinessLogicThreshold(): void {
+        const threshold = this.config.businessLogicThreshold;
+        this.controllerAnalyzer.setBusinessLogicThreshold(threshold);
+        this.entityAnalyzer.setBusinessLogicThreshold(threshold);
+        this.apiResourceAnalyzer.setBusinessLogicThreshold(threshold);
     }
 
     public ignoreViolation(id: string): void {
@@ -187,7 +205,7 @@ export class ViolationManager {
 
     /** Re-creates diagnostics from cached violations, filtering out ignored ones. */
     private refreshDiagnostics(): void {
-        this.diagnosticReporter.report(this.activeViolations, this.ignoredViolationIds);
+        this.diagnosticReporter.report([...this.activeViolations, ...this.advisoryViolations], this.ignoredViolationIds);
     }
 
     /**
@@ -237,11 +255,19 @@ export class ViolationManager {
                 if (ast) scopedFiles[f] = ast;
             }
             crossFileViolations = this.crossFileAnalyzer.analyze(this.graph, scopedFiles);
-            packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(
-                this.packageBoundaryAnalyzer.analyze(fileAsts, this.graph)
-            );
         } else {
             affectedFiles.add(filePath);
+        }
+        // Package boundary analysis always runs — it only needs the single-file AST (filePath + imports),
+        // not the dependency graph. This ensures V501 violations re-appear after undo.
+        packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(
+            this.packageBoundaryAnalyzer.analyze(fileAsts, undefined, this.buildClassAnnotationsMap())
+        );
+
+        // Design pattern analysis — runs on every change
+        let dpViolations: Violation[] = [];
+        if (this.config.enableDesignPatternChecks) {
+            dpViolations = this.designPatternAnalyzer.analyze(fileAsts, this.graph, this.filesMap);
         }
 
         // 6. Merge violations
@@ -251,6 +277,7 @@ export class ViolationManager {
             ...newLocalViolations,
             ...crossFileViolations,
             ...packageBoundaryViolations,
+            ...dpViolations,
         ];
 
         this.activeViolations = this.filterByConfig(merged);
@@ -296,9 +323,15 @@ export class ViolationManager {
 
             // Stage 3: Run package boundary analysis
             const packageViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(
-                this.packageBoundaryAnalyzer.analyze(allAsts, this.graph)
+                this.packageBoundaryAnalyzer.analyze(allAsts, this.graph, this.buildClassAnnotationsMap())
             );
             unifiedViolations.push(...packageViolations);
+
+            // Stage 4: Run design pattern checks
+            if (this.config.enableDesignPatternChecks) {
+                const dpViolations = this.designPatternAnalyzer.analyze(allAsts, this.graph, this.filesMap);
+                unifiedViolations.push(...dpViolations);
+            }
         }
 
         this.activeViolations = this.filterByConfig(unifiedViolations);
@@ -319,9 +352,30 @@ export class ViolationManager {
         this.filesMap[filePath] = ast;
     }
 
-    /** Returns all currently active violations for UI consumers. */
+    /** Returns all currently active violations (deterministic + advisory) for the assessment UI. */
     public getActiveViolations(): Violation[] {
+        return [...this.activeViolations, ...this.advisoryViolations];
+    }
+
+    /** Returns only the deterministic audit violations. */
+    public getDeterministicViolations(): Violation[] {
         return [...this.activeViolations];
+    }
+
+    /** Returns net-new advisory findings produced by the AI Reasoning pass. */
+    public getAdvisoryViolations(): Violation[] {
+        return [...this.advisoryViolations];
+    }
+
+    /** Latest AST cache for the AI context builder. */
+    public getFilesMap(): Record<string, FullASTOutput> {
+        return this.filesMap;
+    }
+
+    /** Replaces the advisory findings set (called by the AI Reasoning coordinator). */
+    public setAdvisoryViolations(list: Violation[]): void {
+        this.advisoryViolations = list;
+        this.refreshDiagnostics();
     }
 
     /** Exposes the live project dependency graph for REST API / visualizer consumption. */
@@ -384,5 +438,17 @@ export class ViolationManager {
     public clear(): void {
         this.diagnosticReporter.clear();
         this.activeViolations = [];
+        this.advisoryViolations = [];
+    }
+
+    private buildClassAnnotationsMap(): Map<string, string[]> {
+        const map = new Map<string, string[]>();
+        for (const ast of Object.values(this.filesMap)) {
+            for (const cls of ast.classes) {
+                const fqcn = cls.fullyQualifiedName || cls.className;
+                map.set(fqcn, (cls.annotations || []).map(a => a.name));
+            }
+        }
+        return map;
     }
 }

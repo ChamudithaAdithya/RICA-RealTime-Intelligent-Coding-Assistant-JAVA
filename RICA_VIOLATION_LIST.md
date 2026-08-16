@@ -1,0 +1,160 @@
+# RICA — Complete Violation Detection Rule List
+
+**Definitive, source-verified list of all violation codes RICA can emit.**
+
+Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src/crossFileAnalyzer.ts`, `src/packageBoundaryDetector.ts`.
+
+> **Single source of truth**: detailed per-code pages (trigger, rationale, fix steps, before/after)
+> are generated from `src/violationCatalog.ts` into the VitePress site under `rica-developerui/docs/`
+> (`npm run docs:build` / `npm run docs:verify`). This list mirrors the catalog at the summary level.
+
+---
+
+## Summary
+
+| Metric | Count |
+|---|---|
+| Codes defined | **35** (V101–V104, V106–V114, V201–V207, V300–V307, V400–V404, V501, V000) |
+| Codes with a live emitter | **32** (28 + V104, V109, V202, V203, V207) |
+| Codes declared but never emitted (dead) | **0** |
+| Fallback codes | **3** (V000, V300, V400) |
+| Detectors | **7** |
+
+> **V105 removed** — the old `package-violation` code was obsolete and is fully replaced by **RICA-V501** (emitted by `PackageBoundaryAnalyzer`).
+
+---
+
+## 1. Stage 1 — Layer-Specific Detectors
+
+### ServiceLayerAnalyzer
+
+| Code | Name | Severity | Trigger | Emitted |
+|---|---|---|---|---|
+| V101 | Self-Instantiation | `error` | Service does `new RepositoryImpl()` / `new Dao()` instead of DI | ✅ |
+| V102 | Uninjected Repository Access | `error` | Service field/call targets a Repository type without injection | ✅ |
+| V104 | Anemic Service | `warning` | Service has ≥2 concrete methods that are only accessors/pure delegation | ✅ |
+
+### ControllerLayerAnalyzer
+
+| Code | Name | Severity | Trigger | Emitted |
+|---|---|---|---|---|
+| V101 | Self-Instantiation | `error` | Controller `new`s a service/repository/infra class | ✅ |
+| V103 | Uninjected Service Access | `error` | Controller field typed Service/Repo without injection | ✅ |
+| V106 | Business Logic in Controller | `warning` | Parser-computed `businessLogicScore` ≥ threshold (default 3: loops/conditionals/calculations) | ✅ |
+| V110 | Direct HTTP Call | `error` | `HttpClient`, `RestTemplate`, `WebClient` in controller | ✅ |
+| V111 | File I/O in Controller | `error` | `File`, `InputStream`, `Files`, `Path` in controller | ✅ |
+| V112 | Background Thread | `warning` | `Thread`, `Executor`, `Future` in controller | ✅ |
+| V113 | Static Cache | `warning` | `static` `HashMap`/`ConcurrentHashMap` with cache-like field name | ✅ |
+| V114 | Raw SQL Access | `error` | `DataSource`, `JdbcTemplate`, `EntityManager` in controller | ✅ |
+
+### EntityLayerAnalyzer
+
+| Code | Name | Severity | Trigger | Emitted |
+|---|---|---|---|---|
+| V106 | Business Logic in Entity | `warning` | Parser-computed `businessLogicScore` ≥ threshold (default 3) | ✅ |
+| V107 | Direct Layer Access | `error` | Entity imports Service/Controller type | ✅ |
+| V108 | Anemic Entity | `info` | Zero methods, or >80% methods are getters/setters with no behavior | ✅ |
+| V109 | Improper Data Access | `error` | Entity field/method uses DB APIs directly (`JdbcTemplate`, `EntityManager`, JDBC, `DataSource`) | ✅ |
+
+### APIResourceLayerAnalyzer
+
+| Code | Name | Severity | Trigger | Emitted |
+|---|---|---|---|---|
+| V201 | Exposing Internal Entity | `warning` | Public controller method returns `@Entity` type (skips private) | ✅ |
+| V202 | Missing DTO Usage | `warning` | Endpoint parameter type is an internal domain/entity class instead of a DTO (skips private) | ✅ |
+| V203 | Improper Error Handling | `warning` | Endpoint throws a raw generic exception (`throws Exception`/`throw new Exception`), creates it, or calls `printStackTrace()` (skips private) | ✅ |
+| V204 | Business Logic in Resource | `warning` | Parser-computed `businessLogicScore` ≥ threshold (default 3) | ✅ |
+| V205 | Direct Service Instantiation | `error` | REST controller does `new ServiceImpl()` | ✅ |
+| V206 | Missing Validation | `info` | Endpoint param missing `@Valid`/`@NotNull`/`@NotEmpty` (skips private) | ✅ |
+| V207 | Exposing Internal Structure | `warning` | Endpoint returns a non-DTO internal project class instead of a DTO (entity returns → V201) | ✅ |
+
+---
+
+## 2. Stage 2 — Cross-File Graph Rules (CrossFileAnalyzer)
+
+| Code | Name | Severity | Trigger | Emitted |
+|---|---|---|---|---|
+| V401 | Controller Bypass | `error` | Controller → Repository directly (calls/has-a/uses) | ✅ |
+| V402 | Cross-Layer Violation | `warning` | Service→Controller, Entity→Controller, Entity→Service, Repository→Controller, Repository→View | ✅ |
+| V403 | Cyclic Dependency | `error`/`warning` | Tarjan SCC cycle → `error`; `INVERTED_DEP` (lower→higher layer) → `warning` | ✅ |
+| V404 | Entity Exposure | `warning`/`info` | Controller exposes Entity in return type/param → `warning`; in fields → `info` | ✅ |
+| V400 | *(fallback)* | — | Any unmapped graph ruleId → V400 | ⚠️ fallback |
+
+---
+
+## 3. Stage 3 — Package Boundary (PackageBoundaryAnalyzer)
+
+| Code | Name | Severity | Trigger | Emitted |
+|---|---|---|---|---|
+| V501 | Package Boundary Violation | `error` | File in layer A imports type in layer B ∉ A.allowedDeps | ✅ |
+
+Safeguards:
+- `@Component`-only classes in controller packages are excluded from `presentation` layer
+- Feign patterns (`**/feign/**`, `**/feignClient/**`) match `infrastructure` before `controller`
+
+---
+
+## 4. Stage 4 — Design Pattern Compliance (DesignPatternAnalyzer)
+
+| Code | Name | Severity | Trigger | Emitted |
+|---|---|---|---|---|
+| V301 | Adapter Missing | `error` | Domain/application imports external SDK (AWS SDK, Kafka, Netty…) without adapter in infrastructure | ✅ |
+| V302 | God Facade | `warning` | In-degree ≥8 AND LOC ≥500 AND ≥60% delegation methods | ✅ |
+| V303 | Strategy Missing | `warning` | Service-layer: ≥4 if-else on same variable OR ≥4 switch-cases | ✅ |
+| V304 | Factory Missing | `error` | Same concrete `new`ed from ≥3 callers AND implements interface (skips `*Builder*`) | ✅ |
+| V305 | Mutable Singleton | `warning` | `static` non-`final` mutable collection field | ✅ |
+| V306 | Raw Thread Spawn | `error` | `new Thread()` / `Executors.execute()` outside `@Configuration` | ✅ |
+| V307 | Missing Abstraction | `warning` | Interface/abstract class with exactly 1 implementation | ✅ |
+| V300 | *(fallback)* | — | Any unmapped design-pattern ruleType → V300 | ⚠️ fallback |
+
+Safeguards:
+- V304 skips class names containing `Builder` (Lombok)
+- V306 skips `@Configuration` classes
+- V303 restricted to `detectedLayer === 'service'`
+
+---
+
+## 5. Severity Distribution
+
+| Severity | Codes |
+|---|---|
+| **error** | V101, V102, V103, V110, V111, V114, V107, V109, V205, V301, V304, V306, V401, V403, V501 |
+| **warning** | V104, V106, V112, V113, V201, V202, V203, V204, V207, V302, V303, V305, V307, V402, V404 |
+| **info** | V108, V206 |
+
+---
+
+## 6. Trigger Example Code Snippets (for screenshots)
+
+| Rule | Minimal trigger |
+|---|---|
+| V101 | `public void save() { UserRepository repo = new UserRepository(); }` in a Service |
+| V104 | `@Service` class with ≥2 methods that only delegate: `public String a() { return repo.a(); }` |
+| V109 | `EntityManager em; em.persist(...)` or `new JdbcTemplate()` inside an `@Entity` |
+| V110 | `RestTemplate rt = new RestTemplate(); rt.getForObject(url, String.class);` in a Controller |
+| V113 | `static Map<String,String> cache = new HashMap<>();` in a Controller |
+| V114 | `JdbcTemplate jt; jt.query(...)` in a Controller |
+| V206 | `@GetMapping public String get(@RequestParam String id)` — no `@Valid`/`@NotNull` |
+| V202 | `public String create(@RequestBody Order order)` where `Order` is an internal/entity class |
+| V207 | `public Invoice getInvoice(String id)` — `Invoice` is a non-DTO project model |
+| V301 | `import software.amazon.awssdk.services.s3.S3Client;` in `domain/` |
+| V303 | Service method with `if (type == A)… else if (type == B)… else if (type == C)… else if (type == D)` |
+| V304 | Same class `new`ed from 3 different service classes |
+| V305 | `public static List<String> items = new ArrayList<>();` |
+| V306 | `new Thread(() -> {}).start();` outside `@Configuration` |
+| V307 | `interface PaymentGateway {}` with only one impl class |
+| V401 | Controller injects `UserRepository` and calls `.findById()` |
+| V501 | `application/OrderService.java` does `import com.foo.presentation.UserController;` |
+| V403 | `A depends on B, B depends on C, C depends on A` |
+
+---
+
+## 7. Verification Command
+
+Run this to re-derive the full code list from source:
+
+```powershell
+cd rica-developerui
+Select-String -Pattern "RICA-V\d{3}" -Path src\violationManager.ts, src\designPatternAnalyzer.ts, src\crossFileAnalyzer.ts, src\packageBoundaryDetector.ts |
+  ForEach-Object { ([regex]::Matches($_.Line, "RICA-V\d{3}")).Value } | Sort-Object -Unique
+```

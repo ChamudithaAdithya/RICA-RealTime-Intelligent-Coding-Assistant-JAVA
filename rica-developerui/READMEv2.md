@@ -65,7 +65,6 @@ when a file changes (see Incremental Analysis below).
 | V102 | Uninjected Repository Access | Service uses a Repository field without @Autowired / constructor injection |
 | V103 | Uninjected Service Access | Controller uses a Service field without injection |
 | V104 | Anemic Service | A service class contains no business logic |
-| V105 | Package Violation | Class is in the wrong package for its detected layer |
 | V107 | Direct Layer Access | Entity depends on a Service, Repository, or Infrastructure component |
 | V109 | Improper Data Access | Entity contains data-access logic |
 | V110 | Direct HTTP Call | Controller makes HTTP calls via HttpClient, RestTemplate, WebClient — should use a gateway service |

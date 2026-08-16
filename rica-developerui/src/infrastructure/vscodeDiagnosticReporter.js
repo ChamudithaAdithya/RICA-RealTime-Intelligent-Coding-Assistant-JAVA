@@ -35,65 +35,99 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VscodeDiagnosticReporter = void 0;
 const vscode = __importStar(require("vscode"));
+/**
+ * Deterministic rule diagnostics and AI advisory findings go to SEPARATE VS Code
+ * diagnostic collections so the two are visually distinct. Advisory findings
+ * get a `RICA-AI` source and a `[RICA-AI]` message prefix.
+ */
 class VscodeDiagnosticReporter {
-    constructor(collection) {
+    constructor(collection, advisoryCollection) {
         this.collection = collection;
+        this.advisoryCollection = advisoryCollection;
     }
     report(violations, ignoredIds) {
         this.collection.clear();
+        this.advisoryCollection?.clear();
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders || workspaceFolders.length === 0)
             return;
         const workspaceFolder = workspaceFolders[0];
-        const fileMap = new Map();
+        const ruleMap = new Map();
+        const advisoryMap = new Map();
         for (const v of violations) {
             if (!v.filePath)
                 continue;
             if (ignoredIds.has(v.id))
                 continue;
-            const arr = fileMap.get(v.filePath) || [];
+            const isAdvisory = v.detectorSource === 'AiAdvisory';
+            const map = isAdvisory ? advisoryMap : ruleMap;
+            const arr = map.get(v.filePath) || [];
             arr.push(v);
-            fileMap.set(v.filePath, arr);
+            map.set(v.filePath, arr);
         }
-        for (const [relativePath, vlist] of fileMap) {
-            const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, relativePath);
-            const diagnostics = [];
-            for (const v of vlist) {
-                let severity;
-                switch (v.severity) {
-                    case 'error':
-                        severity = vscode.DiagnosticSeverity.Error;
-                        break;
-                    case 'warning':
-                        severity = vscode.DiagnosticSeverity.Warning;
-                        break;
-                    default:
-                        severity = vscode.DiagnosticSeverity.Information;
-                        break;
-                }
-                let range;
-                if (v.range) {
-                    range = new vscode.Range(v.range.start.line - 1, v.range.start.character, v.range.end.line - 1, v.range.end.character);
-                }
-                else if (v.lineNumber) {
-                    range = new vscode.Range(v.lineNumber - 1, 0, v.lineNumber - 1, 0);
-                }
-                else {
-                    range = new vscode.Range(0, 0, 0, 0);
-                }
-                const severityLabel = v.severity === 'error' ? '[Error]' : v.severity === 'warning' ? '[Warning]' : '[Info]';
-                const codePrefix = v.code ? `[${v.code}] ` : '';
-                const diag = new vscode.Diagnostic(range, `${codePrefix}${severityLabel} ${v.message}`, severity);
-                diag.source = 'Java Layer Analyzer';
-                diag.code = v.id;
-                diagnostics.push(diag);
+        for (const [relativePath, vlist] of ruleMap) {
+            this.collection.set(workspaceUri(workspaceFolder, relativePath), toDiagnostics(vlist, false));
+        }
+        for (const [relativePath, vlist] of advisoryMap) {
+            if (this.advisoryCollection) {
+                this.advisoryCollection.set(workspaceUri(workspaceFolder, relativePath), toDiagnostics(vlist, true));
             }
-            this.collection.set(fileUri, diagnostics);
         }
     }
     clear() {
         this.collection.clear();
+        this.advisoryCollection?.clear();
     }
 }
 exports.VscodeDiagnosticReporter = VscodeDiagnosticReporter;
+function workspaceUri(workspaceFolder, relativePath) {
+    return vscode.Uri.joinPath(workspaceFolder.uri, relativePath);
+}
+function toDiagnostics(vlist, advisory) {
+    const diagnostics = [];
+    const docBase = vscode.workspace
+        .getConfiguration('javaAstAnalyzer')
+        .get('documentationBaseUrl', 'http://localhost:5173')
+        .replace(/\/+$/, '');
+    for (const v of vlist) {
+        let severity;
+        switch (v.severity) {
+            case 'error':
+                severity = vscode.DiagnosticSeverity.Error;
+                break;
+            case 'warning':
+                severity = vscode.DiagnosticSeverity.Warning;
+                break;
+            default:
+                severity = vscode.DiagnosticSeverity.Information;
+                break;
+        }
+        let range;
+        if (v.range) {
+            range = new vscode.Range(v.range.start.line - 1, v.range.start.character, v.range.end.line - 1, v.range.end.character);
+        }
+        else if (v.lineNumber) {
+            range = new vscode.Range(v.lineNumber - 1, 0, v.lineNumber - 1, 0);
+        }
+        else {
+            range = new vscode.Range(0, 0, 0, 0);
+        }
+        const severityLabel = v.severity === 'error' ? '[Error]' : v.severity === 'warning' ? '[Warning]' : '[Info]';
+        const codePrefix = v.code ? `[${v.code}] ` : '';
+        const tag = advisory ? '[RICA-AI] ' : '';
+        const diag = new vscode.Diagnostic(range, `${tag}${codePrefix}${severityLabel} ${v.message}`, severity);
+        diag.source = advisory ? 'RICA-AI' : 'Java Layer Analyzer';
+        // Render the Problems-panel code as a clickable link to the matching docs page
+        // when a per-violation documentationUrl is available (advisory findings have none).
+        if (!advisory && v.documentationUrl) {
+            const target = vscode.Uri.parse(`${docBase}${v.documentationUrl}.html`);
+            diag.code = { value: v.id, target };
+        }
+        else {
+            diag.code = v.id;
+        }
+        diagnostics.push(diag);
+    }
+    return diagnostics;
+}
 //# sourceMappingURL=vscodeDiagnosticReporter.js.map

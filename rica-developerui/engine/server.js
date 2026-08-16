@@ -64,7 +64,6 @@ const RULE_CODE_MAP = {
   'uninjected-repository-access': 'RICA-V102',
   'uninjected-service-access': 'RICA-V103',
   'anemic-service': 'RICA-V104',
-  'package-violation': 'RICA-V105',
   'business-logic': 'RICA-V106',
   'direct-layer-access': 'RICA-V107',
   'anemic-entity': 'RICA-V108',

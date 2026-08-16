@@ -6,6 +6,7 @@ import {
     cyclicDependencyRule, crossLayerViolationRule
 } from './dependencyGraph';
 import { FullASTOutput } from './astTypes';
+import { violationDocSlug } from './violationCatalog';
 
 export interface CrossFileRule {
     id: string;
@@ -41,6 +42,7 @@ function toUnifiedViolation(
         },
         explanation: gv.explanation || undefined,
         mitigationHint,
+        documentationUrl: violationDocSlug(CROSS_FILE_CODE_MAP[ruleId]),
         detectorSource: 'CrossFileAnalyzer',
     };
 }
@@ -74,6 +76,7 @@ function toUnifiedFromEdge(
         },
         explanation: explanation || 'A dependency edge violates architectural rules based on edge type and layer constraints.',
         mitigationHint,
+        documentationUrl: violationDocSlug(CROSS_FILE_CODE_MAP[ruleId]),
         detectorSource: 'CrossFileAnalyzer',
     };
 }
