@@ -46,6 +46,24 @@ class OpenAICompatibleAiAdapter {
             throw new Error('Provider response had no message content');
         return (0, parseDecisions_1.parseDecisions)(content);
     }
+    /** Forces the model weights into VRAM with a tiny prompt; keeps the response small. */
+    async warmUp(opts) {
+        const body = {
+            model: this.model,
+            messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+            temperature: 0,
+            max_tokens: opts.numPredict,
+            response_format: { type: 'json_object' },
+        };
+        const res = await (0, httpJson_1.httpRequest)(`${this.stripSlash(this.endpoint)}/v1/chat/completions`, {
+            body,
+            timeoutMs: opts.timeoutMs,
+            headers: this.authHeaders(),
+        });
+        if (res.status < 200 || res.status >= 300) {
+            throw new Error(`Warm-up returned HTTP ${res.status}: ${res.body.slice(0, 200)}`);
+        }
+    }
     authHeaders() {
         return this.options.apiKey ? { Authorization: `Bearer ${this.options.apiKey}` } : undefined;
     }

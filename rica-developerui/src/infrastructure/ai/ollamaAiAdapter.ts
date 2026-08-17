@@ -28,6 +28,25 @@ export class OllamaAiAdapter implements AiDecisionProvider {
     }
   }
 
+  /** Forces the model weights into VRAM with a tiny prompt; keeps the response small. */
+  async warmUp(opts: { timeoutMs: number; numPredict: number }): Promise<void> {
+    const body = {
+      model: this.model,
+      messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+      stream: true,
+      format: 'json',
+      keep_alive: '30m',
+      options: { num_predict: opts.numPredict, temperature: 0 },
+    };
+    const res = await httpRequest(`${this.stripSlash(this.endpoint)}/api/chat`, {
+      body,
+      timeoutMs: opts.timeoutMs,
+    });
+    if (res.status < 200 || res.status >= 300) {
+      throw new Error(`Warm-up returned HTTP ${res.status}: ${res.body.slice(0, 200)}`);
+    }
+  }
+
   async evaluate(context: AiContextPayload): Promise<AiDecision[]> {
     const base = this.stripSlash(this.endpoint);
     const body = {
@@ -35,6 +54,7 @@ export class OllamaAiAdapter implements AiDecisionProvider {
       messages: buildMessages(context),
       stream: true,
       format: 'json',
+      keep_alive: '30m',
       options: { num_predict: this.options.maxTokensPerRequest, temperature: 0.2 },
     };
     const res = await httpRequest(`${base}/api/chat`, {
