@@ -298,6 +298,59 @@ It covers:
 
 ---
 
+## Phase 10: AST Infrastructure Expansion (data-flow & graph metrics)
+
+### What to implement
+- Extend `rica-developerui/src/infrastructure/javaParser.ts` method-body analysis:
+  - `persistenceWrites`: calls whose receiver variable's resolved type is a persistence type (`*Repository`, `*DAO`, `EntityManager`, `JdbcTemplate`, `Session`, `MongoTemplate`, `*Mapper`). In-memory ops (`list.remove()`, `map.delete()`) must NOT qualify — matching is typed, never name-global.
+  - Recursively unwrap method-chaining to the base receiver so `repository.saveAndFlush(entity).getId()` registers the write on `repository`.
+  - `writtenVariables`: assignment targets inside a method body.
+- Extend `rica-developerui/src/domain/astTypes.ts`:
+  - `MethodBodyInfo` gains `persistenceWrites: { call: string; line: number }[]` and `writtenVariables: string[]`.
+- Extend `rica-developerui/src/dependencyGraph.ts`:
+  - Add real `getFanIn()` / `getFanOut()` per class based on type-call edges, and rewire V302 God Facade to use them instead of raw `getIncomingEdges().length`.
+
+### Why
+- Missing Command (V310) needs to know whether a method sequences multiple typed persistence writes.
+- V302 precision improves by distinguishing incoming type-call edges from generic dependency edges.
+- Feeds Phase 11 rules without duplicating parse passes.
+
+---
+
+## Phase 11: Design Pattern Analyzer Expansion (V308, V309, V310)
+
+### What to implement (all in `rica-developerui/src/designPatternAnalyzer.ts`)
+- Add `DP_RULE_CODES` / `DP_MITIGATIONS` entries + `toViolation` severity wiring:
+  - **V308 Leaking Construction Logic** (`warning`): flag `new ConcreteType(args)` whose constructor/init statement count exceeds the threshold inside a business method. Guards: skip anonymous class bodies and builder cascades (`.builder()`, `*Builder`).
+  - **V309 Fat Interface / ISP** (`warning`): declared method count > `fatInterfaceMethodCount` OR implementing-class usage ratio < `fatInterfaceUsageRatio`. Guards: only project-internal interfaces (defined in parsed files, not framework/SDK/`java.*`); resolve inherited methods through interface `extends` when computing the ratio.
+  - **V310 Missing Command** (`warning`): method with `>=2 distinct persistenceWrites` AND cyclomatic complexity `>= 6`. Guard: exempt `@Transactional` methods (declarative boundary is the accepted mechanism; avoids flagging standard CRUD orchestration).
+
+### Why
+- Closes the last three matrix gaps (Leaking Construction, Fat Interface, Missing Command) with type-aware, low-false-positive detection.
+
+---
+
+## Phase 12: System Integration & Verification
+
+### What to implement
+- Register V308–V310 in `rica-developerui/src/violationManager.ts` catalogs/severity maps.
+- Expose thresholds in `rica-developerui/package.json`:
+  - `javaAstAnalyzer.designPatternThresholds.constructionStatements`
+  - `javaAstAnalyzer.designPatternThresholds.fatInterfaceMethodCount`
+  - `javaAstAnalyzer.designPatternThresholds.fatInterfaceUsageRatio`
+- Update `RICA_VIOLATION_LIST.md` (Total Codes: 35 -> 38) with V308–V310 rows.
+- Add fixture unit tests in `rica-developerui/src/test/designPattern.test.js`, including negative cases:
+  - fluent builder cascades (no V308)
+  - anonymous `Runnable` / `Comparator` (no V308)
+  - framework/third-party interface implementations (no V309)
+  - `@Transactional` CRUD orchestration (no V310)
+
+### Verification gates
+- `npx tsc -p ./` clean
+- `npx mocha` all existing + new tests pass
+
+---
+
 ## Final recommendation
 This plan is designed to turn the repository into a true real-time intelligent assistant.
 The most important addition is the project-level dependency graph and incremental cross-file revalidation, because architectural and design-pattern violations almost always span multiple files.

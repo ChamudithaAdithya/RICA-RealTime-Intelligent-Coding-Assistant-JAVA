@@ -136,6 +136,11 @@ export interface LocalVariable {
   usedInLambda: boolean;
 }
 
+export interface PersistenceWrite {
+  call: string;
+  line: number;
+}
+
 export interface MethodBodyInfo {
   linesOfCode: number;
   localVariables: LocalVariable[];
@@ -145,6 +150,8 @@ export interface MethodBodyInfo {
   cyclomaticComplexity?: number;
   businessLogicScore?: number;
   complexityMetrics?: ComplexityMetrics;
+  persistenceWrites?: PersistenceWrite[];
+  writtenVariables?: string[];
 }
 
 export interface MethodMemoryBehavior {
@@ -228,6 +235,8 @@ export interface ObjectCreation {
   constructorArgs: string[];
   isPotentialViolation?: boolean;
   targetLayer?: string;
+  /** True when the constructor argument subtree contains branching logic (ternary/conditional expressions). */
+  hasBranching?: boolean;
 }
 
 export interface ImportInfo {

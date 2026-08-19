@@ -148,6 +148,40 @@ export class ProjectDependencyGraph {
         return this.edges.filter(e => e.source === nodeId);
     }
 
+    /** Structural dependency edge types that count toward fan-in/fan-out. */
+    private static readonly COUPLING_EDGES = new Set(['calls', 'has-a', 'uses', 'extends', 'implements']);
+
+    /**
+     * Fan-in: number of distinct class/interface nodes that structurally
+     * depend on `nodeId` (incoming coupling). Excludes file-level nodes and
+     * non-coupling edges (imports, instantiates, inner-class).
+     */
+    getFanIn(nodeId: string): number {
+        const dependents = new Set<string>();
+        for (const edge of this.edges) {
+            if (!ProjectDependencyGraph.COUPLING_EDGES.has(edge.type)) continue;
+            if (edge.target !== nodeId) continue;
+            const node = this.nodes.get(edge.source);
+            if (node && (node.type === 'class' || node.type === 'interface')) dependents.add(edge.source);
+        }
+        return dependents.size;
+    }
+
+    /**
+     * Fan-out: number of distinct class/interface nodes that `nodeId`
+     * structurally depends on (outgoing coupling).
+     */
+    getFanOut(nodeId: string): number {
+        const dependencies = new Set<string>();
+        for (const edge of this.edges) {
+            if (!ProjectDependencyGraph.COUPLING_EDGES.has(edge.type)) continue;
+            if (edge.source !== nodeId) continue;
+            const node = this.nodes.get(edge.target);
+            if (node && (node.type === 'class' || node.type === 'interface')) dependencies.add(edge.target);
+        }
+        return dependencies.size;
+    }
+
     findNodesByLayer(layer: string): GraphNode[] {
         const result: GraphNode[] = [];
         for (const node of this.nodes.values()) {
