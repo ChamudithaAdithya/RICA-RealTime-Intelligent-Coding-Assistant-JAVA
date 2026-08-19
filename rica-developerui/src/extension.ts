@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 import * as path from 'path';
 import { ASTManager } from './astManager';
 import { ApiClient } from './apiClient';
@@ -14,6 +15,12 @@ import { VscodeDiagnosticReporter } from './infrastructure/vscodeDiagnosticRepor
 import { VscodeConfigProvider } from './infrastructure/vscodeConfigProvider';
 import { VscodeSourceProvider } from './infrastructure/vscodeSourceProvider';
 import { FullASTOutput } from './domain/astTypes';
+import { AiAdvisoryCoordinator } from './application/ai/aiAdvisoryCoordinator';
+import { OllamaAiAdapter } from './infrastructure/ai/ollamaAiAdapter';
+import { OpenAICompatibleAiAdapter } from './infrastructure/ai/openaiCompatibleAiAdapter';
+import { FileAuditLogger } from './infrastructure/ai/fileAuditLogger';
+import { AiQuickFixCodeActionProvider } from './codeActionProvider';
+import { DocumentationCodeActionProvider } from './documentationCodeActionProvider';
 
 let astManager: ASTManager;
 let sourceProvider: SourceProvider;
@@ -23,6 +30,8 @@ let javaParser: JavaParser;
 let statusBarItem: vscode.StatusBarItem;
 let outputChannel: vscode.OutputChannel;
 let violationManager: ViolationManager;
+let aiCoordinator: AiAdvisoryCoordinator | undefined;
+let workspaceRoot: string;
 
 export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('Java AST Analyzer');
@@ -42,9 +51,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Clean Architecture wiring: ports → adapters
     const diagnosticCollection = vscode.languages.createDiagnosticCollection('java-layer-analyzer');
-    context.subscriptions.push(diagnosticCollection);
+    const advisoryDiagnosticCollection = vscode.languages.createDiagnosticCollection('rica-ai-advisory');
+    context.subscriptions.push(diagnosticCollection, advisoryDiagnosticCollection);
 
-    const diagnosticReporter = new VscodeDiagnosticReporter(diagnosticCollection);
+    const diagnosticReporter = new VscodeDiagnosticReporter(diagnosticCollection, advisoryDiagnosticCollection);
     const parserService = new JavaParserAdapter(javaParser);
     const configProvider = new VscodeConfigProvider();
 
@@ -58,6 +68,35 @@ export async function activate(context: vscode.ExtensionContext) {
         savedIgnoredIds,
     );
 
+    // AI Reasoning advisory wiring — pipeline (M5) + M6 quick-fix surface
+    workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? context.globalStorageUri.fsPath;
+    aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
+
+    // AI Quick-Fix lightbulb actions (M6): reads violation.quickFix edits
+    context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider(
+            'java',
+            new AiQuickFixCodeActionProvider(() => violationManager.getActiveViolations()),
+            { providedCodeActionKinds: AiQuickFixCodeActionProvider.providedCodeActionKinds },
+        ),
+    );
+
+    // Docs lightbulb: "Open RICA documentation" on every deterministic violation
+    context.subscriptions.push(
+        vscode.languages.registerCodeActionsProvider(
+            'java',
+            new DocumentationCodeActionProvider(),
+            { providedCodeActionKinds: DocumentationCodeActionProvider.providedCodeActionKinds },
+        ),
+    );
+    context.subscriptions.push(
+        vscode.commands.registerCommand('javaAstAnalyzer.openDocumentation', (url?: string) => {
+            if (url) {
+                vscode.env.openExternal(vscode.Uri.parse(url));
+            }
+        }),
+    );
+
     fileWatcher = new FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
 
     // Re-run analysis when relevant settings change
@@ -65,7 +104,9 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('javaAstAnalyzer')) {
                 outputChannel.appendLine('Configuration changed — re-analyzing...');
+                aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
                 violationManager.update();
+                runAiAdvisory();
                 updateStatusBar('ready');
             }
         })
@@ -142,10 +183,15 @@ export async function activate(context: vscode.ExtensionContext) {
                     activeEditor.document.uri.fsPath
                 );
                 await violationManager.onFileSaved(relativePath, activeEditor.document.getText());
+                runAiAdvisory();
                 updateStatusBar('ready');
             } else {
                 vscode.window.showWarningMessage('No Java file is currently open');
             }
+        }),
+
+        vscode.commands.registerCommand('rica.aiReview', async () => {
+            await runAiAdvisory('onDemand');
         }),
 
         vscode.commands.registerCommand('rica.showStatusSummary', () => {
@@ -243,6 +289,7 @@ async function analyzeFullProject() {
 
             // Run analysis
             violationManager.update();
+            runAiAdvisory('onFullScan');
             updateStatusBar('ready', result.fileCount, violationManager.getActiveViolations().length);
             vscode.window.showInformationMessage(
                 `Java AST: Analyzed ${result.fileCount} files (${result.nodeCount} nodes) in ${result.duration}ms`
@@ -252,6 +299,70 @@ async function analyzeFullProject() {
             updateStatusBar('error');
             vscode.window.showErrorMessage(`AST Analysis failed: ${error.message}`);
         }
+    });
+}
+
+/**
+ * Fire-and-forget advisory pass. Config off, provider off, or events below the
+ * configured trigger yield a no-op; every failure is logged and never throws.
+ */
+async function runAiAdvisory(trigger: 'onDemand' | 'onSave' | 'onFullScan' = 'onSave'): Promise<void> {
+    if (!aiCoordinator) return;
+    const ai = aiCoordinator['deps'].config.ai as { enableAiAdvisory: boolean; aiProvider: string; aiTrigger: string };
+    if (!ai.enableAiAdvisory || ai.aiProvider === 'off') return;
+    if (trigger === 'onDemand' || triggerRank(trigger) >= triggerRank(ai.aiTrigger as 'onDemand' | 'onSave' | 'onFullScan')) {
+        try {
+            const result = await aiCoordinator.run(violationManager.getDeterministicViolations());
+            violationManager.setAdvisoryViolations(result.advisoryViolations);
+            if (ai.aiTrigger === 'onDemand' && trigger === 'onDemand') {
+                outputChannel.appendLine(
+                    `AI Review: ${result.annotatedCount} annotated, ${result.advisoryCount} advisory findings (${result.outcome})`
+                );
+            }
+        } catch (error: any) {
+            outputChannel.appendLine(`AI advisory pass failed: ${error.message}`);
+        }
+    }
+}
+
+/** event hierarchy: manual (0) < onSave (1) < onFullScan (2). */
+function triggerRank(t: 'onDemand' | 'onSave' | 'onFullScan'): number {
+    return t === 'onDemand' ? 0 : t === 'onSave' ? 1 : 2;
+}
+
+/** Rebuild the AI coordinator from the current 'javaAstAnalyzer' workspace config. */
+function createAiCoordinator(cfg: vscode.WorkspaceConfiguration): AiAdvisoryCoordinator {
+    const resolved = new VscodeConfigProvider().getConfig();
+    const aiConfig = {
+        enableAiAdvisory: cfg.get<boolean>('enableAiAdvisory', false),
+        aiProvider: cfg.get<'off' | 'ollama' | 'openai-compatible'>('aiProvider', 'ollama'),
+        aiEndpoint: cfg.get<string>('aiEndpoint', 'http://localhost:11434'),
+        aiModel: cfg.get<string>('aiModel', 'qwen2.5-coder:7b'),
+        aiMaxTokensPerRequest: cfg.get<number>('aiMaxTokensPerRequest', 2000),
+        aiTimeoutMs: cfg.get<number>('aiTimeoutMs', 30000),
+        aiMaxCandidatesPerRun: cfg.get<number>('aiMaxCandidatesPerRun', 8),
+        aiTrigger: cfg.get<'onDemand' | 'onSave' | 'onFullScan'>('aiTrigger', 'onDemand'),
+        aiAuditLogEnabled: cfg.get<boolean>('aiAuditLogEnabled', true),
+    };
+    const timeout = { timeoutMs: aiConfig.aiTimeoutMs, maxTokensPerRequest: aiConfig.aiMaxTokensPerRequest };
+    const provider = aiConfig.aiProvider === 'openai-compatible'
+        ? new OpenAICompatibleAiAdapter(aiConfig.aiEndpoint, aiConfig.aiModel, timeout)
+        : new OllamaAiAdapter(aiConfig.aiEndpoint, aiConfig.aiModel, timeout);
+    const auditLogger = new FileAuditLogger(workspaceRoot);
+
+    return new AiAdvisoryCoordinator({
+        config: { ...resolved, ai: aiConfig },
+        provider,
+        auditLogger,
+        getFilesMap: () => violationManager.getFilesMap(),
+        getGraph: () => violationManager.getProjectGraph(),
+        readSource: (relativePath) => {
+            try {
+                return fs.readFileSync(path.join(workspaceRoot, relativePath), 'utf8');
+            } catch {
+                return undefined;
+            }
+        },
     });
 }
 

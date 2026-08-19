@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DesignPatternAnalyzer = void 0;
 const analyzerConfig_1 = require("./domain/analyzerConfig");
+const violationCatalog_1 = require("./violationCatalog");
 const DP_RULE_CODES = {
     'missing-adapter': 'RICA-V301',
     'god-facade': 'RICA-V302',
@@ -113,6 +114,7 @@ class DesignPatternAnalyzer {
             templateMethodSimilarity: 0.8,
             excludePatterns: [],
             layerBoundaries: { ...analyzerConfig_1.DEFAULT_LAYER_BOUNDARIES },
+            ai: { ...analyzerConfig_1.DEFAULT_AI_CONFIG },
             ...config,
         };
     }
@@ -145,9 +147,10 @@ class DesignPatternAnalyzer {
         return violations;
     }
     toViolation(ruleType, message, filePath, lineNumber, range, methodName, fieldName, targetType) {
+        const code = DP_RULE_CODES[ruleType] || 'RICA-V300';
         return {
             id: `DP-${ruleType}-${filePath}-${methodName || ''}-${fieldName || ''}-${lineNumber || 0}`,
-            code: DP_RULE_CODES[ruleType] || 'RICA-V300',
+            code,
             ruleName: `DesignPattern: ${ruleType.replace(/-/g, ' ')}`,
             severity: ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning',
             message,
@@ -155,6 +158,7 @@ class DesignPatternAnalyzer {
             lineNumber,
             range,
             mitigationHint: DP_MITIGATIONS[ruleType] || 'Review the design pattern guidelines for this violation',
+            documentationUrl: (0, violationCatalog_1.violationDocSlug)(code),
             detectorSource: 'DesignPatternAnalyzer',
             contextMetadata: { methodName, fieldName, targetComponent: targetType },
             legacyType: ruleType,

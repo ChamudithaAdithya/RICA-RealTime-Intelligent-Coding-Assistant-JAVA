@@ -4,6 +4,10 @@
 
 Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src/crossFileAnalyzer.ts`, `src/packageBoundaryDetector.ts`.
 
+> **Single source of truth**: detailed per-code pages (trigger, rationale, fix steps, before/after)
+> are generated from `src/violationCatalog.ts` into the VitePress site under `rica-developerui/docs/`
+> (`npm run docs:build` / `npm run docs:verify`). This list mirrors the catalog at the summary level.
+
 ---
 
 ## Summary
@@ -36,7 +40,7 @@ Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src
 |---|---|---|---|---|
 | V101 | Self-Instantiation | `error` | Controller `new`s a service/repository/infra class | ✅ |
 | V103 | Uninjected Service Access | `error` | Controller field typed Service/Repo without injection | ✅ |
-| V106 | Business Logic in Controller | `warning` | Logic score ≥ threshold (loops/conditionals/calculations) | ✅ |
+| V106 | Business Logic in Controller | `warning` | Parser-computed `businessLogicScore` ≥ threshold (default 3: loops/conditionals/calculations) | ✅ |
 | V110 | Direct HTTP Call | `error` | `HttpClient`, `RestTemplate`, `WebClient` in controller | ✅ |
 | V111 | File I/O in Controller | `error` | `File`, `InputStream`, `Files`, `Path` in controller | ✅ |
 | V112 | Background Thread | `warning` | `Thread`, `Executor`, `Future` in controller | ✅ |
@@ -47,9 +51,9 @@ Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src
 
 | Code | Name | Severity | Trigger | Emitted |
 |---|---|---|---|---|
-| V106 | Business Logic in Entity | `warning` | Entity method logic score ≥ threshold | ✅ |
+| V106 | Business Logic in Entity | `warning` | Parser-computed `businessLogicScore` ≥ threshold (default 3) | ✅ |
 | V107 | Direct Layer Access | `error` | Entity imports Service/Controller type | ✅ |
-| V108 | Anemic Entity | `info` | Entity class has zero methods | ✅ |
+| V108 | Anemic Entity | `info` | Zero methods, or >80% methods are getters/setters with no behavior | ✅ |
 | V109 | Improper Data Access | `error` | Entity field/method uses DB APIs directly (`JdbcTemplate`, `EntityManager`, JDBC, `DataSource`) | ✅ |
 
 ### APIResourceLayerAnalyzer
@@ -59,7 +63,7 @@ Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src
 | V201 | Exposing Internal Entity | `warning` | Public controller method returns `@Entity` type (skips private) | ✅ |
 | V202 | Missing DTO Usage | `warning` | Endpoint parameter type is an internal domain/entity class instead of a DTO (skips private) | ✅ |
 | V203 | Improper Error Handling | `warning` | Endpoint throws a raw generic exception (`throws Exception`/`throw new Exception`), creates it, or calls `printStackTrace()` (skips private) | ✅ |
-| V204 | Business Logic in Resource | `warning` | REST method logic score ≥ threshold | ✅ |
+| V204 | Business Logic in Resource | `warning` | Parser-computed `businessLogicScore` ≥ threshold (default 3) | ✅ |
 | V205 | Direct Service Instantiation | `error` | REST controller does `new ServiceImpl()` | ✅ |
 | V206 | Missing Validation | `info` | Endpoint param missing `@Valid`/`@NotNull`/`@NotEmpty` (skips private) | ✅ |
 | V207 | Exposing Internal Structure | `warning` | Endpoint returns a non-DTO internal project class instead of a DTO (entity returns → V201) | ✅ |
@@ -72,8 +76,8 @@ Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src
 |---|---|---|---|---|
 | V401 | Controller Bypass | `error` | Controller → Repository directly (calls/has-a/uses) | ✅ |
 | V402 | Cross-Layer Violation | `warning` | Service→Controller, Entity→Controller, Entity→Service, Repository→Controller, Repository→View | ✅ |
-| V403 | Cyclic Dependency | `error` | Tarjan SCC cycle; also `INVERTED_DEP` (lower→higher layer) | ✅ |
-| V404 | Entity Exposure | `warning` | Controller exposes Entity in return type/param/field | ✅ |
+| V403 | Cyclic Dependency | `error`/`warning` | Tarjan SCC cycle → `error`; `INVERTED_DEP` (lower→higher layer) → `warning` | ✅ |
+| V404 | Entity Exposure | `warning`/`info` | Controller exposes Entity in return type/param → `warning`; in fields → `info` | ✅ |
 | V400 | *(fallback)* | — | Any unmapped graph ruleId → V400 | ⚠️ fallback |
 
 ---
@@ -148,6 +152,8 @@ Safeguards:
 
 † V108 is `info` in EntityLayerDetector
 ‡ V108 as emitted by EntityLayerDetector is `info`
+| **warning** | V104, V106, V112, V113, V201, V202, V203, V204, V207, V302, V303, V305, V307, V402, V404 |
+| **info** | V108, V206 |
 
 ---
 

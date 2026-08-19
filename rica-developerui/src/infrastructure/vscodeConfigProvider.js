@@ -40,6 +40,17 @@ class VscodeConfigProvider {
     getConfig() {
         const cfg = vscode.workspace.getConfiguration('javaAstAnalyzer');
         const layerBoundaries = cfg.get('layerBoundaries');
+        const ai = {
+            enableAiAdvisory: cfg.get('enableAiAdvisory', analyzerConfig_1.DEFAULT_AI_CONFIG.enableAiAdvisory),
+            aiProvider: cfg.get('aiProvider', analyzerConfig_1.DEFAULT_AI_CONFIG.aiProvider),
+            aiEndpoint: cfg.get('aiEndpoint', analyzerConfig_1.DEFAULT_AI_CONFIG.aiEndpoint),
+            aiModel: cfg.get('aiModel', analyzerConfig_1.DEFAULT_AI_CONFIG.aiModel),
+            aiMaxTokensPerRequest: cfg.get('aiMaxTokensPerRequest', analyzerConfig_1.DEFAULT_AI_CONFIG.aiMaxTokensPerRequest),
+            aiTimeoutMs: cfg.get('aiTimeoutMs', analyzerConfig_1.DEFAULT_AI_CONFIG.aiTimeoutMs),
+            aiMaxCandidatesPerRun: cfg.get('aiMaxCandidatesPerRun', analyzerConfig_1.DEFAULT_AI_CONFIG.aiMaxCandidatesPerRun),
+            aiTrigger: cfg.get('aiTrigger', analyzerConfig_1.DEFAULT_AI_CONFIG.aiTrigger),
+            aiAuditLogEnabled: cfg.get('aiAuditLogEnabled', analyzerConfig_1.DEFAULT_AI_CONFIG.aiAuditLogEnabled),
+        };
         return {
             enableArchitecturalChecks: cfg.get('enableArchitecturalChecks', true),
             enableDesignPatternChecks: cfg.get('enableDesignPatternChecks', true),
@@ -56,6 +67,7 @@ class VscodeConfigProvider {
             templateMethodSimilarity: cfg.get('templateMethodSimilarity', 0.8),
             excludePatterns: cfg.get('excludePatterns', []),
             layerBoundaries: layerBoundaries || analyzerConfig_1.DEFAULT_LAYER_BOUNDARIES,
+            ai,
         };
     }
     onConfigChange(callback) {

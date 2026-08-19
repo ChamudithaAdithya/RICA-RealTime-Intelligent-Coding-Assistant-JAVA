@@ -1,7 +1,8 @@
 import { FullASTOutput, ClassInfo, Method, MethodCall } from './domain/astTypes';
 import { Violation, DiagnosticRange } from './domain/violations';
 import { ProjectDependencyGraph } from './dependencyGraph';
-import { AnalyzerConfig, DEFAULT_LAYER_BOUNDARIES } from './domain/analyzerConfig';
+import { AnalyzerConfig, DEFAULT_AI_CONFIG, DEFAULT_LAYER_BOUNDARIES } from './domain/analyzerConfig';
+import { violationDocSlug } from './violationCatalog';
 
 const DP_RULE_CODES: Record<string, string> = {
   'missing-adapter': 'RICA-V301',
@@ -71,6 +72,7 @@ export class DesignPatternAnalyzer {
       templateMethodSimilarity: 0.8,
       excludePatterns: [],
       layerBoundaries: { ...DEFAULT_LAYER_BOUNDARIES },
+      ai: { ...DEFAULT_AI_CONFIG },
       ...config,
     };
   }
@@ -116,9 +118,10 @@ export class DesignPatternAnalyzer {
     fieldName?: string,
     targetType?: string,
   ): Violation {
+    const code = DP_RULE_CODES[ruleType] || 'RICA-V300';
     return {
       id: `DP-${ruleType}-${filePath}-${methodName || ''}-${fieldName || ''}-${lineNumber || 0}`,
-      code: DP_RULE_CODES[ruleType] || 'RICA-V300',
+      code,
       ruleName: `DesignPattern: ${ruleType.replace(/-/g, ' ')}`,
       severity: ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning',
       message,
@@ -126,6 +129,7 @@ export class DesignPatternAnalyzer {
       lineNumber,
       range,
       mitigationHint: DP_MITIGATIONS[ruleType] || 'Review the design pattern guidelines for this violation',
+      documentationUrl: violationDocSlug(code),
       detectorSource: 'DesignPatternAnalyzer',
       contextMetadata: { methodName, fieldName, targetComponent: targetType },
       legacyType: ruleType,

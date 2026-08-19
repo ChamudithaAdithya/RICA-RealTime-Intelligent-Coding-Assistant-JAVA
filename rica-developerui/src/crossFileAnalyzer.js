@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CrossFileAnalyzer = void 0;
 exports.buildCrossFileAnalyzer = buildCrossFileAnalyzer;
 const dependencyGraph_1 = require("./dependencyGraph");
+const violationCatalog_1 = require("./violationCatalog");
 const CROSS_FILE_CODE_MAP = {
     'LAYER_BYPASS': 'RICA-V401',
     'CROSS_LAYER': 'RICA-V402',
@@ -24,6 +25,7 @@ function toUnifiedViolation(gv, ruleId, ruleName, mitigationHint) {
         },
         explanation: gv.explanation || undefined,
         mitigationHint,
+        documentationUrl: (0, violationCatalog_1.violationDocSlug)(CROSS_FILE_CODE_MAP[ruleId]),
         detectorSource: 'CrossFileAnalyzer',
     };
 }
@@ -42,6 +44,7 @@ function toUnifiedFromEdge(graph, sourceId, targetId, edgeType, ruleId, ruleName
         },
         explanation: explanation || 'A dependency edge violates architectural rules based on edge type and layer constraints.',
         mitigationHint,
+        documentationUrl: (0, violationCatalog_1.violationDocSlug)(CROSS_FILE_CODE_MAP[ruleId]),
         detectorSource: 'CrossFileAnalyzer',
     };
 }

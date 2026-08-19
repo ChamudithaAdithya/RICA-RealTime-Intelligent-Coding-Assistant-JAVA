@@ -16,6 +16,8 @@ export interface APIResourceLayerViolation {
 }
 
 export class APIResourceLayerAnalyzer {
+  private businessLogicThreshold = 3;
+
   // Map of fully qualified class name to its layer and class info
   private classLayers: Map<string, string> = new Map();
   private classMap: Map<string, ClassInfo> = new Map();
@@ -43,35 +45,10 @@ export class APIResourceLayerAnalyzer {
   private exceptionPatterns = ['Exception', 'Error'];
   // Known validation annotations
   private validationAnnotations = ['Valid', 'NotNull', 'Size', 'Min', 'Max', 'Pattern', 'Email', 'NotEmpty', 'NotBlank'];
-  // Known business logic indicators in method bodies
-  private businessLogicPatterns = [
-    'if\\s*\\(',
-    'for\\s*\\(',
-    'while\\s*\\(',
-    'switch\\s*\\(',
-    '\\|\\|',
-    '&&',
-    '==',
-    '!=',
-    '<',
-    '>',
-    '<=',
-    '>=',
-    '\\+\\+',
-    '--',
-    '\\+=',
-    '-=',
-    '\\*=',
-    '/=',
-    '%=',
-    'new\\s+java\\.sql\\.',
-    'EntityManager',
-    'CriteriaQuery',
-    'Query\\s*\\(',
-    'prepareStatement',
-    'executeQuery',
-    'executeUpdate'
-  ];
+
+  setBusinessLogicThreshold(value: number): void {
+    this.businessLogicThreshold = value;
+  }
 
   analyze(astOutputs: FullASTOutput[]): APIResourceLayerViolation[] {
     const violations: APIResourceLayerViolation[] = [];
@@ -174,8 +151,8 @@ export class APIResourceLayerAnalyzer {
           }
 
           // Check for business logic in API resource methods
-          const businessLogicScore = this.calculateBusinessLogicScore(method);
-          if (businessLogicScore > 3) { // Threshold for significant business logic
+          const businessLogicScore = method.body?.businessLogicScore ?? 0;
+          if (businessLogicScore >= this.businessLogicThreshold) { // Threshold for significant business logic
             violations.push({
               type: 'business-logic-in-resource',
               message: `API resource method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer.`,
@@ -521,26 +498,5 @@ export class APIResourceLayerAnalyzer {
     // Unresolvable type — only rely on entity naming so unparsed framework or
     // third-party types are not falsely flagged.
     return this.isEntityClassName(raw);
-  }
-
-  private calculateBusinessLogicScore(method: Method): number {
-    let score = 0;
-    const methodBody = method.body;
-
-    if (!methodBody) return score;
-
-    // Check method complexity based on available metrics
-    if (methodBody.linesOfCode > 20) {
-      score += 2; // Long methods often contain business logic
-    }
-
-    if (methodBody.localVariables.length > 5) {
-      score += 1; // Many local variables suggest complex logic
-    }
-
-    // Since we don't have the actual method body text, we'll return a basic score
-    // In a full implementation, we would parse the method body for business logic patterns
-
-    return score;
   }
 }
