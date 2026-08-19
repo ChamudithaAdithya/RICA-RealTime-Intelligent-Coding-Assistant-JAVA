@@ -86,6 +86,27 @@
           "maximum": 20,
           "description": "Score threshold for business logic detection in methods; higher = fewer warnings"
         },
+        "javaAstAnalyzer.constructionStatementLimit": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "V308: maximum construction statements allowed inside a single `new` expression before flagging leaking construction logic"
+        },
+        "javaAstAnalyzer.fatInterfaceMethodLimit": {
+          "type": "number",
+          "default": 10,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V309: maximum declared methods on a project interface before flagging a fat interface / ISP violation"
+        },
+        "javaAstAnalyzer.missingCommandComplexityThreshold": {
+          "type": "number",
+          "default": 6,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V310: minimum cyclomatic complexity for a method with multiple persistence writes to flag missing Command pattern"
+        },
         "javaAstAnalyzer.excludePatterns": {
           "type": "array",
           "default": [

@@ -100,6 +100,41 @@ class ProjectDependencyGraph {
     getOutgoingEdges(nodeId) {
         return this.edges.filter(e => e.source === nodeId);
     }
+    /**
+     * Fan-in: number of distinct class/interface nodes that structurally
+     * depend on `nodeId` (incoming coupling). Excludes file-level nodes and
+     * non-coupling edges (imports, instantiates, inner-class).
+     */
+    getFanIn(nodeId) {
+        const dependents = new Set();
+        for (const edge of this.edges) {
+            if (!ProjectDependencyGraph.COUPLING_EDGES.has(edge.type))
+                continue;
+            if (edge.target !== nodeId)
+                continue;
+            const node = this.nodes.get(edge.source);
+            if (node && (node.type === 'class' || node.type === 'interface'))
+                dependents.add(edge.source);
+        }
+        return dependents.size;
+    }
+    /**
+     * Fan-out: number of distinct class/interface nodes that `nodeId`
+     * structurally depends on (outgoing coupling).
+     */
+    getFanOut(nodeId) {
+        const dependencies = new Set();
+        for (const edge of this.edges) {
+            if (!ProjectDependencyGraph.COUPLING_EDGES.has(edge.type))
+                continue;
+            if (edge.source !== nodeId)
+                continue;
+            const node = this.nodes.get(edge.target);
+            if (node && (node.type === 'class' || node.type === 'interface'))
+                dependencies.add(edge.target);
+        }
+        return dependencies.size;
+    }
     findNodesByLayer(layer) {
         const result = [];
         for (const node of this.nodes.values()) {
@@ -234,6 +269,8 @@ class ProjectDependencyGraph {
     }
 }
 exports.ProjectDependencyGraph = ProjectDependencyGraph;
+/** Structural dependency edge types that count toward fan-in/fan-out. */
+ProjectDependencyGraph.COUPLING_EDGES = new Set(['calls', 'has-a', 'uses', 'extends', 'implements']);
 function buildGraphFromFiles(files) {
     const graph = new ProjectDependencyGraph();
     // Pass 1: Register all file + class nodes

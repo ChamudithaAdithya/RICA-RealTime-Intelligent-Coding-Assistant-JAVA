@@ -11,6 +11,9 @@ const DP_RULE_CODES: Record<string, string> = {
   'mutable-singleton': 'RICA-V305',
   'raw-thread': 'RICA-V306',
   'missing-abstraction': 'RICA-V307',
+  'leaking-construction': 'RICA-V308',
+  'fat-interface': 'RICA-V309',
+  'missing-command': 'RICA-V310',
 };
 
 const DP_MITIGATIONS: Record<string, string> = {
@@ -21,6 +24,9 @@ const DP_MITIGATIONS: Record<string, string> = {
   'mutable-singleton': 'Replace static mutable state with DI-scoped beans (@Bean, @Scope) or immutable configuration',
   'raw-thread': 'Use @Async or a TaskExecutor bean instead of managing threads directly — this gives lifecycle management and monitoring',
   'missing-abstraction': 'Either this abstraction is unnecessary (YAGNI — consider inlining), or add more implementations to justify the indirection',
+  'leaking-construction': 'Extract complex object initialization into a Builder or Factory so business methods stay focused on orchestration',
+  'fat-interface': 'Split this interface by responsibility (ISP) — clients should depend only on the methods they actually use',
+  'missing-command': 'Encapsulate each multi-step write sequence as a Command object (or @Transactional boundary) to keep transactions explicit',
 };
 
 export class DesignPatternAnalyzer {
@@ -32,6 +38,9 @@ export class DesignPatternAnalyzer {
       enableDesignPatternChecks: true,
       enableBusinessLogicChecks: true,
       businessLogicThreshold: 3,
+      constructionStatementLimit: 5,
+      fatInterfaceMethodLimit: 10,
+      missingCommandComplexityThreshold: 6,
       excludePatterns: [],
       layerBoundaries: { ...DEFAULT_LAYER_BOUNDARIES },
       ...config,
@@ -51,6 +60,9 @@ export class DesignPatternAnalyzer {
     violations.push(...this.checkMissingFactory(asts, allAsts));
     violations.push(...this.checkGodFacade(asts, graph));
     violations.push(...this.checkMissingStrategy(asts));
+    violations.push(...this.checkLeakingConstruction(asts));
+    violations.push(...this.checkFatInterface(asts, allAsts));
+    violations.push(...this.checkMissingCommand(asts));
 
     return violations;
   }
@@ -341,7 +353,7 @@ export class DesignPatternAnalyzer {
     for (const ast of asts) {
       for (const cls of ast.classes) {
         const fqcn = cls.fullyQualifiedName || cls.className;
-        const inDegree = graph.getIncomingEdges(fqcn).length;
+        const inDegree = graph.getFanIn(fqcn);
         if (inDegree < 8) continue;
 
         const bodyStart = cls.startLine || 0;
@@ -410,6 +422,162 @@ export class DesignPatternAnalyzer {
               ));
             }
           }
+        }
+      }
+    }
+    return violations;
+  }
+
+  // ─── V308 Leaking Construction Logic ─────────────────────────────
+
+  private readonly BUILDER_PATTERN_RE = /builder|\.with[A-Z]/i;
+
+  private checkLeakingConstruction(asts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+    const limit = this.config.constructionStatementLimit ?? 5;
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        const isConfigClass = cls.annotations?.some(a => a.name === 'Configuration');
+        if (isConfigClass) continue;
+        for (const method of cls.methods) {
+          // Report only the heaviest construction per method to avoid flooding nested-new sites.
+          let best: { creation: any; count: number } | undefined;
+          for (const creation of method.createdObjects) {
+            if (this.BUILDER_PATTERN_RE.test(creation.className)) continue; // fluent builders
+            if (creation.className === 'Thread' || creation.className === 'Runnable') continue; // anon/infra, covered by V306
+            const stmtCount = this.countConstructionStatements(creation);
+            const branching = creation.hasBranching === true;
+            const flagged = stmtCount > limit || branching;
+            if (flagged && (!best || (branching && !best.creation.hasBranching) || stmtCount > best.count)) {
+              best = { creation, count: stmtCount };
+            }
+          }
+          if (best) {
+            const { creation, count } = best;
+            const branchNote = creation.hasBranching === true
+              ? ` with branching logic (ternary/conditional) during construction`
+              : '';
+            violations.push(this.toViolation(
+              'leaking-construction',
+              `Method '${method.name}' performs ${count} construction statements for '${creation.className}'${branchNote} (limit ${limit}). Extract a Builder or Factory.`,
+              ast.filePath || '', creation.lineNumber, undefined, method.name, undefined, creation.className,
+            ));
+          }
+        }
+      }
+    }
+    return violations;
+  }
+
+  /** Construction complexity: base `new` + count of nested `new` and multi-arg constructor calls. */
+  private countConstructionStatements(creation: any): number {
+    let count = 1;
+    for (const arg of creation.constructorArgs || []) {
+      const text = String(arg);
+      if (text.includes('new ')) count += 2;       // nested object construction
+      else if (text.includes('(') || text.includes(',')) count += 1; // chained/compound args
+      else count += 1;
+    }
+    return count;
+  }
+
+  // ─── V309 Fat Interface (ISP) ────────────────────────────────────
+
+  private readonly INTERFACE_USAGE_RATIO_THRESHOLD = 0.5;
+
+  private checkFatInterface(asts: FullASTOutput[], allAsts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+    const limit = this.config.fatInterfaceMethodLimit ?? 10;
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        if (cls.classType !== 'interface') continue;
+        const fqcn = cls.fullyQualifiedName || cls.className;
+        const declaredMethods = cls.methods || [];
+        const declared = declaredMethods.length;
+        if (declared > limit) {
+          violations.push(this.toViolation(
+            'fat-interface',
+            `Interface '${cls.className}' declares ${declared} methods (limit ${limit}). Consider splitting by responsibility (ISP).`,
+            ast.filePath || '', cls.startLine, undefined, undefined, undefined, fqcn,
+          ));
+          continue;
+        }
+        // Alternative trigger: clients use <50% of the declared methods. Requires a
+        // reasonable surface (>=4 methods) so tiny untouched interfaces are not flagged.
+        if (declared < 4) continue;
+        const declNames = new Set(declaredMethods.map(m => m.name));
+        const relatedTypes = this.collectImplementationTypeNames(allAsts, cls.className, fqcn);
+        const used = this.collectUsedInterfaceMethods(allAsts, relatedTypes, declNames);
+        const ratio = used.size / declared;
+        if (ratio < this.INTERFACE_USAGE_RATIO_THRESHOLD) {
+          violations.push(this.toViolation(
+            'fat-interface',
+            `Interface '${cls.className}' declares ${declared} methods but only ${used.size} (${Math.round(ratio * 100)}%) are used by clients (threshold ${Math.round(this.INTERFACE_USAGE_RATIO_THRESHOLD * 100)}%). Consider splitting by responsibility (ISP).`,
+            ast.filePath || '', cls.startLine, undefined, undefined, undefined, fqcn,
+          ));
+        }
+      }
+    }
+    return violations;
+  }
+
+  /** Simple names of the interface plus every project class that implements it. */
+  private collectImplementationTypeNames(allAsts: FullASTOutput[], className: string, fqcn: string): Set<string> {
+    const names = new Set<string>([className, fqcn.split('.').pop() || className]);
+    for (const ast of allAsts) {
+      for (const c of ast.classes) {
+        if (c.classType === 'interface') continue;
+        for (const impl of c.interfaces || []) {
+          const last = impl.split('.').pop() || impl;
+          if (last === className || impl === fqcn || impl === className) {
+            names.add(c.className);
+            names.add(c.fullyQualifiedName?.split('.').pop() || c.className);
+          }
+        }
+      }
+    }
+    return names;
+  }
+
+  /** Interface methods actually referenced via an interface- or implementation-typed receiver. */
+  private collectUsedInterfaceMethods(allAsts: FullASTOutput[], relatedTypes: Set<string>, declNames: Set<string>): Set<string> {
+    const used = new Set<string>();
+    for (const ast of allAsts) {
+      for (const c of ast.classes) {
+        for (const m of c.methods) {
+          for (const call of m.calledMethods || []) {
+            const receiver = (call.receiverType || call.targetClass || '').replace(/<.*>/g, '').trim().split('.').pop() || '';
+            if (relatedTypes.has(receiver) && declNames.has(call.calledMethodName)) {
+              used.add(call.calledMethodName);
+            }
+          }
+        }
+      }
+    }
+    return used;
+  }
+
+  // ─── V310 Missing Command Pattern ────────────────────────────────
+
+  private readonly COMMAND_WRITE_COUNT_THRESHOLD = 2;
+
+  private checkMissingCommand(asts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+    const complexityThreshold = this.config.missingCommandComplexityThreshold ?? 6;
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        for (const method of cls.methods) {
+          if (method.annotations?.some(a => a.name === 'Transactional')) continue; // declarative boundary exists
+          const writes = method.body?.persistenceWrites || [];
+          const distinctWrites = new Set(writes.map(w => w.call)).size;
+          if (distinctWrites < this.COMMAND_WRITE_COUNT_THRESHOLD) continue;
+          const complexity = method.complexityMetrics?.cyclomaticComplexity ?? 1;
+          if (complexity < complexityThreshold) continue;
+          violations.push(this.toViolation(
+            'missing-command',
+            `Method '${method.name}' sequences ${distinctWrites} persistence writes at cyclomatic ${complexity}. Encapsulate as a Command (or @Transactional).`,
+            ast.filePath || '', method.startLine, undefined, method.name,
+          ));
         }
       }
     }

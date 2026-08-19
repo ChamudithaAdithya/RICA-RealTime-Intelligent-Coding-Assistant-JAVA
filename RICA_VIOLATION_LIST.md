@@ -10,8 +10,8 @@ Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src
 
 | Metric | Count |
 |---|---|
-| Codes defined | **35** (V101–V104, V106–V114, V201–V207, V300–V307, V400–V404, V501, V000) |
-| Codes with a live emitter | **32** (28 + V104, V109, V202, V203, V207) |
+| Codes defined | **38** (V101–V104, V106–V114, V201–V207, V300–V310, V400–V404, V501, V000) |
+| Codes with a live emitter | **35** (31 + V104, V109, V202, V203, V207, V308, V309, V310) |
 | Codes declared but never emitted (dead) | **0** |
 | Fallback codes | **3** (V000, V300, V400) |
 | Detectors | **7** |
@@ -101,12 +101,18 @@ Safeguards:
 | V305 | Mutable Singleton | `warning` | `static` non-`final` mutable collection field | ✅ |
 | V306 | Raw Thread Spawn | `error` | `new Thread()` / `Executors.execute()` outside `@Configuration` | ✅ |
 | V307 | Missing Abstraction | `warning` | Interface/abstract class with exactly 1 implementation | ✅ |
+| V308 | Leaking Construction Logic | `warning` | Business method performs >N construction statements in one `new` OR construction contains branching (ternary) logic (skips builders/anonymous) | ✅ |
+| V309 | Fat Interface (ISP) | `warning` | Project interface declares >N methods OR clients use <50% of declared methods (usage ratio) | ✅ |
+| V310 | Missing Command Pattern | `warning` | Method sequences ≥2 persistence writes at cyclomatic ≥6 (skips `@Transactional`) | ✅ |
 | V300 | *(fallback)* | — | Any unmapped design-pattern ruleType → V300 | ⚠️ fallback |
 
 Safeguards:
 - V304 skips class names containing `Builder` (Lombok)
 - V306 skips `@Configuration` classes
 - V303 restricted to `detectedLayer === 'service'`
+- V308 skips `*Builder*` / `.withX()` cascades and anonymous `Thread`/`Runnable`; counts nested `new`/compound args and flags ternaries inside the construction
+- V309 flags by declared-method count (>N) or usage ratio (<50% of declared methods actually referenced by clients); requires ≥4 declared methods for the ratio branch
+- V310 exempts `@Transactional` methods
 
 ---
 
@@ -115,7 +121,7 @@ Safeguards:
 | Severity | Codes |
 |---|---|
 | **error** | V101, V102, V103, V110, V111, V114, V107, V109, V205, V301, V304, V306, V401, V403, V501 |
-| **warning** | V104, V106, V112, V113, V108†, V201, V202, V203, V204, V207, V302, V303, V305, V307, V402, V404 |
+| **warning** | V104, V106, V112, V113, V108†, V201, V202, V203, V204, V207, V302, V303, V305, V307, V308, V309, V310, V402, V404 |
 | **info** | V108‡, V206 |
 
 † V108 is `info` in EntityLayerDetector
@@ -142,6 +148,11 @@ Safeguards:
 | V305 | `public static List<String> items = new ArrayList<>();` |
 | V306 | `new Thread(() -> {}).start();` outside `@Configuration` |
 | V307 | `interface PaymentGateway {}` with only one impl class |
+| V308 | `return new Order(new Address("x", 10, new City("NY", 10001)), new Customer(...));` in a business method |
+| V308b | `return flags.get("x") ? new FastConnector(...) : new SlowConnector(...);` — branch inside a construction |
+| V309 | `interface AllInOne {` with 12 unrelated methods |
+| V309b | `interface PaymentWriter {` with 5 methods where clients call only 1 (usage ratio <50%) |
+| V310 | Complex service method that calls `repo.save()`, `repo.deleteById()` in sequence without `@Transactional` |
 | V401 | Controller injects `UserRepository` and calls `.findById()` |
 | V501 | `application/OrderService.java` does `import com.foo.presentation.UserController;` |
 | V403 | `A depends on B, B depends on C, C depends on A` |

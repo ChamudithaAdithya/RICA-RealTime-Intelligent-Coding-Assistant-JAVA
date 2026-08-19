@@ -10,6 +10,7 @@ import {
   Parameter,
   LocalVariable,
   MethodBodyInfo,
+  PersistenceWrite,
   MethodMemoryBehavior,
   GenericTypeParam,
   Annotation,
@@ -1008,17 +1009,26 @@ export class JavaParser {
     }
 
     private getSuperInterfaces(node: any): string[] {
-        if (!node?.children?.superinterfaces) return [];
-
-        const si = node.children.superinterfaces[0];
-        return this.extractTypeList(si);
+        // java-parser 2.x: the implements clause lives under classImplements, not superinterfaces.
+        const clauses = ['classImplements', 'superinterfaces'];
+        for (const key of clauses) {
+            const clause = node?.children?.[key]?.[0];
+            if (clause?.children?.interfaceTypeList?.[0]) {
+                return this.extractTypeList(clause.children.interfaceTypeList[0]);
+            }
+        }
+        return [];
     }
 
     private getExtendsInterfaces(node: any): string[] {
-        if (!node?.children?.extendsInterfaces) return [];
-
-        const ei = node.children.extendsInterfaces[0];
-        return this.extractTypeList(ei);
+        const clauses = ['classImplements', 'interfaceExtends', 'extendsInterfaces'];
+        for (const key of clauses) {
+            const clause = node?.children?.[key]?.[0];
+            if (clause?.children?.interfaceTypeList?.[0]) {
+                return this.extractTypeList(clause.children.interfaceTypeList[0]);
+            }
+        }
+        return [];
     }
 
     private extractTypeName(node: any): string {
@@ -1415,9 +1425,11 @@ export class JavaParser {
             // Interface method declaration
             if (imd.children?.interfaceMethodDeclaration) {
                 const iMethod = imd.children.interfaceMethodDeclaration[0];
+                // Names/types/params live on the methodHeader child, not on the declaration node.
+                const header = iMethod.children?.methodHeader?.[0];
                 const modifiers = this.getMethodModifiers(imd);
-                const methodName = this.getMethodName(iMethod);
-                const returnType = this.getReturnType(iMethod);
+                const methodName = header ? this.getMethodName(header) : '';
+                const returnType = header ? this.getReturnType(header) : 'void';
                 const isStatic = modifiers.includes('static');
                 const isDefault = modifiers.includes('default');
                 const isPrivate = modifiers.includes('private');
@@ -1460,9 +1472,12 @@ export class JavaParser {
 
     private getMethodModifiers(node: any): string[] {
         const modifiers: string[] = [];
-        if (!node?.children?.methodModifier) return modifiers;
+        const modKey = node?.children?.methodModifier
+            ? 'methodModifier'
+            : node?.children?.interfaceMethodModifier ? 'interfaceMethodModifier' : null;
+        if (!modKey) return modifiers;
 
-        for (const mm of node.children.methodModifier) {
+        for (const mm of node.children[modKey]) {
             if (mm.children) {
                 if (mm.children.Public) modifiers.push('public');
                 if (mm.children.Private) modifiers.push('private');
@@ -1695,6 +1710,9 @@ export class JavaParser {
         // Extract behavioral dependencies with symbol resolution
         const calledMethods = this.extractMethodCalls(methodBody, symbolTable);
         const createdObjects = this.extractObjectCreationsFromBody(methodBody);
+
+        bodyInfo.persistenceWrites = this.extractPersistenceWrites(calledMethods);
+        bodyInfo.writtenVariables = this.extractWrittenVariables(methodBody);
 
         const loc = this.extractLocation(node);
         const method: Method = {
@@ -1947,7 +1965,8 @@ export class JavaParser {
                         className,
                         isExternal: false,
                         lineNumber: node.location?.startLine ?? 0,
-                        constructorArgs: []
+                        constructorArgs: this.extractCreationArgs(node),
+                        hasBranching: this.containsConditionalExpression(node),
                     });
                 }
             }
@@ -1965,6 +1984,126 @@ export class JavaParser {
 
         traverse(methodBody);
         return creations;
+    }
+
+    /** Extract the constructor argument expressions for a `new` CST node (mirrors extractArgumentsFromSuffix). */
+    private extractCreationArgs(node: any): string[] {
+        const args: string[] = [];
+        const collectArgs = (n: any): void => {
+            if (!n) return;
+            const al = n.children?.argumentList?.[0];
+            if (al?.children?.expression) {
+                for (const expr of al.children.expression) {
+                    const val = this.extractExpressionValue(expr);
+                    args.push(val !== null && val !== undefined ? String(val) : '?');
+                }
+            }
+            if (n.children) {
+                for (const key of Object.keys(n.children)) {
+                    if (Array.isArray(n.children[key])) {
+                        for (const c of n.children[key]) {
+                            if (c === n) continue;
+                            collectArgs(c);
+                        }
+                    }
+                }
+            }
+        };
+        collectArgs(node);
+        return args;
+    }
+
+    /** True if the CST subtree contains a conditional (ternary) expression — branching logic inside a construction. */
+    private containsConditionalExpression(node: any): boolean {
+        if (!node) return false;
+        // java-parser wraps every expression in a conditionalExpression pass-through;
+        // a real ternary additionally carries QuestionMark/Colon children.
+        if (node.name === 'conditionalExpression' && node.children?.QuestionMark) return true;
+        if (node.children) {
+            for (const key of Object.keys(node.children)) {
+                if (Array.isArray(node.children[key])) {
+                    for (const child of node.children[key]) {
+                        if (child !== node && this.containsConditionalExpression(child)) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    // ─── Persistence-write detection (typed receiver) ──────────────
+    // A call counts as a persistence write only when the receiver variable's
+    // resolved type is a persistence type (Repository/DAO/EntityManager/…).
+    // In-memory ops on List/Map never qualify, and read methods (find*/get*/count…)
+    // are excluded so V310 targets multi-step write sequences, not reads.
+    private readonly PERSISTENCE_TYPE_RE = /(Repository|Dao|DAO|EntityManager|JdbcTemplate|JdbcOperations|Session|MongoTemplate|Mapper|PersistenceManager)$/;
+    private readonly PERSISTENCE_READ_RE = /^(find|get|read|count|exists|has|load|query|search|is|to)/i;
+
+    private extractPersistenceWrites(calledMethods: MethodCall[]): PersistenceWrite[] {
+        const writes: PersistenceWrite[] = [];
+        for (const call of calledMethods) {
+            const receiverType = call.receiverType || call.targetClass || '';
+            if (!this.PERSISTENCE_TYPE_RE.test(receiverType.replace(/<.*>/g, '').trim())) continue;
+            if (this.PERSISTENCE_READ_RE.test(call.calledMethodName)) continue;
+            writes.push({
+                call: `${receiverType.split('.').pop()}.${call.calledMethodName}`,
+                line: call.lineNumber || 0,
+            });
+        }
+        return writes;
+    }
+
+    private extractWrittenVariables(methodBody: any): string[] {
+        if (!methodBody) return [];
+        const written = new Set<string>();
+
+        const traverse = (node: any) => {
+            if (!node) return;
+            if (node.name === 'localVariableDeclaration') {
+                const names = this.getLocalVarNames(node);
+                for (const n of names) written.add(n);
+            }
+            // Assignment x = ..., x += ... — CST: binaryExpression has an AssignmentOperator child.
+            if (node.name === 'binaryExpression' && Array.isArray(node.children?.AssignmentOperator)
+                && Array.isArray(node.children.unaryExpression)) {
+                const lhs = node.children.unaryExpression[0];
+                const ids = this.collectLhsIdentifiers(lhs);
+                for (const id of ids) written.add(id);
+            }
+            if (node.children) {
+                for (const key of Object.keys(node.children)) {
+                    if (Array.isArray(node.children[key])) {
+                        for (const child of node.children[key]) traverse(child);
+                    }
+                }
+            }
+        };
+
+        traverse(methodBody);
+        return Array.from(written);
+    }
+
+    /** Collects the identifiers written on the left-hand side (x, this.field, a.b, arr[i]). */
+    private collectLhsIdentifiers(node: any): string[] {
+        if (!node) return [];
+        const ids: string[] = [];
+        const collect = (n: any) => {
+            if (!n) return;
+            if (Array.isArray(n.children?.Identifier)) {
+                for (const id of n.children.Identifier) {
+                    if (id?.image) ids.push(id.image);
+                }
+            }
+            if (n.children) {
+                for (const key of Object.keys(n.children)) {
+                    if (Array.isArray(n.children[key])) {
+                        for (const c of n.children[key]) collect(c);
+                    }
+                }
+            }
+        };
+        collect(node);
+        return ids;
     }
 
     private extractDetailedMethodParameters(header: any, fieldNames: Set<string>): Parameter[] {

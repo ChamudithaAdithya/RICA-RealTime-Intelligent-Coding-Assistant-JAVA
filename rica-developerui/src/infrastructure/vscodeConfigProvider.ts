@@ -11,6 +11,9 @@ export class VscodeConfigProvider implements ConfigProvider {
       enableDesignPatternChecks: cfg.get<boolean>('enableDesignPatternChecks', true),
       enableBusinessLogicChecks: cfg.get<boolean>('enableBusinessLogicChecks', true),
       businessLogicThreshold: cfg.get<number>('businessLogicThreshold', 3),
+      constructionStatementLimit: cfg.get<number>('constructionStatementLimit', 5),
+      fatInterfaceMethodLimit: cfg.get<number>('fatInterfaceMethodLimit', 10),
+      missingCommandComplexityThreshold: cfg.get<number>('missingCommandComplexityThreshold', 6),
       excludePatterns: cfg.get<string[]>('excludePatterns', []),
       layerBoundaries: layerBoundaries as Record<string, { packages: string[]; allowedDeps: string[] }> || DEFAULT_LAYER_BOUNDARIES,
     };

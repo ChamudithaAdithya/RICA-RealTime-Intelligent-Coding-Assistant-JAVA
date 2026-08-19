@@ -8,6 +8,9 @@ export interface AnalyzerConfig {
   enableDesignPatternChecks: boolean;
   enableBusinessLogicChecks: boolean;
   businessLogicThreshold: number;
+  constructionStatementLimit?: number;
+  fatInterfaceMethodLimit?: number;
+  missingCommandComplexityThreshold?: number;
   excludePatterns: string[];
   layerBoundaries: Record<string, LayerBoundary>;
 }
