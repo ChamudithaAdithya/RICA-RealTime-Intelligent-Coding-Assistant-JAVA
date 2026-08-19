@@ -107,6 +107,48 @@
           "maximum": 100,
           "description": "V310: minimum cyclomatic complexity for a method with multiple persistence writes to flag missing Command pattern"
         },
+        "javaAstAnalyzer.crossCuttingCallLimit": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "V313: minimum cross-cutting calls (logging/metrics/tracing) interleaved with business logic before flagging a missing Decorator"
+        },
+        "javaAstAnalyzer.stateMachineClassLimit": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V316: minimum distinct classes with hardcoded status/state comparisons before flagging a scattered state machine"
+        },
+        "javaAstAnalyzer.notifierTargetLimit": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V318: minimum distinct notification/audit services called in one method before flagging a hardcoded multi-notifier"
+        },
+        "javaAstAnalyzer.guardClauseLimit": {
+          "type": "number",
+          "default": 5,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V319: minimum sequential guard clauses in one method before flagging a monolithic pipeline"
+        },
+        "javaAstAnalyzer.nullCheckLimit": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V321: minimum defensive null checks in one method before flagging excessive null checking"
+        },
+        "javaAstAnalyzer.templateMethodSimilarity": {
+          "type": "number",
+          "default": 0.8,
+          "minimum": 0.5,
+          "maximum": 1,
+          "description": "V317: structural similarity threshold (0..1) for duplicate algorithm sequences across classes"
+        },
         "javaAstAnalyzer.excludePatterns": {
           "type": "array",
           "default": [

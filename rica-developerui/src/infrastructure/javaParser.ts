@@ -1562,7 +1562,9 @@ export class JavaParser {
         
         const uct = node.children.unannClassType[0];
         if (uct.children?.Identifier) {
-            return uct.children.Identifier[0].image;
+            // Dotted class types (org.slf4j.Logger) expose every segment as a
+            // direct Identifier child — join them for the fully-qualified type.
+            return uct.children.Identifier.map((id: any) => id.image).join('.');
         }
         
         return '';
@@ -1867,7 +1869,9 @@ export class JavaParser {
                             arguments: args
                         });
                     }
-                    return; // Don't traverse deeper into this primary
+                    // Deliberately do NOT return here — descend so nested method
+                    // invocations inside argument lists (e.g. b.getX() in a.setX(b.getX()))
+                    // are captured as their own MethodCall entries.
                 }
             }
 
@@ -1954,8 +1958,12 @@ export class JavaParser {
     private extractObjectCreationsFromBody(methodBody: any): ObjectCreation[] {
         const creations: ObjectCreation[] = [];
         if (!methodBody) return creations;
+        const LOOP_NODES = new Set([
+            'forStatement', 'basicForStatement', 'enhancedForStatement',
+            'whileStatement', 'doStatement',
+        ]);
 
-        const traverse = (node: any) => {
+        const traverse = (node: any, loopDepth: number = 0) => {
             if (!node) return;
 
             if (node.name === 'newExpression' || node.name === 'objectCreationExpression') {
@@ -1967,6 +1975,7 @@ export class JavaParser {
                         lineNumber: node.location?.startLine ?? 0,
                         constructorArgs: this.extractCreationArgs(node),
                         hasBranching: this.containsConditionalExpression(node),
+                        insideLoop: loopDepth > 0,
                     });
                 }
             }
@@ -1975,7 +1984,7 @@ export class JavaParser {
                 for (const key of Object.keys(node.children)) {
                     if (Array.isArray(node.children[key])) {
                         for (const child of node.children[key]) {
-                            traverse(child);
+                            traverse(child, LOOP_NODES.has(node.name) ? loopDepth + 1 : loopDepth);
                         }
                     }
                 }
@@ -2863,6 +2872,15 @@ export class JavaParser {
                 // Extract local variables
                 const locals = this.extractLocalVariables(statement);
                 localVariables.push(...locals);
+            } else {
+                // java-parser 2.x wraps locals in localVariableDeclarationStatement
+                linesOfCode++;
+                this.analyzeStatementForCalls(stmt, c => {
+                    if (c === 'this') callsThis = true;
+                    if (c === 'super') callsSuper = true;
+                });
+                const locals = this.extractLocalVariables(stmt);
+                localVariables.push(...locals);
             }
         }
 
@@ -3088,7 +3106,6 @@ export class JavaParser {
 
         if (!statement) return locals;
 
-        // Check for local variable declaration
         if (statement.name === 'localVariableDeclaration') {
             const type = this.getLocalVarType(statement);
             const names = this.getLocalVarNames(statement);
@@ -3113,7 +3130,47 @@ export class JavaParser {
                     usedInLambda: false
                 });
             }
+            return locals;
         }
+
+        // java-parser 2.x: scan the subtree for localVariableDeclaration nodes
+        // (e.g. wrapped under localVariableDeclarationStatement).
+        const findDecls = (n: any) => {
+            if (!n) return;
+            if (n.name === 'localVariableDeclaration') {
+                const type = this.getLocalVarType(n);
+                const names = this.getLocalVarNames(n);
+                const loc = this.extractLocation(n);
+                const declaredAtLine = loc?.startLine ?? 0;
+                for (let i = 0; i < names.length; i++) {
+                    locals.push({
+                        name: names[i],
+                        dataType: type,
+                        ...loc,
+                        isVarInferred: false,
+                        inferredType: undefined,
+                        isFinal: false,
+                        isEffectivelyFinal: true,
+                        initialValue: null,
+                        scope: {
+                            declaredAtLine,
+                            scopeBlock: 'method'
+                        },
+                        memoryType: 'stack',
+                        usedInLambda: false
+                    });
+                }
+                return;
+            }
+            if (n.children) {
+                for (const key of Object.keys(n.children)) {
+                    if (Array.isArray(n.children[key])) {
+                        for (const c of n.children[key]) findDecls(c);
+                    }
+                }
+            }
+        };
+        findDecls(statement);
 
         // Check for enhanced for loop
         if (statement.name === 'enhancedForStatement') {
@@ -3140,6 +3197,13 @@ export class JavaParser {
     private getLocalVarType(statement: any): string {
         if (statement.children?.unannType) {
             return this.extractType(statement.children.unannType[0]);
+        }
+        // java-parser 2.x wraps the type under localVariableType
+        if (statement.children?.localVariableType) {
+            const lvt = statement.children.localVariableType[0];
+            if (lvt.children?.unannType) {
+                return this.extractType(lvt.children.unannType[0]);
+            }
         }
         if (statement.children?.varType) {
             return 'var'; // Inferred type
@@ -3742,7 +3806,7 @@ export class JavaParser {
                 return;
             }
 
-            if (node.name === 'forStatement' || node.name === 'basicForStatement' || node.name === 'enhancedForStatement') {
+            if (node.name === 'basicForStatement' || node.name === 'enhancedForStatement') {
                 metrics.cyclomaticComplexity++;
                 metrics.decisionPoints.push({
                     type: 'for', line: getLine(node), nestingDepth: depth

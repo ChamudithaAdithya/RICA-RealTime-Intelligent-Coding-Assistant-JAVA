@@ -11,6 +11,12 @@ export interface AnalyzerConfig {
   constructionStatementLimit?: number;
   fatInterfaceMethodLimit?: number;
   missingCommandComplexityThreshold?: number;
+  crossCuttingCallLimit?: number;
+  stateMachineClassLimit?: number;
+  notifierTargetLimit?: number;
+  guardClauseLimit?: number;
+  nullCheckLimit?: number;
+  templateMethodSimilarity?: number;
   excludePatterns: string[];
   layerBoundaries: Record<string, LayerBoundary>;
 }

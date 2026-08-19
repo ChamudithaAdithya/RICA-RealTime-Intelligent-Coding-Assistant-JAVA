@@ -14,6 +14,12 @@ export class VscodeConfigProvider implements ConfigProvider {
       constructionStatementLimit: cfg.get<number>('constructionStatementLimit', 5),
       fatInterfaceMethodLimit: cfg.get<number>('fatInterfaceMethodLimit', 10),
       missingCommandComplexityThreshold: cfg.get<number>('missingCommandComplexityThreshold', 6),
+      crossCuttingCallLimit: cfg.get<number>('crossCuttingCallLimit', 2),
+      stateMachineClassLimit: cfg.get<number>('stateMachineClassLimit', 3),
+      notifierTargetLimit: cfg.get<number>('notifierTargetLimit', 3),
+      guardClauseLimit: cfg.get<number>('guardClauseLimit', 5),
+      nullCheckLimit: cfg.get<number>('nullCheckLimit', 3),
+      templateMethodSimilarity: cfg.get<number>('templateMethodSimilarity', 0.8),
       excludePatterns: cfg.get<string[]>('excludePatterns', []),
       layerBoundaries: layerBoundaries as Record<string, { packages: string[]; allowedDeps: string[] }> || DEFAULT_LAYER_BOUNDARIES,
     };

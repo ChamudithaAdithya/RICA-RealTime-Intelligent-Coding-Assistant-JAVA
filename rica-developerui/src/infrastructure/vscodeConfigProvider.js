@@ -48,6 +48,12 @@ class VscodeConfigProvider {
             constructionStatementLimit: cfg.get('constructionStatementLimit', 5),
             fatInterfaceMethodLimit: cfg.get('fatInterfaceMethodLimit', 10),
             missingCommandComplexityThreshold: cfg.get('missingCommandComplexityThreshold', 6),
+            crossCuttingCallLimit: cfg.get('crossCuttingCallLimit', 2),
+            stateMachineClassLimit: cfg.get('stateMachineClassLimit', 3),
+            notifierTargetLimit: cfg.get('notifierTargetLimit', 3),
+            guardClauseLimit: cfg.get('guardClauseLimit', 5),
+            nullCheckLimit: cfg.get('nullCheckLimit', 3),
+            templateMethodSimilarity: cfg.get('templateMethodSimilarity', 0.8),
             excludePatterns: cfg.get('excludePatterns', []),
             layerBoundaries: layerBoundaries || analyzerConfig_1.DEFAULT_LAYER_BOUNDARIES,
         };
