@@ -71,6 +71,14 @@ class ViolationsWebviewPanel {
                         }
                     }
                     break;
+                case 'openViolationDocs':
+                    if (message.url) {
+                        const cfg = vscode.workspace.getConfiguration('javaAstAnalyzer');
+                        const base = cfg.get('documentationBaseUrl', 'http://localhost:5173');
+                        const target = base.replace(/\/+$/, '') + message.url;
+                        vscode.env.openExternal(vscode.Uri.parse(target));
+                    }
+                    break;
                 case 'ignoreViolation':
                     if (message.id) {
                         violationManager.ignoreViolation(message.id);
@@ -167,6 +175,8 @@ tr.clickable{cursor:pointer}
 .action-btn.ignore:hover{background:var(--vscode-errorForeground);color:#fff}
 .action-btn.unignore{border-color:var(--vscode-textLink-foreground);color:var(--vscode-textLink-foreground);background:transparent}
 .action-btn.unignore:hover{background:var(--vscode-textLink-foreground);color:#fff}
+.action-btn.docs{border-color:var(--vscode-textLink-foreground);color:var(--vscode-textLink-foreground);background:transparent;margin-left:4px}
+.action-btn.docs:hover{background:var(--vscode-textLink-foreground);color:#fff}
 </style>
 </head>
 <body>
@@ -181,6 +191,7 @@ tr.clickable{cursor:pointer}
 <span id="ignoredBadgeArea" style="display:none;font-size:12px;cursor:pointer" onclick="document.getElementById('showIgnored').checked=!document.getElementById('showIgnored').checked;renderTable()"></span>
 <button onclick="renderTable()">&#x21bb; Refresh</button>
 <button class="secondary" onclick="clearFilters()">Clear</button>
+<button class="secondary" onclick="openDocsHome()">&#x1f4d6; Docs</button>
 </div>
 <div id="tableContainer">
 <table>
@@ -318,6 +329,9 @@ function renderTable() {
         var act = isIgnored
             ? '<button class="action-btn unignore" onclick="return toggleIgnore(' + i + ')" title="Unignore this violation">\u21A9 Unignore</button>'
             : '<button class="action-btn ignore" onclick="return toggleIgnore(' + i + ')" title="Stop showing this violation">\u2715 Ignore</button>';
+        if (!isIgnored && v.documentationUrl) {
+            act += '<button class="action-btn docs" onclick="return openDocs(' + i + ')" title="Open documentation for this violation">\u266F Docs</button>';
+        }
         var mit = v.mitigationHint ? escapeAttr(v.mitigationHint) : (v.explanation ? escapeAttr(v.explanation) : '');
         html += '<tr' + rowClass + '>';
         html += '<td><span class="' + cls + '">' + lbl + '</span></td>';
@@ -358,6 +372,18 @@ function openViolationFile(idx) {
         _vscode.postMessage({ command: 'openFile', filePath: v.filePath, lineNumber: v.lineNumber, message: v.message });
         showNotif(v.message, v.explanation);
     }
+}
+
+function openDocs(idx) {
+    var v = filteredRows[idx];
+    if (v && v.documentationUrl) {
+        _vscode.postMessage({ command: 'openViolationDocs', url: v.documentationUrl + '.html' });
+    }
+    return false;
+}
+
+function openDocsHome() {
+    _vscode.postMessage({ command: 'openViolationDocs', url: '/index.html' });
 }
 
 function sortBy(key) {

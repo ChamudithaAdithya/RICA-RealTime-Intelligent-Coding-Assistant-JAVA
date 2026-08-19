@@ -1,4 +1,4 @@
-import { FullASTOutput, ClassInfo, Method, MethodCall, ObjectCreation, ImportInfo } from './astTypes';
+import { FullASTOutput, ClassInfo, MethodCall, ObjectCreation, ImportInfo } from './astTypes';
 import { DiagnosticRange } from './types/violations';
 
 export interface EntityLayerViolation {
@@ -16,6 +16,8 @@ export interface EntityLayerViolation {
 }
 
 export class EntityLayerAnalyzer {
+  private businessLogicThreshold = 3;
+
   // Map of fully qualified class name to its layer and class info
   private classLayers: Map<string, string> = new Map();
   private classMap: Map<string, ClassInfo> = new Map();
@@ -38,35 +40,10 @@ export class EntityLayerAnalyzer {
     'SqlSession', 'SqlSessionFactory', 'DatabaseClient',
     'R2dbcEntityTemplate', 'R2dbcDatabaseClient', 'DriverManager'
   ];
-  // Known business logic indicators in method bodies
-  private businessLogicPatterns = [
-    'if\\s*\\(',
-    'for\\s*\\(',
-    'while\\s*\\(',
-    'switch\\s*\\(',
-    '\\|\\|',
-    '&&',
-    '==',
-    '!=',
-    '<',
-    '>',
-    '<=',
-    '>=',
-    '\\+\\+',
-    '--',
-    '\\+=',
-    '-=',
-    '\\*=',
-    '/=',
-    '%=',
-    'new\\s+java\\.sql\\.',
-    'EntityManager',
-    'CriteriaQuery',
-    'Query\\s*\\(',
-    'prepareStatement',
-    'executeQuery',
-    'executeUpdate'
-  ];
+
+  setBusinessLogicThreshold(value: number): void {
+    this.businessLogicThreshold = value;
+  }
 
   analyze(astOutputs: FullASTOutput[]): EntityLayerViolation[] {
     const violations: EntityLayerViolation[] = [];
@@ -223,8 +200,8 @@ export class EntityLayerAnalyzer {
           }
 
           // Check for business logic in entity methods
-          const businessLogicScore = this.calculateBusinessLogicScore(method);
-          if (businessLogicScore > 2) { // Lower threshold for entities as they should have minimal logic
+          const businessLogicScore = method.body?.businessLogicScore ?? 0;
+          if (businessLogicScore >= this.businessLogicThreshold) { // Lower threshold for entities as they should have minimal logic
             violations.push({
               type: 'business-logic',
               message: `Entity method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer or keeping entities as simple data containers.`,
@@ -243,7 +220,7 @@ export class EntityLayerAnalyzer {
         }
 
         // Check for anemic entity (once per class, not per method)
-        const isAnemic = cls.methods.length > 0 && this.isAnemicEntity(cls);
+        const isAnemic = this.isAnemicEntity(cls);
         if (isAnemic) {
           violations.push({
             type: 'anemic-entity',
@@ -357,30 +334,10 @@ export class EntityLayerAnalyzer {
     return this.entityPatterns.some(pattern => className.endsWith(pattern));
   }
 
-  private calculateBusinessLogicScore(method: Method): number {
-    let score = 0;
-    const methodBody = method.body;
-
-    if (!methodBody) return score;
-
-    // Check method complexity based on available metrics
-    if (methodBody.linesOfCode > 10) {
-      score += 2; // Long methods in entities often contain business logic
-    }
-
-    if (methodBody.localVariables.length > 3) {
-      score += 1; // Many local variables suggest complex logic
-    }
-
-    // Since we don't have the actual method body text, we'll return a basic score
-    // In a full implementation, we would parse the method body for business logic patterns
-
-    return score;
-  }
-
   private isAnemicEntity(cls: ClassInfo): boolean {
     const totalMethods = cls.methods.length;
-    if (totalMethods === 0) return false;
+    // An entity with no methods is a dumb data holder with no behavior.
+    if (totalMethods === 0) return true;
 
     let getterSetterCount = 0;
     for (const method of cls.methods) {

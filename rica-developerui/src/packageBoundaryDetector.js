@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PackageBoundaryAnalyzer = void 0;
 const analyzerConfig_1 = require("./domain/analyzerConfig");
+const violationCatalog_1 = require("./violationCatalog");
 class PackageBoundaryAnalyzer {
     constructor(config) {
         this.config = {
@@ -11,6 +12,7 @@ class PackageBoundaryAnalyzer {
             businessLogicThreshold: 3,
             excludePatterns: [],
             layerBoundaries: { ...analyzerConfig_1.DEFAULT_LAYER_BOUNDARIES },
+            ai: { ...analyzerConfig_1.DEFAULT_AI_CONFIG },
             ...config,
         };
     }
@@ -126,6 +128,7 @@ class PackageBoundaryAnalyzer {
             },
             legacyType: 'package-violation',
             detectorSource: 'PackageBoundaryAnalyzer',
+            documentationUrl: (0, violationCatalog_1.violationDocSlug)('RICA-V501'),
         }));
     }
 }

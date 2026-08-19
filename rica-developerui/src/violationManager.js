@@ -9,7 +9,9 @@ const crossFileAnalyzer_1 = require("./crossFileAnalyzer");
 const dependencyGraph_1 = require("./dependencyGraph");
 const packageBoundaryDetector_1 = require("./packageBoundaryDetector");
 const designPatternAnalyzer_1 = require("./designPatternAnalyzer");
+const analyzerConfig_1 = require("./domain/analyzerConfig");
 const impactAnalyzer_1 = require("./impactAnalyzer");
+const violationCatalog_1 = require("./violationCatalog");
 const MITIGATION_HINTS = {
     'self-instantiation': 'Use dependency injection (@Autowired/@Inject) instead of directly instantiating with new()',
     'uninjected-repository-access': 'Annotate the field with @Autowired or use constructor injection',
@@ -62,9 +64,10 @@ const CROSS_FILE_RULE_CODES = {
 };
 function layerViolationToUnified(v, source) {
     const type = 'type' in v ? v.type : 'unknown';
+    const code = RULE_CODE_MAP[type] || `RICA-V000`;
     return {
         id: `${source}-${v.className}-${v.methodName || ''}-${v.fieldName || ''}-${type}-${v.lineNumber || 0}`,
-        code: RULE_CODE_MAP[type] || `RICA-V000`,
+        code,
         ruleName: `${source}: ${type.replace(/-/g, ' ')}`,
         severity: v.severity,
         message: v.message,
@@ -72,7 +75,8 @@ function layerViolationToUnified(v, source) {
         lineNumber: v.lineNumber,
         range: v.range,
         explanation: 'explanation' in v ? v.explanation : undefined,
-        mitigationHint: MITIGATION_HINTS[type] || 'Review the architectural guidelines for this layer',
+        mitigationHint: violationCatalog_1.VIOLATION_DOC_BY_CODE[code]?.mitigationHint || MITIGATION_HINTS[type] || 'Review the architectural guidelines for this layer',
+        documentationUrl: (0, violationCatalog_1.violationDocSlug)(code),
         legacyType: type,
         detectorSource: source,
         contextMetadata: {
@@ -86,6 +90,9 @@ class ViolationManager {
     constructor(diagnosticReporter, parserService, configProvider, onIgnoreChanged, initialIgnoredIds) {
         // Unified violation cache for UI consumers
         this.activeViolations = [];
+        // Optional AI Reasoning advisory findings (RICA-V000). Never part of the
+        // deterministic audit; surfaced separately to the UI and combined on read.
+        this.advisoryViolations = [];
         // Persisted set of ignored violation IDs
         this.ignoredViolationIds = new Set();
         // Phase 5: Incremental revalidation state
@@ -100,6 +107,7 @@ class ViolationManager {
             businessLogicThreshold: 3,
             excludePatterns: [],
             layerBoundaries: {},
+            ai: analyzerConfig_1.DEFAULT_AI_CONFIG,
         };
         this.diagnosticReporter = diagnosticReporter;
         this.parserService = parserService;
@@ -116,12 +124,20 @@ class ViolationManager {
             this.ignoredViolationIds = new Set(initialIgnoredIds);
         }
         this.config = configProvider.getConfig();
+        this.applyBusinessLogicThreshold();
         this.packageBoundaryAnalyzer.setConfig(this.config);
         configProvider.onConfigChange(() => {
             this.config = configProvider.getConfig();
+            this.applyBusinessLogicThreshold();
             this.packageBoundaryAnalyzer.setConfig(this.config);
             this.update();
         });
+    }
+    applyBusinessLogicThreshold() {
+        const threshold = this.config.businessLogicThreshold;
+        this.controllerAnalyzer.setBusinessLogicThreshold(threshold);
+        this.entityAnalyzer.setBusinessLogicThreshold(threshold);
+        this.apiResourceAnalyzer.setBusinessLogicThreshold(threshold);
     }
     ignoreViolation(id) {
         this.ignoredViolationIds.add(id);
@@ -145,7 +161,7 @@ class ViolationManager {
     }
     /** Re-creates diagnostics from cached violations, filtering out ignored ones. */
     refreshDiagnostics() {
-        this.diagnosticReporter.report(this.activeViolations, this.ignoredViolationIds);
+        this.diagnosticReporter.report([...this.activeViolations, ...this.advisoryViolations], this.ignoredViolationIds);
     }
     /**
      * Phase 5: Incremental delta pipeline for single-file changes.
@@ -271,9 +287,26 @@ class ViolationManager {
     seedFileCache(filePath, ast) {
         this.filesMap[filePath] = ast;
     }
-    /** Returns all currently active violations for UI consumers. */
+    /** Returns all currently active violations (deterministic + advisory) for the assessment UI. */
     getActiveViolations() {
+        return [...this.activeViolations, ...this.advisoryViolations];
+    }
+    /** Returns only the deterministic audit violations. */
+    getDeterministicViolations() {
         return [...this.activeViolations];
+    }
+    /** Returns net-new advisory findings produced by the AI Reasoning pass. */
+    getAdvisoryViolations() {
+        return [...this.advisoryViolations];
+    }
+    /** Latest AST cache for the AI context builder. */
+    getFilesMap() {
+        return this.filesMap;
+    }
+    /** Replaces the advisory findings set (called by the AI Reasoning coordinator). */
+    setAdvisoryViolations(list) {
+        this.advisoryViolations = list;
+        this.refreshDiagnostics();
     }
     /** Exposes the live project dependency graph for REST API / visualizer consumption. */
     getProjectGraph() {
@@ -335,6 +368,7 @@ class ViolationManager {
     clear() {
         this.diagnosticReporter.clear();
         this.activeViolations = [];
+        this.advisoryViolations = [];
     }
     buildClassAnnotationsMap() {
         const map = new Map();

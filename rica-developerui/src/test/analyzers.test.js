@@ -219,10 +219,7 @@ public class MyController {
         assert.ok(selfInst, 'should detect self-instantiation of service');
     });
 
-    it.skip('should detect business logic in controller (known heuristic limitation)', () => {
-        // NOTE: Business logic scoring uses linesOfCode >20 and localVariables >5.
-        // The java-parser 2.x CST counts multi-declaration lines (e.g. "int a=0,b=1;")
-        // as a single nod without children.statement, undercounting the body size.
+    it('should detect business logic in controller', () => {
         const code = `package com.example;
 import org.springframework.web.bind.annotation.RestController;
 @RestController
@@ -414,8 +411,7 @@ public class MyResource {
         assert.ok(exposing, 'should detect exposing entity');
     });
 
-    it.skip('should detect business-logic-in-resource (known heuristic limitation)', () => {
-        // NOTE: Same limitation as controller business logic scoring.
+    it('should detect business-logic-in-resource', () => {
         const code = `package com.example;
 import org.springframework.web.bind.annotation.RestController;
 @RestController

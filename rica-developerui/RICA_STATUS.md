@@ -139,6 +139,32 @@ onFileSaved(file):
 | `enableBusinessLogicChecks` | `true` | V106, V108, V204 |
 | `layerBoundaries` | Clean Arch defaults | V501 package boundary definitions |
 | `excludePatterns` | `node_modules, build, target…` | Files to skip |
+| `enableAiAdvisory` | `false` | Optional AI Reasoning advisory (RICA-V000) |
+| `aiProvider` | `ollama` | `off` / `ollama` / `openai-compatible` |
+| `aiEndpoint` | `http://localhost:11434` | Ollama/Colab tunnel URL |
+| `aiModel` | `qwen2.5-coder:7b` | Model tag served by the provider |
+| `aiTrigger` | `onDemand` | `onDemand` / `onSave` / `onFullScan` |
+
+### 6. AI Reasoning Advisory (core pipeline — M0–M5)
+- **Deterministic-first**: `triage` selects AI-relevant codes + mutating-entry probes →
+  `contextBuilder` pre-computes the execution path (auth annotations, privilege
+  markers, distance-weighted source slices) → `heuristicAdvisor` (Option C) probes for
+  missing authorization **offline** → optional LLM (`OllamaAiAdapter` /
+  `OpenAICompatibleAiAdapter`) evaluates the bounded `AiContextPayload`.
+- **Advisory Non-Deletion**: the coordinator annotates the same `Violation` objects
+  (`aiInsights`, `quickFix`) and surfaces net-new findings as `RICA-V000` /
+  `detectorSource: 'AiAdvisory'`. `enableAiAdvisory=false` or `aiProvider=off` is a
+  strict no-op — today's pipeline is byte-identical.
+- Every pass is appended to `.rica/ai-audit.jsonl` (`aiAuditLogEnabled`, default on).
+
+### M6 UI surface
+- **Quick fixes**: `rica-developerui/src/codeActionProvider.ts` turns `violation.quickFix`
+  into a preferred VS Code Quick-Fix lightbulb on the exact diagnostic.
+- **Marker differentiation**: advisory findings are rendered in a separate
+  `rica-ai-advisory` diagnostic collection (source `RICA-AI`, `[RICA-AI]` prefix);
+  deterministic rules stay in `java-layer-analyzer`.
+- **Reviewed / OK**: clean `NO_VIOLATION` reviews stay silent in the editor (no
+  diagnostic) and are recorded in the audit log — no diagnostic clutter.
 
 ### 5. Standalone Engine + Dashboard
 ```
@@ -156,9 +182,9 @@ GET /view                  → D3.js force-directed graph dashboard
 ### Test Suite
 | Metric | Value |
 |--------|-------|
-| TypeScript source files | 36 |
-| Lines of TypeScript | 8,693 |
-| Mocha unit tests | 62 (passing) |
+| TypeScript source files | 40 |
+| Lines of TypeScript | ~10,300 |
+| Mocha unit tests | 90 (passing) |
 | Pending tests | 3 |
 | Cross-layer violations (self-check) | 0 |
 
@@ -209,6 +235,7 @@ GET /view                  → D3.js force-directed graph dashboard
 |---------|----|--------|
 | Analyze Full Project | `rica.analyzeProject` | Full scan + parse + graph + all rules |
 | Quick Scan File | `rica.quickScanFile` | Delta pipeline on active file |
+| AI Review | `rica.aiReview` | Run the advisory AI Reasoning pass on demand |
 | Show Audit Summary | `rica.showStatusSummary` | Error/warning/info counts |
 | Open Violations Panel | `javaAstAnalyzer.showViolationsView` | Sortable/filterable WebView table |
 | Open Browser Viewer | `javaAstAnalyzer.openBrowserViewer` | D3.js dashboard at `/view` |
@@ -259,21 +286,36 @@ rica-developerui/
 │   ├── domain/                    # Zero-dependency pure types
 │   │   ├── astTypes.ts            # FullASTOutput, ClassInfo, Method, etc.
 │   │   ├── violations.ts          # Violation, DiagnosticRange, ViolationSummary
-│   │   └── analyzerConfig.ts      # AnalyzerConfig, LayerBoundary interface
+│   │   ├── ai.ts                  # AiCandidate, AiContextPayload, AiDecision, audit types
+│   │   └── analyzerConfig.ts      # AnalyzerConfig, LayerBoundary, AiConfig
 │   ├── application/ports/         # Port interfaces (no framework deps)
 │   │   ├── parserService.ts       # ParserService interface
 │   │   ├── diagnosticReporter.ts  # DiagnosticReporter interface
 │   │   ├── configProvider.ts      # ConfigProvider interface
 │   │   ├── sourceProvider.ts      # SourceProvider interface
 │   │   ├── backendService.ts      # BackendService (HTTP API) interface
-│   │   └── analyzerService.ts     # AnalyzerService interface
+│   │   ├── analyzerService.ts     # AnalyzerService interface
+│   │   ├── aiDecisionProvider.ts  # LLM decision port (isAvailable/evaluate)
+│   │   └── aiAuditLogger.ts       # Audit log port
+│   ├── application/ai/            # AI Reasoning core (deterministic orchestration)
+│   │   ├── triage.ts              # Candidate selection + entry-point probes
+│   │   ├── contextBuilder.ts      # Bounded execution-path context packaging
+│   │   ├── heuristicAdvisor.ts    # Option C offline auth probe (works with AI off)
+│   │   └── aiAdvisoryCoordinator.ts # triage → context → advisor → LLM → merge → audit
 │   ├── infrastructure/            # Adaptor implementations
 │   │   ├── javaParser.ts          # JavaParser (wraps java-parser 2.x CST)
 │   │   ├── javaParserAdapter.ts   # Adapter: JavaParser → ParserService
 │   │   ├── vscodeDiagnosticReporter.ts
 │   │   ├── vscodeConfigProvider.ts
 │   │   ├── vscodeSourceProvider.ts
-│   │   └── apiClientAdapter.ts    # Adapter: HTTP client → BackendService
+│   │   ├── apiClientAdapter.ts    # Adapter: HTTP client → BackendService
+│   │   └── ai/                    # AI adapters
+│   │       ├── ollamaAiAdapter.ts # Ollama /api/chat (format: json)
+│   │       ├── openaiCompatibleAiAdapter.ts # /v1/chat/completions
+│   │       ├── fileAuditLogger.ts # .rica/ai-audit.jsonl
+│   │       ├── prompt.ts          # System + user prompt builders
+│   │       ├── parseDecisions.ts  # Robust LLM JSON → AiDecision[]
+│   │       └── httpJson.ts        # Shared http/https JSON client
 │   ├── serviceLayerDetector.ts    # V101-V104 service layer rules
 │   ├── controllerLayerDetector.ts # V103, V106, V110-V114 controller rules
 │   ├── entityLayerDetector.ts     # V106-V109 entity rules
@@ -297,7 +339,9 @@ rica-developerui/
 ├── src/test/                      # Mocha test suite
 │   ├── parser.test.js             # JavaParser + injection detection
 │   ├── analyzers.test.js          # All 4 layer detectors
-│   └── crossFile.test.js          # Graph rules + boundary validation
+│   ├── crossFile.test.js          # Graph rules + boundary validation
+│   ├── aiAdvisory.test.js         # triage/context/heuristic/coordinator/parsing
+│   └── mocks/mockAiDecisionProvider.js
 ├── test-lms-analyzer.js           # LMS benchmark (49 files)
 ├── test-simlea-analyzer.js        # Simlea benchmark (757 files)
 ├── package.json                   # 8 configuration settings
@@ -308,4 +352,4 @@ rica-developerui/
 
 ## Status: Production-Ready for Pilot
 
-RICA has been validated against **806 Java files** across 2 projects (49-file LMS + 757-file Simlea microservices) with **62 passing unit tests**, **zero type errors**, and **zero self-check violations** in Clean Architecture layering. The delta pipeline processes single-file changes in `O(Δ)` time, and the D3.js dashboard provides real-time architectural visualization.
+RICA has been validated against **806 Java files** across 2 projects (49-file LMS + 757-file Simlea microservices) with **90 passing unit tests**, **zero type errors**, and **zero self-check violations** in Clean Architecture layering. The delta pipeline processes single-file changes in `O(Δ)` time, the D3.js dashboard provides real-time architectural visualization, and the AI Reasoning module (M0–M8) is fully implemented: deterministic triage/context/heuristic pipeline, Ollama/OpenAI-compatible adapter, audit log, plus the M6 UI surface (quick-fix lightbulbs and `[RICA-AI]` marker differentiation).

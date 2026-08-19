@@ -1,7 +1,8 @@
 import { FullASTOutput, ImportInfo } from './astTypes';
 import { Violation, DiagnosticRange } from './domain/violations';
 import { ProjectDependencyGraph } from './dependencyGraph';
-import { AnalyzerConfig, LayerBoundary, DEFAULT_LAYER_BOUNDARIES } from './domain/analyzerConfig';
+import { AnalyzerConfig, DEFAULT_AI_CONFIG, LayerBoundary, DEFAULT_LAYER_BOUNDARIES } from './domain/analyzerConfig';
+import { violationDocSlug } from './violationCatalog';
 
 export interface LayerBoundaryViolation {
   type: 'package-violation';
@@ -27,6 +28,7 @@ export class PackageBoundaryAnalyzer {
       businessLogicThreshold: 3,
       excludePatterns: [],
       layerBoundaries: { ...DEFAULT_LAYER_BOUNDARIES },
+      ai: { ...DEFAULT_AI_CONFIG },
       ...config,
     };
   }
@@ -151,6 +153,7 @@ export class PackageBoundaryAnalyzer {
       },
       legacyType: 'package-violation',
       detectorSource: 'PackageBoundaryAnalyzer',
+      documentationUrl: violationDocSlug('RICA-V501'),
     }));
   }
 }
