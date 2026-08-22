@@ -134,13 +134,16 @@ export class JavaParser {
             }
         }
 
+        const suppressedLines = this.extractSuppressedLines(sourceCode);
+
         return {
             packageInfo,
             classes,
             imports,
             relationships,
             timestamp: Date.now(),
-            filePath
+            filePath,
+            suppressedLines
         };
     }
 
@@ -1001,10 +1004,14 @@ export class JavaParser {
 
 
     private getSuperClass(node: any): string | null {
-        if (!node?.children?.superclass) return null;
-
-        const sc = node.children.superclass[0];
-        const typeName = this.extractClassName(sc);
+        // java-parser 2.x uses classExtends, legacy used superclass
+        const clause = node?.children?.superclass?.[0] || node?.children?.classExtends?.[0];
+        if (!clause) return null;
+        // classExtends wraps classType { Identifier: [Shape] }
+        if (clause.children?.classType?.[0]?.children?.Identifier) {
+            return clause.children.classType[0].children.Identifier.map((id: any) => id.image).join('.');
+        }
+        const typeName = this.extractClassName(clause);
         return typeName || null;
     }
 
@@ -3613,7 +3620,17 @@ export class JavaParser {
         let packageScore = 0;
 
         // Annotation-based layer detection (Spring/Java EE conventions)
-        if (annotationNames.includes('Service') || annotationNames.includes('Component')) {
+        // Special cases before generic @Component to avoid misclassification
+        if (annotationNames.includes('FeignClient')) {
+            layer = 'infrastructure';
+            annotationScore = 1.0;
+        } else if ((annotationNames.includes('ControllerAdvice') || annotationNames.includes('RestControllerAdvice'))) {
+            layer = 'config';
+            annotationScore = 1.0;
+        } else if (annotationNames.includes('Component') && cls.className.endsWith('Filter')) {
+            layer = 'infrastructure';
+            annotationScore = 1.0;
+        } else if (annotationNames.includes('Service') || annotationNames.includes('Component')) {
             layer = 'service';
             annotationScore = 1.0;
         } else if (annotationNames.includes('Repository') || annotationNames.includes('Dao') || annotationNames.includes('DAO')) {
@@ -3915,37 +3932,48 @@ export class JavaParser {
     private calculateBusinessLogicScore(bodyText: string, linesOfCode: number, complexity: number): number {
         let score = 0;
         
-        const patterns = [
-            /if\s*\(/g,
-            /for\s*\(/g,
-            /while\s*\(/g,
-            /switch\s*\(/g,
-            /\|\|/g,
-            /&&/g,
-            /==/g,
-            /!=/g,
-            /<=?/g,
-            />=?/g,
-            /\+\+/g,
-            /--/g,
-            /\+=/g,
-            /-=/g,
-            /\*=/g,
-            /\/=/g,
-            /%=/g,
-            /new\s+java\.sql\./g,
-            /EntityManager/g,
-            /CriteriaQuery/g,
-            /Query\s*\(/g,
-            /prepareStatement/g,
-            /executeQuery/g,
-            /executeUpdate/g
+        // Semantic weighting: defensive guard clauses (null-checks) weight 0.
+        // Strip null-check fragments before counting `==`/`!=` and guard `if`s.
+        const nullCheckEq = (bodyText.match(/==\s*null|null\s*==/g) || []).length;
+        const nullCheckNe = (bodyText.match(/!=\s*null|null\s*!=/g) || []).length;
+        // Count guard `if (...null...) return/throw` to discount the `if` itself
+        const guardIfNull = (bodyText.match(/if\s*\([^)]*null[^)]*\)\s*(return|throw)/g) || []).length;
+
+        const patterns: Array<{ re: RegExp; weight: number; adjust?: number }> = [
+            { re: /if\s*\(/g, weight: 1, adjust: -guardIfNull }, // defensive null-guard if weight 0
+            { re: /for\s*\(/g, weight: 1 },
+            { re: /while\s*\(/g, weight: 1 },
+            { re: /switch\s*\(/g, weight: 1 },
+            { re: /\|\|/g, weight: 1 },
+            { re: /&&/g, weight: 1 },
+            { re: /==/g, weight: 1, adjust: -nullCheckEq }, // null equality not business
+            { re: /!=/g, weight: 1, adjust: -nullCheckNe },
+            { re: /<=/g, weight: 1 },
+            { re: />=/g, weight: 1 },
+            { re: /</g, weight: 1 }, // keep simple compare, but null already stripped
+            { re: />/g, weight: 1 },
+            { re: /\+\+/g, weight: 1 },
+            { re: /--/g, weight: 1 },
+            { re: /\+=/g, weight: 1 },
+            { re: /-=/g, weight: 1 },
+            { re: /\*=/g, weight: 1 },
+            { re: /\/=/g, weight: 1 },
+            { re: /%=/g, weight: 1 },
+            { re: /new\s+java\.sql\./g, weight: 1 },
+            { re: /EntityManager/g, weight: 1 },
+            { re: /CriteriaQuery/g, weight: 1 },
+            { re: /Query\s*\(/g, weight: 1 },
+            { re: /prepareStatement/g, weight: 1 },
+            { re: /executeQuery/g, weight: 1 },
+            { re: /executeUpdate/g, weight: 1 },
         ];
         
-        for (const pattern of patterns) {
-            const matches = bodyText.match(pattern);
+        for (const { re, weight, adjust } of patterns) {
+            const matches = bodyText.match(re);
             if (matches) {
-                score += matches.length;
+                let cnt = matches.length + (adjust || 0);
+                if (cnt < 0) cnt = 0;
+                score += cnt * weight;
             }
         }
         
@@ -3953,7 +3981,57 @@ export class JavaParser {
         if (linesOfCode > 20) score += 2;
         if (complexity > 3) score += 2;
         
-        return score;
+        return score < 0 ? 0 : score;
+    }
+
+    private extractSuppressedLines(sourceCode: string): Record<number, string[]> {
+        const suppressed: Record<number, string[]> = {};
+        const lines = sourceCode.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            // // rica-disable-next-line V111, V112  or  // rica-disable-next-line rica:all
+            const m = line.match(/rica-disable-next-line\s+([^\n]+)/i);
+            if (m) {
+                const raw = m[1].trim();
+                let codes: string[] = [];
+                if (/rica:\s*all/i.test(raw) || /\ball\b/i.test(raw) && raw.toLowerCase().includes('rica')) {
+                    codes = ['all'];
+                } else {
+                    // extract Vxxx tokens or rica:Vxxx
+                    const tokens = raw.match(/V\d{3}/gi) || [];
+                    for (const t of tokens) {
+                        const norm = t.toUpperCase().startsWith('RICA-') ? t.toUpperCase() : `RICA-${t.toUpperCase()}`;
+                        codes.push(norm);
+                    }
+                    // also handle rica:V111
+                    const ricaTokens = raw.match(/rica:\s*V\d{3}/gi) || [];
+                    for (const t of ricaTokens) {
+                        const v = t.match(/V\d{3}/i)![0].toUpperCase();
+                        const norm = `RICA-${v}`;
+                        if (!codes.includes(norm)) codes.push(norm);
+                    }
+                    if (codes.length === 0 && raw.includes('V')) {
+                        // fallback: try to capture any Vxxx
+                        const anyV = raw.match(/V\d{3}/gi) || [];
+                        for (const t of anyV) codes.push(`RICA-${t.toUpperCase()}`);
+                    }
+                }
+                if (codes.length > 0) {
+                    const targetLine = i + 2; // next line is i+1 1-indexed => i+2
+                    suppressed[targetLine] = [...(suppressed[targetLine] || []), ...codes];
+                }
+            }
+            // Block disable: /* rica-disable */ ... /* rica-enable */  (file-level, treat as all lines)
+            if (/rica-disable(?!\s*-\s*next)/i.test(line) && !/rica-disable-next-line/i.test(line)) {
+                // treat remaining file as suppressed for all
+                for (let j = i + 1; j < lines.length; j++) {
+                    const jl = j + 1;
+                    suppressed[jl] = [...(suppressed[jl] || []), 'all'];
+                    if (/rica-enable/i.test(lines[j])) break;
+                }
+            }
+        }
+        return suppressed;
     }
 
     private extractAccessedFields(bodyNode: any, fieldNames: Set<string>): string[] {

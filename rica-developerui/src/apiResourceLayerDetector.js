@@ -206,23 +206,30 @@ class APIResourceLayerAnalyzer {
                         }
                     }
                     // Check for missing validation on parameters (private helper methods are not endpoints)
+                    // Class-level @Validated/@Valid makes all method params validated (Spring)
                     if (isEndpoint) {
-                        const missingValidation = this.checkForMissingValidation(method);
-                        if (missingValidation) {
-                            violations.push({
-                                type: 'missing-validation',
-                                message: `API resource method '${method.name}' parameter '${missingValidation}' lacks validation annotations. Consider adding @Valid, @NotNull, etc. for input validation.`,
-                                className: cls.fullyQualifiedName,
-                                methodName: method.name,
-                                lineNumber: method.body?.linesOfCode,
-                                range: method.startLine ? {
-                                    start: { line: method.startLine, character: method.startColumn || 0 },
-                                    end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
-                                } : undefined,
-                                severity: 'info',
-                                filePath: ast.filePath,
-                                explanation: 'Your API resource method has a parameter that lacks validation annotations. Adding constraints like @Valid, @NotNull, or @Size ensures malformed input is caught early and produces clean error responses instead of cryptic failures deeper in the stack.'
-                            });
+                        const hasClassValidation = cls.annotations.some(a => ['Validated', 'Valid'].some(v => a.name.endsWith(v)));
+                        if (hasClassValidation) {
+                            // Suppress V206 when class is @Validated — framework handles validation
+                        }
+                        else {
+                            const missingValidation = this.checkForMissingValidation(method, cls);
+                            if (missingValidation) {
+                                violations.push({
+                                    type: 'missing-validation',
+                                    message: `API resource method '${method.name}' parameter '${missingValidation}' lacks validation annotations. Consider adding @Valid, @NotNull, etc. for input validation.`,
+                                    className: cls.fullyQualifiedName,
+                                    methodName: method.name,
+                                    lineNumber: method.body?.linesOfCode,
+                                    range: method.startLine ? {
+                                        start: { line: method.startLine, character: method.startColumn || 0 },
+                                        end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
+                                    } : undefined,
+                                    severity: 'info',
+                                    filePath: ast.filePath,
+                                    explanation: 'Your API resource method has a parameter that lacks validation annotations. Adding constraints like @Valid, @NotNull, or @Size ensures malformed input is caught early and produces clean error responses instead of cryptic failures deeper in the stack.'
+                                });
+                            }
                         }
                     }
                     // Check for improper error handling (exposing exceptions) — only for endpoint methods
@@ -362,7 +369,7 @@ class APIResourceLayerAnalyzer {
         }
         return null;
     }
-    checkForMissingValidation(method) {
+    checkForMissingValidation(method, _cls) {
         // Check method parameters for missing validation
         for (const param of method.parameters) {
             // Skip if it's a simple type that might not need validation (though this is debatable)

@@ -596,6 +596,155 @@ class OrderService {
     });
 });
 
+describe('DesignPatternAnalyzer — V322 Missing Proxy', () => {
+
+    it('should flag direct heavy resource instantiation in service layer', () => {
+        const code = `package com.example.service;
+import javax.sql.DataSource;
+class OrderService {
+    public void process() {
+        DataSource ds = new DataSource();
+        ds.getConnection();
+    }
+}`;
+        const ast = parse(code, 'service/OrderService.java');
+        const analyzer = new DesignPatternAnalyzer();
+        const violations = analyzer.analyze([ast]);
+        assert.ok(violations.some(v => v.code === 'RICA-V322'), 'should emit V322 for direct DataSource new in service');
+    });
+
+    it('should flag EntityManager direct instantiation in controller layer', () => {
+        const code = `package com.example.controller;
+class OrderController {
+    public void handle() {
+        javax.persistence.EntityManager em = new javax.persistence.EntityManager();
+    }
+}`;
+        const ast = parse(code, 'controller/OrderController.java');
+        const violations = new DesignPatternAnalyzer().analyze([ast]);
+        assert.ok(violations.some(v => v.code === 'RICA-V322'), 'should emit V322 for EntityManager in controller');
+    });
+
+    it('should NOT flag heavy resource in infrastructure layer', () => {
+        const code = `package com.example.infrastructure;
+import javax.sql.DataSource;
+class DataSourceConfig {
+    public void create() {
+        DataSource ds = new DataSource();
+    }
+}`;
+        const ast = parse(code, 'infrastructure/DataSourceConfig.java');
+        const violations = new DesignPatternAnalyzer().analyze([ast]);
+        assert.ok(!violations.some(v => v.code === 'RICA-V322'), 'infra layer should be exempt');
+    });
+
+    it('should NOT flag when proxy wrapper exists in infrastructure', () => {
+        const infra = {
+            path: 'infrastructure/ConnectionProxy.java',
+            code: `package com.example.infrastructure;
+class ConnectionProxy implements DataSource {
+    public java.sql.Connection getConnection() { return null; }
+}`
+        };
+        const service = {
+            path: 'service/OrderService.java',
+            code: `package com.example.service;
+class OrderService {
+    public void process() {
+        DataSource ds = new DataSource();
+    }
+}`
+        };
+        // infrastructure provides interface impl → proxiedTypes includes DataSource → should NOT flag
+        const asts = [parse(infra.code, infra.path), parse(service.code, service.path)];
+        const violations = new DesignPatternAnalyzer().analyze(asts);
+        assert.ok(!violations.some(v => v.code === 'RICA-V322'), 'should not flag when infra proxy exists');
+    });
+
+    it('should NOT flag normal business object creation', () => {
+        const code = `package com.example.service;
+class OrderService {
+    public void process() {
+        Order o = new Order();
+    }
+}`;
+        const ast = parse(code, 'service/OrderService.java');
+        const violations = new DesignPatternAnalyzer().analyze([ast]);
+        assert.ok(!violations.some(v => v.code === 'RICA-V322'), 'normal Order creation should not flag');
+    });
+});
+
+describe('DesignPatternAnalyzer — V323 Missing Bridge', () => {
+
+    it('should flag combinatorial hierarchy explosion (RedSquare/BlueSquare...)', () => {
+        const sources = [
+            { path: 'Shape.java', code: `package com.example; abstract class Shape { abstract void draw(); }` },
+            { path: 'RedSquare.java', code: `package com.example; class RedSquare extends Shape { void draw() {} }` },
+            { path: 'BlueSquare.java', code: `package com.example; class BlueSquare extends Shape { void draw() {} }` },
+            { path: 'RedCircle.java', code: `package com.example; class RedCircle extends Shape { void draw() {} }` },
+            { path: 'BlueCircle.java', code: `package com.example; class BlueCircle extends Shape { void draw() {} }` },
+        ];
+        const asts = sources.map(s => parse(s.code, s.path));
+        const violations = new DesignPatternAnalyzer().analyze(asts);
+        assert.ok(violations.some(v => v.code === 'RICA-V323'), 'should emit V323 for 2x2 combinatorial explosion');
+    });
+
+    it('should flag DatabaseLogger/FileLogger/DatabaseNotifier/FileNotifier', () => {
+        const sources = [
+            { path: 'Notifier.java', code: `package com.example; abstract class Notifier { abstract void send(); }` },
+            { path: 'DatabaseLogger.java', code: `package com.example; class DatabaseLogger extends Notifier { void send() {} }` },
+            { path: 'FileLogger.java', code: `package com.example; class FileLogger extends Notifier { void send() {} }` },
+            { path: 'DatabaseNotifier.java', code: `package com.example; class DatabaseNotifier extends Notifier { void send() {} }` },
+            { path: 'FileNotifier.java', code: `package com.example; class FileNotifier extends Notifier { void send() {} }` },
+        ];
+        const asts = sources.map(s => parse(s.code, s.path));
+        const violations = new DesignPatternAnalyzer().analyze(asts);
+        assert.ok(violations.some(v => v.code === 'RICA-V323'), 'should emit V323 for Logger/Notifier combinatorial');
+    });
+
+    it('should NOT flag hierarchy below threshold', () => {
+        const sources = [
+            { path: 'Shape.java', code: `package com.example; abstract class Shape { abstract void draw(); }` },
+            { path: 'RedSquare.java', code: `package com.example; class RedSquare extends Shape { void draw() {} }` },
+            { path: 'BlueSquare.java', code: `package com.example; class BlueSquare extends Shape { void draw() {} }` },
+            { path: 'RedCircle.java', code: `package com.example; class RedCircle extends Shape { void draw() {} }` },
+        ];
+        const asts = sources.map(s => parse(s.code, s.path));
+        const violations = new DesignPatternAnalyzer({ bridgeHierarchyThreshold: 4 }).analyze(asts);
+        assert.ok(!violations.some(v => v.code === 'RICA-V323'), '3 children below threshold should not flag');
+    });
+
+    it('should NOT flag non-combinatorial hierarchy', () => {
+        const sources = [
+            { path: 'Animal.java', code: `package com.example; abstract class Animal { abstract void speak(); }` },
+            { path: 'Dog.java', code: `package com.example; class Dog extends Animal { void speak() {} }` },
+            { path: 'Cat.java', code: `package com.example; class Cat extends Animal { void speak() {} }` },
+            { path: 'Bird.java', code: `package com.example; class Bird extends Animal { void speak() {} }` },
+            { path: 'Fish.java', code: `package com.example; class Fish extends Animal { void speak() {} }` },
+        ];
+        const asts = sources.map(s => parse(s.code, s.path));
+        const violations = new DesignPatternAnalyzer().analyze(asts);
+        assert.ok(!violations.some(v => v.code === 'RICA-V323'), 'distinct names without combinatorial repetition should not flag');
+    });
+
+    it('should honor bridgeHierarchyThreshold config', () => {
+        const sources = [
+            { path: 'Shape.java', code: `package com.example; abstract class Shape { abstract void draw(); }` },
+            { path: 'RedSquare.java', code: `package com.example; class RedSquare extends Shape { void draw() {} }` },
+            { path: 'BlueSquare.java', code: `package com.example; class BlueSquare extends Shape { void draw() {} }` },
+            { path: 'RedCircle.java', code: `package com.example; class RedCircle extends Shape { void draw() {} }` },
+            { path: 'BlueCircle.java', code: `package com.example; class BlueCircle extends Shape { void draw() {} }` },
+            { path: 'GreenSquare.java', code: `package com.example; class GreenSquare extends Shape { void draw() {} }` },
+            { path: 'GreenCircle.java', code: `package com.example; class GreenCircle extends Shape { void draw() {} }` },
+        ];
+        const asts = sources.map(s => parse(s.code, s.path));
+        const strict = new DesignPatternAnalyzer({ bridgeHierarchyThreshold: 2 }).analyze(asts);
+        assert.ok(strict.some(v => v.code === 'RICA-V323'), 'low threshold should flag');
+        const lenient = new DesignPatternAnalyzer({ bridgeHierarchyThreshold: 10 }).analyze(asts);
+        assert.ok(!lenient.some(v => v.code === 'RICA-V323'), 'high threshold should not flag');
+    });
+});
+
 describe('DesignPatternAnalyzer — no-op gating', () => {
 
     it('should emit nothing for V308-V310 when design-pattern checks are disabled', () => {

@@ -55,6 +55,8 @@ Every code the analyzers can emit, generated from the single source of truth `sr
 | [RICA-V305](./violations/RICA-V305.md) | Mutable Singleton | warning | any | `enableDesignPatternChecks` |
 | [RICA-V306](./violations/RICA-V306.md) | Raw Thread Spawn | error | any (outside @Configuration) | `enableDesignPatternChecks` |
 | [RICA-V307](./violations/RICA-V307.md) | Missing Abstraction | warning | any | `enableDesignPatternChecks` |
+| [RICA-V322](./violations/RICA-V322.md) | Missing Proxy | warning | service / application (non-infrastructure) | `enableDesignPatternChecks` |
+| [RICA-V323](./violations/RICA-V323.md) | Missing Bridge | warning | any (abstract hierarchy) | `enableDesignPatternChecks` |
 
 ## Fallback
 

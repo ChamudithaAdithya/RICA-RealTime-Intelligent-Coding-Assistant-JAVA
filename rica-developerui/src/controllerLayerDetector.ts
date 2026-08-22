@@ -184,15 +184,19 @@ export class ControllerLayerAnalyzer {
               });
             }
             if (this.isFileIOType(simpleName)) {
-              violations.push({
-                type: 'file-io',
-                message: `Controller method '${method.name}' performs file I/O via '${call.receiverVariableName || simpleName}' (${simpleName}). Move file operations to a dedicated service.`,
-                className: cls.fullyQualifiedName, methodName: method.name,
-                receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
-                range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
-                severity: 'error', filePath: ast.filePath,
-                explanation: 'Controllers should not read or write files. Extract file I/O operations into a service class that your controller injects.'
-              });
+              // Allowlist: thin wrappers for content-type sniffing or path resolution are legit in controller
+              const allowedFileMethods = new Set(['probeContentType', 'getFile', 'toPath', 'getName', 'getOriginalFilename']);
+              if (!allowedFileMethods.has(call.calledMethodName)) {
+                violations.push({
+                  type: 'file-io',
+                  message: `Controller method '${method.name}' performs file I/O via '${call.receiverVariableName || simpleName}' (${simpleName}). Move file operations to a dedicated service.`,
+                  className: cls.fullyQualifiedName, methodName: method.name,
+                  receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                  range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                  severity: 'error', filePath: ast.filePath,
+                  explanation: 'Controllers should not read or write files. Extract file I/O operations into a service class that your controller injects.'
+                });
+              }
             }
             if (this.isThreadType(simpleName)) {
               violations.push({

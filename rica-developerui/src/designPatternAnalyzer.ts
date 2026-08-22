@@ -26,6 +26,8 @@ const DP_RULE_CODES: Record<string, string> = {
   'monolithic-pipeline': 'RICA-V319',
   'service-locator': 'RICA-V320',
   'excessive-null-checks': 'RICA-V321',
+  'missing-proxy': 'RICA-V322',
+  'missing-bridge': 'RICA-V323',
 };
 
 const DP_MITIGATIONS: Record<string, string> = {
@@ -50,6 +52,8 @@ const DP_MITIGATIONS: Record<string, string> = {
   'monolithic-pipeline': 'Decompose the linear guard/validation chain into configurable Chain-of-Responsibility handlers',
   'service-locator': 'Inject dependencies constructor/field-style instead of looking them up via ApplicationContext/ServiceLocator',
   'excessive-null-checks': 'Replace repetitive null checks with Optional, Null Objects, or empty collections at the source',
+  'missing-proxy': 'Access heavy resources through a Proxy or managed wrapper/bean (lazy loading, access control, caching) instead of direct instantiation in business logic',
+  'missing-bridge': 'Decouple orthogonal dimensions via composition (Bridge) instead of exploding into combinatorial subclasses',
 };
 
 export class DesignPatternAnalyzer {
@@ -70,6 +74,7 @@ export class DesignPatternAnalyzer {
       guardClauseLimit: 5,
       nullCheckLimit: 3,
       templateMethodSimilarity: 0.8,
+      bridgeHierarchyThreshold: 4,
       excludePatterns: [],
       layerBoundaries: { ...DEFAULT_LAYER_BOUNDARIES },
       ai: { ...DEFAULT_AI_CONFIG },
@@ -104,6 +109,8 @@ export class DesignPatternAnalyzer {
     violations.push(...this.checkMonolithicPipeline(asts));
     violations.push(...this.checkServiceLocator(asts));
     violations.push(...this.checkExcessiveNullChecks(asts));
+    violations.push(...this.checkMissingProxy(asts, allAsts));
+    violations.push(...this.checkMissingBridge(asts, allAsts));
 
     return violations;
   }
@@ -319,15 +326,24 @@ export class DesignPatternAnalyzer {
 
   private hasAdapterFor(sdkFqcn: string, allAsts: FullASTOutput[]): boolean {
     const sdkSimple = sdkFqcn.split('.').pop() || '';
+    const lowerSimple = sdkSimple.toLowerCase();
     const infraLayer = this.config.layerBoundaries?.infrastructure?.packages || [];
     for (const ast of allAsts) {
-      const path = (ast.filePath || '').replace(/\\/g, '/');
-      const inInfrastructure = infraLayer.some(p => this.simpleGlobMatch(path, p));
+      const rawPath = (ast.filePath || '').replace(/\\/g, '/');
+      const candidates = [rawPath, rawPath.startsWith('/') ? rawPath : '/' + rawPath];
+      const inInfrastructure = infraLayer.some(p => candidates.some(c => this.simpleGlobMatch(c, p))) || rawPath.includes('/infrastructure/') || rawPath.includes('infrastructure');
       if (!inInfrastructure) continue;
       for (const cls of ast.classes) {
-        if (cls.interfaces.length > 0) return true;
-        if (cls.className.toLowerCase().includes(sdkSimple.toLowerCase())) return true;
-        if (cls.className.endsWith('Adapter') || cls.className.endsWith('Client')) return true;
+        // Require SDK name to appear in adapter — prevents any infra interface suppressing all SDKs
+        if (cls.className.toLowerCase().includes(lowerSimple)) return true;
+        // Adapter/Client suffix only counts if it also mentions the SDK
+        if ((cls.className.endsWith('Adapter') || cls.className.endsWith('Client')) && cls.className.toLowerCase().includes(lowerSimple)) return true;
+        // Generic Port interface match — e.g., S3Client → S3Port, KafkaProducer → KafkaPort
+        const portCandidate = lowerSimple.replace(/client|producer|consumer|template$/i, '');
+        if (portCandidate.length >= 2 && cls.className.toLowerCase().includes(portCandidate)) {
+          // Require at least one interface in infra to indicate Port pattern
+          if (cls.interfaces.length > 0 || cls.className.endsWith('Port') || cls.className.endsWith('Adapter')) return true;
+        }
       }
     }
     return false;
@@ -635,7 +651,15 @@ export class DesignPatternAnalyzer {
     const violations: Violation[] = [];
     for (const ast of asts) {
       for (const cls of ast.classes) {
+        // MapStruct/ModelMapper mappers legitimately do heavy set(get) — exempt
+        const isMapperClass = /Mapper$|Converter$|Mapping$/.test(cls.className);
+        if (isMapperClass) continue;
+        const hasMapperAnnotation = cls.annotations?.some(a => /Mapper|Mapping/i.test(a.name));
+        if (hasMapperAnnotation) continue;
         for (const method of cls.methods) {
+          // Mapper methods like toDto, toEntity, map, convert are intentional copying
+          const isMapperMethod = /^(to.+$|from.+$|map.*|convert.*)$/i.test(method.name);
+          if (isMapperMethod && /Mapper|Converter/.test(cls.className)) continue;
           const pairs = this.countCopyPairs(method.calledMethods || []);
           if (pairs < this.COPY_PAIR_THRESHOLD) continue;
           violations.push(this.toViolation(
@@ -750,12 +774,19 @@ export class DesignPatternAnalyzer {
 
   // ─── V315 Redundant Memory Footprint (allocations in loops) ──────
 
+  private readonly FLYWEIGHT_VALUE_RE = /(Money|Currency|Config|Setting|Price|Amount|Rate|ValueObject)$/i;
+
+  private isFlyweightValueType(className: string): boolean {
+    const simple = className.split('.').pop() || className;
+    return this.FLYWEIGHT_VALUE_RE.test(simple);
+  }
+
   private checkRedundantMemory(asts: FullASTOutput[]): Violation[] {
     const violations: Violation[] = [];
     for (const ast of asts) {
       for (const cls of ast.classes) {
         for (const method of cls.methods) {
-          const missingInLoop = (method.createdObjects || []).filter(c => c.insideLoop === true);
+          const missingInLoop = (method.createdObjects || []).filter(c => c.insideLoop === true && this.isFlyweightValueType(c.className));
           if (!missingInLoop.length) continue;
           const target = missingInLoop[0];
           violations.push(this.toViolation(
@@ -960,15 +991,210 @@ export class DesignPatternAnalyzer {
     return violations;
   }
 
+  // ─── V322 Missing Proxy ──────────────────────────────────────────
+
+  private readonly HEAVY_RESOURCE_TYPES = new Set([
+    'EntityManager', 'EntityManagerFactory', 'PersistenceContext',
+    'DataSource', 'Connection', 'DriverManager', 'JdbcTemplate', 'NamedParameterJdbcTemplate',
+    'Session', 'SessionFactory', 'SqlSession', 'SqlSessionFactory',
+    'Socket', 'ServerSocket', 'HttpURLConnection', 'HttpClient',
+    'RestTemplate', 'WebClient', 'OkHttpClient', 'CloseableHttpClient',
+    'RemoteService', 'RemoteStub', 'RMIClient',
+    'FileInputStream', 'FileOutputStream', 'RandomAccessFile',
+  ]);
+
+  private readonly PROXY_ANNOTATIONS = new Set([
+    'Proxy', 'Lazy', 'Scope', 'Transactional', 'Cacheable', 'Async',
+  ]);
+
+  private readonly PROXY_ALLOWED_TYPES = new Set(['WebClient', 'RestTemplate', 'HttpClient', 'OkHttpClient', 'CloseableHttpClient']);
+
+  private checkMissingProxy(asts: FullASTOutput[], allAsts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+    const seen = new Set<string>();
+
+    // Build lookup of types that have a proxy wrapper (interface in infra or @Proxy/@Lazy)
+    const proxiedTypes = new Set<string>();
+    for (const ast of allAsts) {
+      for (const cls of ast.classes) {
+        const hasProxyAnn = cls.annotations?.some(a => this.PROXY_ANNOTATIONS.has(a.name));
+        const isInfra = this.matchLayer(ast.filePath || '') === 'infrastructure';
+        if (hasProxyAnn) proxiedTypes.add(cls.className);
+        if (isInfra && cls.interfaces.length > 0) proxiedTypes.add(cls.className);
+        // Also collect implements targets as proxied interfaces
+        for (const iface of cls.interfaces) {
+          const simple = iface.split('.').pop() || iface;
+          proxiedTypes.add(simple);
+        }
+      }
+    }
+
+    for (const ast of asts) {
+      const layer = this.matchLayer(ast.filePath || '');
+      if (layer === 'infrastructure') continue; // infra is allowed to touch resources
+      const dominated = this.isConfigurationClass(ast);
+      if (dominated) continue;
+
+      for (const cls of ast.classes) {
+        // Skip MapStruct-style mappers entirely for proxy (they often touch DTOs, not heavy resources)
+        const isProxyExemptClass = /Mapper$|Converter$|Adapter$/.test(cls.className);
+        // Check if class has an injected proxy-friendly bean (e.g., WebClient injected → creation is via bean, not direct)
+        const hasInjectedProxyBean = cls.attributes.some(a => a.isInjected && this.PROXY_ALLOWED_TYPES.has(a.dataType.split('<')[0].split('.').pop()!.trim()));
+        for (const method of cls.methods) {
+          // Check createdObjects for heavy resources
+          for (const creation of method.createdObjects || []) {
+            const type = creation.className;
+            const simple = type.split('.').pop() || type;
+            if (!this.HEAVY_RESOURCE_TYPES.has(type) && !this.HEAVY_RESOURCE_TYPES.has(simple)) continue;
+            if (proxiedTypes.has(type) || proxiedTypes.has(simple)) continue;
+            // Allow WebClient/RestTemplate/etc when class already has an injected proxy bean
+            if (this.PROXY_ALLOWED_TYPES.has(simple) && hasInjectedProxyBean) continue;
+            // Skip exempt mapper/adapter classes (they delegate, not manage resources)
+            if (isProxyExemptClass) continue;
+            const key = `${ast.filePath}:${cls.className}:${method.name}:${type}:${creation.lineNumber}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            violations.push(this.toViolation(
+              'missing-proxy',
+              `Method '${method.name}' directly instantiates heavy resource '${type}' in ${layer || 'business'} layer. Access via a Proxy/managed wrapper or injected bean instead.`,
+              ast.filePath || '', creation.lineNumber, undefined, method.name, undefined, type,
+            ));
+          }
+          // Check calledMethods targeting heavy resource APIs (e.g., driverManager.getConnection)
+          for (const call of method.calledMethods || []) {
+            const target = (call.receiverType || call.targetClass || '').split('.').pop() || '';
+            if (!this.HEAVY_RESOURCE_TYPES.has(target)) continue;
+            if (proxiedTypes.has(target)) continue;
+            if (this.PROXY_ALLOWED_TYPES.has(target) && hasInjectedProxyBean) continue;
+            if (isProxyExemptClass) continue;
+            // Only flag if the call is a construction-like or sensitive method (getConnection, open, create)
+            const sensitive = /^(getConnection|open|create|newInstance|getInstance|connect)$/i.test(call.calledMethodName);
+            if (!sensitive) continue;
+            const key = `call:${ast.filePath}:${cls.className}:${method.name}:${target}:${call.lineNumber}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            violations.push(this.toViolation(
+              'missing-proxy',
+              `Method '${method.name}' directly accesses heavy resource '${target}.${call.calledMethodName}()' in ${layer || 'business'} layer. Use a Proxy/managed wrapper instead.`,
+              ast.filePath || '', call.lineNumber, undefined, method.name, undefined, target,
+            ));
+          }
+        }
+      }
+    }
+    return violations;
+  }
+
+  // ─── V323 Missing Bridge ─────────────────────────────────────────
+
+  private checkMissingBridge(asts: FullASTOutput[], _allAsts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+    const threshold = (this.config as any).bridgeHierarchyThreshold ?? 4;
+
+    // Group classes by their inheritance family (abstract parent FQCN → concrete children)
+    const familyMap = new Map<string, ClassInfo[]>();
+    const classByFqcn = new Map<string, ClassInfo>();
+    const astByFqcn = new Map<string, FullASTOutput>();
+
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        const fqcn = cls.fullyQualifiedName || cls.className;
+        classByFqcn.set(fqcn, cls);
+        astByFqcn.set(fqcn, ast);
+      }
+    }
+
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        if (cls.classType === 'interface') continue;
+        if (cls.isAbstract) continue;
+        const parent = cls.superClass;
+        if (!parent || parent === 'Object' || parent === 'Enum' || parent === 'Record') continue;
+        const parentCls = this.findClass(parent, asts);
+        if (!parentCls || !parentCls.isAbstract) continue;
+        const parentFqcn = parentCls.fullyQualifiedName || parentCls.className;
+        if (!familyMap.has(parentFqcn)) familyMap.set(parentFqcn, []);
+        familyMap.get(parentFqcn)!.push(cls);
+      }
+    }
+
+    for (const [parentFqcn, children] of familyMap) {
+      if (children.length < threshold) continue;
+
+      // Extract candidate dimension tokens from child class names
+      // e.g., RedSquare, BlueSquare, RedCircle, BlueCircle → dims [Red,Blue] x [Square,Circle]
+      const prefixes = this.extractDimensionTokens(children.map(c => c.className));
+      const hasCombinatorialExplosion = prefixes.dimensions.length >= 2
+        && prefixes.dimensions.every(d => d.values.length >= 2);
+
+      // Alternative heuristic: children share repetitive suffix/prefix combinatorial pattern
+      const hasRepeatedAffixes = this.hasRepetitiveAffixes(children.map(c => c.className));
+
+      if (!hasCombinatorialExplosion && !hasRepeatedAffixes) continue;
+
+      const parentCls = classByFqcn.get(parentFqcn);
+      const parentAst = astByFqcn.get(parentFqcn);
+      if (!parentCls || !parentAst) continue;
+
+      const dimDesc = hasCombinatorialExplosion
+        ? prefixes.dimensions.map(d => `[${d.values.join('/')}]`).join(' × ')
+        : `repetitive naming (${children.map(c => c.className).slice(0, 4).join(', ')}...)`;
+
+      violations.push(this.toViolation(
+        'missing-bridge',
+        `Abstract '${parentCls.className}' has ${children.length} concrete subclasses with combinatorial naming ${dimDesc}. Decouple orthogonal dimensions via composition (Bridge) instead of subclass explosion.`,
+        parentAst.filePath || '', parentCls.startLine, undefined, undefined, undefined, parentFqcn,
+      ));
+    }
+    return violations;
+  }
+
+  private extractDimensionTokens(names: string[]): { dimensions: { values: string[] }[] } {
+    // Split CamelCase into tokens, then find positions where tokens vary independently
+    const tokenized = names.map(n => n.split(/(?=[A-Z])/));
+    const maxLen = Math.max(...tokenized.map(t => t.length), 0);
+    const dimensions: { values: string[] }[] = [];
+    for (let i = 0; i < maxLen; i++) {
+      const vals = new Set(tokenized.map(t => t[i]).filter(Boolean));
+      if (vals.size >= 2) dimensions.push({ values: [...vals] });
+    }
+    return { dimensions };
+  }
+
+  private hasRepetitiveAffixes(names: string[]): boolean {
+    // Check suffix repetition indicating second dimension
+    const suffixes = new Map<string, number>();
+    const prefixes = new Map<string, number>();
+    for (const n of names) {
+      const tokens = n.split(/(?=[A-Z])/);
+      if (tokens.length >= 2) {
+        const suffix = tokens[tokens.length - 1];
+        const prefix = tokens[0];
+        suffixes.set(suffix, (suffixes.get(suffix) || 0) + 1);
+        prefixes.set(prefix, (prefixes.get(prefix) || 0) + 1);
+      }
+    }
+    const repeatedSuffix = [...suffixes.values()].some(v => v >= 2);
+    const repeatedPrefix = [...prefixes.values()].some(v => v >= 2);
+    return repeatedSuffix && repeatedPrefix;
+  }
+
+  private isConfigurationClass(ast: FullASTOutput): boolean {
+    return ast.classes.some(c => c.annotations?.some(a => a.name === 'Configuration'));
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────────
 
   private matchLayer(filePath: string): string | null {
     const boundaries = this.config.layerBoundaries;
     if (!boundaries) return null;
     const normalized = filePath.replace(/\\/g, '/');
+    const candidates = [normalized, normalized.startsWith('/') ? normalized : '/' + normalized];
     for (const [name, boundary] of Object.entries(boundaries)) {
       for (const pattern of boundary.packages) {
-        if (this.simpleGlobMatch(normalized, pattern)) return name;
+        for (const cand of candidates) {
+          if (this.simpleGlobMatch(cand, pattern)) return name;
+        }
       }
     }
     return null;

@@ -353,6 +353,8 @@ class ViolationManager {
         ]);
         const architecturalSources = ['CrossFileAnalyzer', 'GraphAnalyzer', 'PackageBoundaryAnalyzer'];
         return violations.filter(v => {
+            if (this.isSuppressed(v))
+                return false;
             if (architecturalSources.includes(v.detectorSource) && !this.config.enableArchitecturalChecks) {
                 return false;
             }
@@ -364,6 +366,58 @@ class ViolationManager {
             }
             return true;
         });
+    }
+    isSuppressed(v) {
+        if (!v.code)
+            return false;
+        const suppressedCode = v.code;
+        const ast = this.filesMap[v.filePath];
+        if (!ast)
+            return false;
+        // Inline comment suppression: // rica-disable-next-line (check ±5 lines window)
+        const line = v.lineNumber || v.range?.start.line || 0;
+        for (let d = -5; d <= 5; d++) {
+            const suppressedForLine = ast.suppressedLines?.[line + d];
+            if (suppressedForLine && (suppressedForLine.includes('all') || suppressedForLine.includes(suppressedCode)))
+                return true;
+        }
+        // Annotation suppression: @SuppressWarnings("rica:V111") or "rica:all"
+        const code = suppressedCode;
+        const matchAnnotation = (anns) => {
+            if (!anns)
+                return false;
+            for (const a of anns) {
+                if (a.name !== 'SuppressWarnings')
+                    continue;
+                // If elements empty, parser didn't capture value — treat bare @SuppressWarnings as suppressing all rica codes (conservative)
+                const hasElements = a.elements && Object.keys(a.elements).length > 0;
+                if (!hasElements)
+                    return true;
+                const raw = JSON.stringify(a.elements || a).toLowerCase();
+                if (raw.includes('rica:all') || raw.includes('"all"'))
+                    return true;
+                // check for code substring e.g. v111
+                const num = code.match(/V\d{3}/)?.[0]?.toLowerCase();
+                if (num && raw.includes(num.toLowerCase()))
+                    return true;
+                if (raw.includes(code.toLowerCase()))
+                    return true;
+            }
+            return false;
+        };
+        for (const cls of ast.classes) {
+            const inClass = !v.lineNumber || (v.lineNumber >= (cls.startLine || 0) && v.lineNumber <= (cls.endLine || 999999));
+            if (!inClass)
+                continue;
+            if (matchAnnotation(cls.annotations))
+                return true;
+            for (const m of cls.methods) {
+                const inMethod = v.contextMetadata?.methodName ? m.name === v.contextMetadata.methodName : (v.lineNumber && v.lineNumber >= (m.startLine || 0) && v.lineNumber <= (m.endLine || 999999));
+                if (inMethod && matchAnnotation(m.annotations))
+                    return true;
+            }
+        }
+        return false;
     }
     clear() {
         this.diagnosticReporter.clear();

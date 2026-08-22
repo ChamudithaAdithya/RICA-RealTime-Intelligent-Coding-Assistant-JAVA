@@ -14,8 +14,8 @@ Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src
 
 | Metric | Count |
 |---|---|
-| Codes defined | **49** (V101–V104, V106–V114, V201–V207, V300–V321, V400–V404, V501, V000) |
-| Codes with a live emitter | **46** (31 + V104, V109, V202, V203, V207, V308–V321) |
+| Codes defined | **51** (V101–V104, V106–V114, V201–V207, V300–V323, V400–V404, V501, V000) |
+| Codes with a live emitter | **48** (31 + V104, V109, V202, V203, V207, V308–V323) |
 | Codes declared but never emitted (dead) | **0** |
 | Fallback codes | **3** (V000, V300, V400) |
 | Detectors | **7** |
@@ -119,6 +119,8 @@ Safeguards:
 | V319 | Monolithic Validation Pipeline | `warning` | Method contains ≥5 guard clauses (null/empty/negative) before the real logic (should use Chain of Responsibility) | ✅ |
 | V320 | Service Locator | `warning` | `*Service`/`*Controller` outside `@Configuration` calls `getBean()` / `getService()` / service-locator lookup | ✅ |
 | V321 | Excessive Defensive Null Checking | `warning` | Method has ≥3 decision points whose condition tests `null` (should use `Optional`/Null Object) | ✅ |
+| V322 | Missing Proxy | `warning` | Non-infrastructure method directly `new`s or accesses heavy resource (`EntityManager`, `DataSource`, `Socket`, `RemoteService`, etc.) without Proxy/wrapper | ✅ |
+| V323 | Missing Bridge | `warning` | Abstract parent has ≥4 concrete subclasses with combinatorial naming (e.g., `RedSquare`/`BlueSquare`/`RedCircle`/`BlueCircle`) → decouple via composition | ✅ |
 | V300 | *(fallback)* | — | Any unmapped design-pattern ruleType → V300 | ⚠️ fallback |
 
 Safeguards:
@@ -139,6 +141,8 @@ Safeguards:
 - V319 counts guard clauses among decision points; skips `@Configuration` classes
 - V320 skips classes annotated `@Configuration` and code-behind `getBean` calls on the DI container
 - V321 counts decision points whose condition tests `null`; skips `null` checks <3
+- V322 skips `infrastructure` and `@Configuration` classes; requires heavy resource type (`EntityManager`, `DataSource`, `Socket`, etc.) and absence of proxy wrapper (infra interface or `@Proxy`/`@Lazy`); checks both `createdObjects` and sensitive `getConnection`/`open`/`connect` calls
+- V323 groups concrete subclasses by abstract parent; requires ≥4 children with combinatorial naming (≥2 orthogonal dimensions each with ≥2 values, or repeated prefix+suffix affixes); reports once per abstract parent
 
 ---
 
@@ -147,7 +151,7 @@ Safeguards:
 | Severity | Codes |
 |---|---|
 | **error** | V101, V102, V103, V110, V111, V114, V107, V109, V205, V301, V304, V306, V401, V403, V501 |
-| **warning** | V104, V106, V112, V113, V108†, V201, V202, V203, V204, V207, V302, V303, V305, V307, V308, V309, V310, V311, V312, V313, V314, V315, V316, V317, V318, V319, V320, V321, V402, V404 |
+| **warning** | V104, V106, V112, V113, V108†, V201, V202, V203, V204, V207, V302, V303, V305, V307, V308, V309, V310, V311, V312, V313, V314, V315, V316, V317, V318, V319, V320, V321, V322, V323, V402, V404 |
 | **info** | V108‡, V206 |
 
 † V108 is `info` in EntityLayerDetector
@@ -192,6 +196,8 @@ Safeguards:
 | V319 | `validate(Order)` with 5+ `if (x == null) throw …` guard clauses |
 | V320 | `OrderRepository r = ctx.getBean(OrderRepository.class);` outside `@Configuration` |
 | V321 | Method with 3+ `if (o.user.name == null)` style null checks |
+| V322 | `DataSource ds = new DataSource(...); ds.getConnection();` inside `service/` method |
+| V323 | `abstract Shape` with `RedSquare`, `BlueSquare`, `RedCircle`, `BlueCircle` |
 | V401 | Controller injects `UserRepository` and calls `.findById()` |
 | V501 | `application/OrderService.java` does `import com.foo.presentation.UserController;` |
 | V403 | `A depends on B, B depends on C, C depends on A` |

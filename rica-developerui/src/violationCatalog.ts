@@ -1438,6 +1438,85 @@ public class StripeGateway { public void charge(double amount) { ... } }
 });
 
 d({
+  code: 'RICA-V322',
+  name: 'Missing Proxy',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingProxy',
+  layer: 'service / application (non-infrastructure)',
+  trigger:
+    'A non-infrastructure business method directly instantiates or accesses a heavy resource type (EntityManager, DataSource, Connection, Socket, HttpClient, RestTemplate, etc.) via `new` or sensitive factory calls (`getConnection`, `open`, `connect`) without a Proxy/managed wrapper or interface indirection in the infrastructure layer.',
+  whyItMatters:
+    'Heavy resources require lifecycle, access-control, and caching concerns (lazy loading, pooling, security checks) that a Proxy centralizes. Direct creation scatters construction cost, leaks connection handling into business logic, and makes testing and resource pooling impossible. A Proxy or injected bean keeps the business layer decoupled from resource acquisition.',
+  howToFix: [
+    'Create a Proxy or wrapper interface in the application layer (e.g., ConnectionProvider, ResourceProxy).',
+    'Implement it in infrastructure with pooling/lazy/access-control logic.',
+    'Inject the proxy interface into business methods instead of calling `new` or `getConnection()` directly.',
+  ],
+  beforeCode: `@Service
+public class OrderService {
+    public void process() {
+        DataSource ds = new DataSource("jdbc:mysql://...");
+        Connection conn = ds.getConnection();
+        conn.execute("SELECT ...");
+    }
+}`,
+  afterCode: `@Service
+public class OrderService {
+    private final ConnectionProxy connectionProxy;
+    public OrderService(ConnectionProxy connectionProxy) {
+        this.connectionProxy = connectionProxy;
+    }
+    public void process() {
+        connectionProxy.execute("SELECT ...");
+    }
+}`,
+  mitigationHint:
+    'Access heavy resources through a Proxy or managed wrapper/bean (lazy loading, access control, caching) instead of direct instantiation in business logic',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V301', 'RICA-V306'],
+  sourceRef: 'src/designPatternAnalyzer.ts:970',
+  tags: ['proxy', 'resource', 'heavy-resource', 'structural'],
+});
+
+d({
+  code: 'RICA-V323',
+  name: 'Missing Bridge',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingBridge',
+  layer: 'any (abstract hierarchy)',
+  trigger:
+    'An abstract class has ≥4 concrete subclasses whose names exhibit combinatorial naming (e.g., RedSquare, BlueSquare, RedCircle, BlueCircle or DatabaseLogger, FileLogger, DatabaseNotifier, FileNotifier) indicating two orthogonal dimensions collapsed into one inheritance hierarchy. Both prefix and suffix repetition must appear.',
+  whyItMatters:
+    'Collapsing two independent dimensions (e.g., color × shape, storage × notifier) into a single hierarchy causes combinatorial explosion: adding one value to either dimension multiplies the class count. The Bridge pattern decouples abstraction from implementation via composition, keeping hierarchies linear and extensible.',
+  howToFix: [
+    'Identify the two orthogonal dimensions (e.g., abstraction = Shape, implementation = Color).',
+    'Extract the second dimension as a composed interface/strategy (e.g., `private final Color color`).',
+    'Let concrete abstractions delegate to the implementation instead of encoding it in the class name.',
+  ],
+  beforeCode: `abstract class Shape { abstract void draw(); }
+class RedSquare extends Shape { void draw() { /* red square */ } }
+class BlueSquare extends Shape { void draw() { /* blue square */ } }
+class RedCircle extends Shape { void draw() { /* red circle */ } }
+class BlueCircle extends Shape { void draw() { /* blue circle */ } }`,
+  afterCode: `interface Color { void apply(); }
+class Red implements Color { void apply() { /* red */ } }
+abstract class Shape { protected final Color color; Shape(Color c){this.color=c;} abstract void draw(); }
+class Square extends Shape { Square(Color c){super(c);} void draw(){ color.apply(); /* square */ } }`,
+  mitigationHint:
+    'Decouple orthogonal dimensions via composition (Bridge) instead of exploding into combinatorial subclasses',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V307', 'RICA-V303'],
+  sourceRef: 'src/designPatternAnalyzer.ts:1030',
+  tags: ['bridge', 'hierarchy', 'structural', 'composition'],
+});
+
+d({
   code: 'RICA-V300',
   name: 'Unmapped Design-Pattern Rule (fallback)',
   severity: 'warning',

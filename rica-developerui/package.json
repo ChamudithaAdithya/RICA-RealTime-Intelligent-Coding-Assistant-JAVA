@@ -153,6 +153,13 @@
           "maximum": 1,
           "description": "V317: structural similarity threshold (0..1) for duplicate algorithm sequences across classes"
         },
+        "javaAstAnalyzer.bridgeHierarchyThreshold": {
+          "type": "number",
+          "default": 4,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V323: minimum concrete subclasses of an abstract parent before flagging a combinatorial hierarchy as missing Bridge"
+        },
         "javaAstAnalyzer.excludePatterns": {
           "type": "array",
           "default": [
@@ -175,7 +182,10 @@
             "domain": {
               "packages": [
                 "**/domain/**",
-                "**/entity/**"
+                "**/entity/**",
+                "**/dto/**",
+                "**/enum/**",
+                "**/model/**"
               ],
               "allowedDeps": []
             },

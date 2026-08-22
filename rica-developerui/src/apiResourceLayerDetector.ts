@@ -234,9 +234,14 @@ export class APIResourceLayerAnalyzer {
           }
 
           // Check for missing validation on parameters (private helper methods are not endpoints)
+          // Class-level @Validated/@Valid makes all method params validated (Spring)
           if (isEndpoint) {
-            const missingValidation = this.checkForMissingValidation(method);
-            if (missingValidation) {
+            const hasClassValidation = cls.annotations.some(a => ['Validated','Valid'].some(v => a.name.endsWith(v)));
+            if (hasClassValidation) {
+              // Suppress V206 when class is @Validated — framework handles validation
+            } else {
+              const missingValidation = this.checkForMissingValidation(method, cls);
+              if (missingValidation) {
               violations.push({
                 type: 'missing-validation',
                 message: `API resource method '${method.name}' parameter '${missingValidation}' lacks validation annotations. Consider adding @Valid, @NotNull, etc. for input validation.`,
@@ -251,6 +256,7 @@ export class APIResourceLayerAnalyzer {
                 filePath: ast.filePath,
                 explanation: 'Your API resource method has a parameter that lacks validation annotations. Adding constraints like @Valid, @NotNull, or @Size ensures malformed input is caught early and produces clean error responses instead of cryptic failures deeper in the stack.'
               });
+            }
             }
           }
 
@@ -408,7 +414,7 @@ export class APIResourceLayerAnalyzer {
     return null;
   }
 
-  private checkForMissingValidation(method: Method): string | null {
+  private checkForMissingValidation(method: Method, _cls?: ClassInfo): string | null {
     // Check method parameters for missing validation
     for (const param of method.parameters) {
       // Skip if it's a simple type that might not need validation (though this is debatable)
