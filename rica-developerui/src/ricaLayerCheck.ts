@@ -109,6 +109,7 @@ function extractImports(content: string): { rawPath: string; line: number }[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line.startsWith('import ') && !line.startsWith('const ') && !line.includes('require(')) continue;
+    if (/^import\s+type\b/.test(line)) continue;
 
     let match: RegExpExecArray | null;
     const localRe = new RegExp(re.source, 'g');

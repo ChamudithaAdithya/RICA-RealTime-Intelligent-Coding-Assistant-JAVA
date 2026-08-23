@@ -1,5 +1,6 @@
 import { FullASTOutput, ClassInfo, Method, MethodCall, ObjectCreation, ImportInfo } from './astTypes';
 import { DiagnosticRange } from './types/violations';
+import { rawTypeName, typeTokens } from './detectorUtils';
 
 export interface APIResourceLayerViolation {
   type: 'exposing-internal-entity' | 'missing-dto-usage' | 'improper-error-handling' | 'business-logic-in-resource' | 'direct-service-instantiation' | 'missing-validation' | 'exposing-internal-structure';
@@ -86,7 +87,7 @@ export class APIResourceLayerAnalyzer {
         // Analyze each method
         for (const method of cls.methods) {
           if (method.methodType === 'abstract') continue;
-          const isEndpoint = method.accessModifier !== 'private';
+          const isEndpoint = this.isEndpointMethod(cls, method);
 
           // Check method calls
           for (const call of method.calledMethods) {
@@ -158,7 +159,7 @@ export class APIResourceLayerAnalyzer {
               message: `API resource method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer.`,
               className: cls.fullyQualifiedName,
               methodName: method.name,
-              lineNumber: method.body?.linesOfCode,
+              lineNumber: method.startLine,
               range: method.startLine ? {
                 start: { line: method.startLine, character: method.startColumn || 0 },
                 end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -171,14 +172,14 @@ export class APIResourceLayerAnalyzer {
 
           // Check for exposing internal entities in return types
           if (isEndpoint) {
-            const exposesInternalEntity = this.checkForExposingInternalEntity(method);
+            const exposesInternalEntity = this.checkForExposingInternalEntity(method, ast.imports, ast.packageInfo?.name);
             if (exposesInternalEntity) {
               violations.push({
                 type: 'exposing-internal-entity',
                 message: `API resource method '${method.name}' returns internal entity type '${exposesInternalEntity}'. Consider using DTOs for API responses to encapsulate internal structure.`,
                 className: cls.fullyQualifiedName,
                 methodName: method.name,
-                lineNumber: method.body?.linesOfCode,
+                lineNumber: method.startLine,
                 range: method.startLine ? {
                   start: { line: method.startLine, character: method.startColumn || 0 },
                   end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -193,7 +194,7 @@ export class APIResourceLayerAnalyzer {
           // V202: missing DTO usage — endpoint consumes internal domain types instead of DTOs
           if (isEndpoint) {
             const domParam = method.parameters.find(param =>
-              this.isInternalDomainType(this.unwrapContainer(param.dataType), ast.imports, ast.packageInfo?.name)
+              this.containsInternalDomainType(param.dataType, ast.imports, ast.packageInfo?.name)
             );
             if (domParam) {
               violations.push({
@@ -201,7 +202,7 @@ export class APIResourceLayerAnalyzer {
                 message: `API resource method '${method.name}' uses internal domain type '${domParam.dataType}' for parameter '${domParam.name}' instead of a DTO.`,
                 className: cls.fullyQualifiedName,
                 methodName: method.name,
-                lineNumber: method.body?.linesOfCode,
+                lineNumber: domParam.startLine || method.startLine,
                 range: method.startLine ? {
                   start: { line: method.startLine, character: method.startColumn || 0 },
                   end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -213,15 +214,15 @@ export class APIResourceLayerAnalyzer {
             }
 
             // V207: exposing internal structure — endpoint returns internal domain objects instead of DTOs
-            const returnType = this.unwrapContainer(method.returnType);
-            if (returnType && !this.isEntityClassName(this.stripGenerics(returnType)) &&
-                this.isInternalDomainType(returnType, ast.imports, ast.packageInfo?.name)) {
-              violations.push({
-                type: 'exposing-internal-structure',
-                message: `API resource method '${method.name}' returns internal domain type '${method.returnType}'. Use a DTO for the response contract.`,
-                className: cls.fullyQualifiedName,
-                methodName: method.name,
-                lineNumber: method.body?.linesOfCode,
+            const returnType = method.returnType;
+            if (returnType && !this.containsEntityType(returnType, ast.imports, ast.packageInfo?.name) &&
+              this.containsInternalDomainType(returnType, ast.imports, ast.packageInfo?.name)) {
+                violations.push({
+                  type: 'exposing-internal-structure',
+                  message: `API resource method '${method.name}' returns internal domain type '${method.returnType}'. Use a DTO for the response contract.`,
+                  className: cls.fullyQualifiedName,
+                  methodName: method.name,
+                  lineNumber: method.startLine,
                 range: method.startLine ? {
                   start: { line: method.startLine, character: method.startColumn || 0 },
                   end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -247,7 +248,7 @@ export class APIResourceLayerAnalyzer {
                 message: `API resource method '${method.name}' parameter '${missingValidation}' lacks validation annotations. Consider adding @Valid, @NotNull, etc. for input validation.`,
                 className: cls.fullyQualifiedName,
                 methodName: method.name,
-                lineNumber: method.body?.linesOfCode,
+                lineNumber: method.startLine,
                 range: method.startLine ? {
                   start: { line: method.startLine, character: method.startColumn || 0 },
                   end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -269,7 +270,7 @@ export class APIResourceLayerAnalyzer {
                 message: `API resource method '${method.name}' exposes internal exceptions or stack traces. Use proper exception handling and return appropriate error responses.`,
                 className: cls.fullyQualifiedName,
                 methodName: method.name,
-                lineNumber: method.body?.linesOfCode,
+                lineNumber: method.startLine,
                 range: method.startLine ? {
                   start: { line: method.startLine, character: method.startColumn || 0 },
                   end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -351,6 +352,23 @@ export class APIResourceLayerAnalyzer {
     );
   }
 
+  private isEndpointMethod(cls: ClassInfo, method: any): boolean {
+    if (method.accessModifier === 'private') return false;
+    const mappingAnnotations = [
+      'RequestMapping', 'GetMapping', 'PostMapping', 'PutMapping',
+      'DeleteMapping', 'PatchMapping', 'HttpExchange', 'GetExchange',
+      'PostExchange', 'PutExchange', 'DeleteExchange', 'PatchExchange',
+    ];
+    if (method.annotations?.some((annotation: any) =>
+      mappingAnnotations.some(name => annotation.name === name || annotation.name.endsWith(`.${name}`)))) {
+      return true;
+    }
+    // Keep support for convention-based controllers that have no explicit
+    // mapping annotations at all, while excluding public helpers in mapped ones.
+    return !cls.methods.some(candidate => candidate.annotations?.some((annotation: any) =>
+      mappingAnnotations.some(name => annotation.name === name || annotation.name.endsWith(`.${name}`))));
+  }
+
   private isServiceClassName(className: string): boolean {
     return this.servicePatterns.some(pattern => className.endsWith(pattern));
   }
@@ -392,46 +410,50 @@ export class APIResourceLayerAnalyzer {
     return 'unknown';
   }
 
-  private checkForExposingInternalEntity(method: Method): string | null {
+  private checkForExposingInternalEntity(method: Method, imports?: ImportInfo[], currentPackage?: string): string | null {
     // Check return type for internal entities
     const returnType = method.returnType;
-    if (returnType && this.isEntityClassName(returnType)) {
+    if (returnType && this.containsEntityType(returnType, imports, currentPackage)) {
       return returnType;
     }
-
-    // Check for collection/array of entities
-    if (returnType && (returnType.startsWith('List<') || returnType.startsWith('Set<') || returnType.endsWith('[]'))) {
-      // Extract generic type
-      const genericMatch = returnType.match(/<(.+)>/);
-      if (genericMatch && genericMatch[1]) {
-        const genericType = genericMatch[1];
-        if (this.isEntityClassName(genericType)) {
-          return `List<${genericType}>`;
-        }
-      }
-    }
-
     return null;
   }
 
-  private checkForMissingValidation(method: Method, _cls?: ClassInfo): string | null {
+  private readonly servletFrameworkTypes = new Set([
+    'HttpServletRequest','HttpServletResponse','HttpSession','Principal','Model','ModelMap','BindingResult','Errors',
+    'HttpHeaders','RequestContext','ServletRequest','ServletResponse','WebRequest','NativeWebRequest','RedirectAttributes'
+  ]);
+
+  /** Spring binding annotations that mark framework-managed params (not payload validation targets). */
+  private readonly frameworkBindingAnnotations = new Set([
+    'RequestParam','PathVariable','RequestHeader','CookieValue','RequestPart','SessionAttribute','ModelAttribute'
+  ]);
+
+  private checkForMissingValidation(method: Method, cls?: ClassInfo): string | null {
+    // Class-level @Validated/@Valid makes the framework validate all constrained params — skip method-level noise
+    if (cls && cls.annotations.some(a => ['Validated','Valid'].some(v => a.name.endsWith(v)))) return null;
+
     // Check method parameters for missing validation
     for (const param of method.parameters) {
-      // Skip if it's a simple type that might not need validation (though this is debatable)
-      const isSimpleType = ['int', 'long', 'boolean', 'double', 'float', 'short', 'byte', 'char', 'String'].includes(param.dataType);
+      // Skip servlet/framework-injected types — never domain validation targets
+      const rawSimple = this.stripGenerics(param.dataType).split('.').pop() || param.dataType;
+      if (this.servletFrameworkTypes.has(rawSimple)) continue;
+      if (this.isStandardLibraryType(param.dataType)) continue;
 
-      // Check if parameter has validation annotations
       const hasValidation = param.annotations.some(ann =>
         this.validationAnnotations.some(v => ann.name.endsWith(v))
       );
+      if (hasValidation) continue;
 
-      // Flag non-simple types without validation (or all types for strict validation)
-      if (!isSimpleType && !hasValidation) {
-        return param.name;
-      }
+      // @RequestParam/@PathVariable simple values are framework-bound; flag only when a
+      // constraint is genuinely expected: non-simple payload bodies or id-named path vars.
+      const isFrameworkBound = param.annotations.some(ann =>
+        [...this.frameworkBindingAnnotations].some(b => ann.name.endsWith(b))
+      );
+      // Payload body (non-simple, not framework-bound) must carry @Valid
+      const isSimpleType = ['int', 'long', 'boolean', 'double', 'float', 'short', 'byte', 'char', 'String', 'Integer', 'Long', 'Boolean', 'Double', 'Float', 'Short', 'Byte', 'Character', 'UUID'].includes(param.dataType);
 
-      // Even for simple types, ID parameters often should be validated (positive, etc.)
-      if (param.name.toLowerCase().includes('id') && !hasValidation) {
+      if (!isSimpleType && !isFrameworkBound && !hasValidation) {
         return param.name;
       }
     }
@@ -464,20 +486,8 @@ export class APIResourceLayerAnalyzer {
   }
 
   // V202/V207 helpers
-  private unwrapContainer(typeName: string): string {
-    if (!typeName) return '';
-    let raw = typeName.trim().replace(/\s*\[\]\s*$/g, '');
-    const m = raw.match(/^[A-Za-z_$][\w$]*(?:<(.+)>)$/);
-    if (m && m[1]) {
-      const args = m[1].split(',').map(s => s.trim());
-      return args[0] || raw;
-    }
-    return raw;
-  }
-
   private stripGenerics(typeName: string): string {
-    if (!typeName) return '';
-    return typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    return rawTypeName(typeName);
   }
 
   private isStandardLibraryType(typeName: string): boolean {
@@ -505,4 +515,32 @@ export class APIResourceLayerAnalyzer {
     // third-party types are not falsely flagged.
     return this.isEntityClassName(raw);
   }
+
+  private containsEntityType(typeName: string, imports?: ImportInfo[], currentPackage?: string): boolean {
+    return this.typeTokens(typeName).some(token => {
+      if (this.isEntityClassName(token)) return true;
+      // A class annotated @Entity (or classified as 'entity' layer) is an
+      // internal entity regardless of its name suffix — e.g. `Order`, `User`.
+      const fqcn = this.resolveTypeName(token, imports || [], currentPackage);
+      if (fqcn) {
+        const cls = this.classMap.get(fqcn);
+        if (cls) {
+          const annotated = cls.annotations?.some(a => a.name === 'Entity');
+          return annotated || cls.detectedLayer === 'entity';
+        }
+      }
+      return false;
+    });
+  }
+
+  private containsInternalDomainType(typeName: string, imports: ImportInfo[], currentPackage?: string): boolean {
+    return this.typeTokens(typeName).some(token =>
+      this.isInternalDomainType(token, imports, currentPackage)
+    );
+  }
+
+  private typeTokens(typeName: string): string[] {
+    return typeTokens(typeName);
+  }
+
 }

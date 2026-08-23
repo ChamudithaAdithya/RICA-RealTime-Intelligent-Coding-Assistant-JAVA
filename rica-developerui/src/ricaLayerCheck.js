@@ -112,6 +112,8 @@ function extractImports(content) {
         const line = lines[i].trim();
         if (!line.startsWith('import ') && !line.startsWith('const ') && !line.includes('require('))
             continue;
+        if (/^import\s+type\b/.test(line))
+            continue;
         let match;
         const localRe = new RegExp(re.source, 'g');
         while ((match = localRe.exec(line)) !== null) {

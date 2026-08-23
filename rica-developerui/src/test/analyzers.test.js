@@ -339,6 +339,8 @@ public class RichEntity {
         const violations = analyzer.analyze([ast]);
         const anemic = violations.find(v => v.type === 'anemic-entity');
         assert.ok(!anemic, 'should not flag entity with behaviour');
+        const bizLogic = violations.find(v => v.type === 'business-logic');
+        assert.ok(!bizLogic, 'self-contained entity invariants should not be flagged as wrong-layer business logic');
     });
 
     it('should detect direct-layer-access when entity instantiates repository', () => {
@@ -525,6 +527,47 @@ public class InvoiceResource {
         assert.ok(exposing, 'should detect exposing internal structure');
     });
 
+    it('should not treat a public helper as an endpoint when mappings exist', () => {
+        const code = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+@RestController
+public class InvoiceResource {
+    @GetMapping
+    public String getInvoice() { return "ok"; }
+    public Invoice toInvoice(String id) { return new Invoice(); }
+}`;
+        const ast = parse(code, 'InvoiceResource.java');
+        const violations = analyzer.analyze([ast]);
+        assert.ok(!violations.some(v => v.methodName === 'toInvoice' &&
+            (v.type === 'exposing-internal-structure' || v.type === 'missing-validation')),
+            'public helper should not receive endpoint-only findings');
+    });
+
+    it('should detect entities nested in multi-argument generic responses', () => {
+        const entityCode = `package com.example;
+import jakarta.persistence.Entity;
+@Entity
+public class Order { public Long getId() { return 1L; } }`;
+        const apiCode = `package com.example;
+import java.util.Map;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+@RestController
+public class OrderResource {
+    @GetMapping
+    public Map<String, Order> getOrders() { return null; }
+}`;
+        const violations = analyzer.analyze([
+            parse(entityCode, 'Order.java'),
+            parse(apiCode, 'OrderResource.java'),
+        ]);
+        assert.ok(violations.some(v => v.type === 'exposing-internal-entity'),
+            'nested entity should be detected in a generic response');
+        assert.ok(!violations.some(v => v.type === 'exposing-internal-structure'),
+            'nested entity exposure should not double-report as generic internal structure');
+    });
+
     it('should detect improper-error-handling when endpoint throws a broad exception', () => {
         const code = `package com.example;
 import org.springframework.web.bind.annotation.RestController;
@@ -538,6 +581,93 @@ public class ErrResource {
         const violations = analyzer.analyze([ast]);
         const improper = violations.find(v => v.type === 'improper-error-handling');
         assert.ok(improper, 'should detect improper error handling for broad throws');
+    });
+});
+
+describe('False-Positive Regression Tests', () => {
+
+    it('should NOT flag uninjected repository in a plain (non-Spring) service', () => {
+        const code = `package com.example;
+public class PlainService {
+    private SomeRepository someRepository;
+    public void doSomething() {
+        someRepository.findAll();
+    }
+}`;
+        const ast = parse(code, 'PlainService.java');
+        const violations = new ServiceLayerAnalyzer().analyze([ast]);
+        const uninjected = violations.find(v => v.type === 'uninjected-repository-access');
+        assert.ok(!uninjected, 'should not flag uninjected repo in non-Spring service');
+    });
+
+    it('should NOT flag uninjected service in a plain (non-Spring) controller', () => {
+        const code = `package com.example;
+public class PlainController {
+    private SomeService someService;
+    public String get() {
+        return someService.findById("1");
+    }
+}`;
+        const ast = parse(code, 'PlainController.java');
+        const violations = new ControllerLayerAnalyzer().analyze([ast]);
+        const uninjected = violations.find(v => v.type === 'uninjected-service-access');
+        assert.ok(!uninjected, 'should not flag uninjected service in non-Spring controller');
+    });
+
+    it('should NOT flag MultipartFile metadata access as file-io in controller', () => {
+        const code = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+@RestController
+public class UploadController {
+    @PostMapping
+    public String upload(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) { return "empty"; }
+        long size = file.getSize();
+        String name = file.getOriginalFilename();
+        return name + ":" + size;
+    }
+}`;
+        const ast = parse(code, 'UploadController.java');
+        const violations = new ControllerLayerAnalyzer().analyze([ast]);
+        const fileIo = violations.find(v => v.type === 'file-io');
+        assert.ok(!fileIo, 'should not flag MultipartFile metadata access as file-io');
+    });
+
+    it('should NOT flag simple validation as business-logic in controller', () => {
+        const code = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public class SimpleController {
+    public String get(String id) {
+        if (id == null || id.isEmpty()) { throw new IllegalArgumentException("Invalid"); }
+        return "ok";
+    }
+}`;
+        const ast = parse(code, 'SimpleController.java');
+        const violations = new ControllerLayerAnalyzer().analyze([ast]);
+        const bizLogic = violations.find(v => v.type === 'business-logic');
+        assert.ok(!bizLogic, 'should not flag simple validation as business-logic');
+    });
+
+    it('should NOT flag @PathVariable long primitive as missing-validation', () => {
+        const code = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+@RestController
+public class PathController {
+    @GetMapping
+    public String get(@PathVariable long id) {
+        return "id=" + id;
+    }
+}`;
+        const ast = parse(code, 'PathController.java');
+        const violations = new APIResourceLayerAnalyzer().analyze([ast]);
+        const missingValid = violations.find(v => v.type === 'missing-validation');
+        assert.ok(!missingValid, 'should not flag @PathVariable long primitive as missing-validation');
     });
 });
 

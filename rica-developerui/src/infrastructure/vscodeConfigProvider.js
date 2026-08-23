@@ -65,6 +65,7 @@ class VscodeConfigProvider {
             guardClauseLimit: cfg.get('guardClauseLimit', 5),
             nullCheckLimit: cfg.get('nullCheckLimit', 3),
             templateMethodSimilarity: cfg.get('templateMethodSimilarity', 0.8),
+            bridgeHierarchyThreshold: cfg.get('bridgeHierarchyThreshold', 4),
             excludePatterns: cfg.get('excludePatterns', []),
             layerBoundaries: layerBoundaries || analyzerConfig_1.DEFAULT_LAYER_BOUNDARIES,
             ai,

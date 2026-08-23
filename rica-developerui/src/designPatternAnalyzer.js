@@ -97,7 +97,7 @@ class DesignPatternAnalyzer {
         // ─── V315 Redundant Memory Footprint (allocations in loops) ──────
         this.FLYWEIGHT_VALUE_RE = /(Money|Currency|Config|Setting|Price|Amount|Rate|ValueObject)$/i;
         // ─── V316 Scattered State Machine ────────────────────────────────
-        this.STATE_CONDITION_RE = /(get(Status|State)\(\)|\.(STATUS|STATE)\.)\s*(==|!=)|(PENDING|ACTIVE|COMPLETED|DISABLED|SUCCESS|FAILED)\s*==/i;
+        this.STATE_CONDITION_RE = /get(Status|State)\s*\(\s*\)|\.(STATUS|STATE)\b|(?:==|!=)\s*(PENDING|ACTIVE|COMPLETED|DISABLED|SUCCESS|FAILED)\b|\b(PENDING|ACTIVE|COMPLETED|DISABLED|SUCCESS|FAILED)\s*(?:==|!=)/i;
         // ─── V318 Hardcoded Multi-Notifier ───────────────────────────────
         this.NOTIFIER_TYPE_RE = /(Notifier|Notification|EmailService|SmsService|Sms|PushService|PushClient|PushNotification|Push|MailSender|AuditLogService|AuditService|AuditLog|LogService|EventPublisher|EventBus)$/i;
         this.NOTIFIER_METHOD_RE = /^(send|notify|notifyAll|publish|email|sms|push|audit|record|dispatch|fire)$/i;
@@ -138,6 +138,10 @@ class DesignPatternAnalyzer {
             ai: { ...analyzerConfig_1.DEFAULT_AI_CONFIG },
             ...config,
         };
+    }
+    /** Runtime config propagation: thresholds and layer boundaries from settings. */
+    setConfig(config) {
+        this.config = { ...this.config, ...config };
     }
     analyze(asts, graph, classLookup) {
         if (!this.config.enableDesignPatternChecks)
@@ -235,6 +239,31 @@ class DesignPatternAnalyzer {
         for (const [impl, abs] of implMap) {
             implCounts.set(abs, (implCounts.get(abs) || 0) + 1);
         }
+        // Collect the set of interfaces/abstract classes that are actually referenced
+        // by clients (as a field type, parameter type, or method receiver). A single-impl
+        // abstraction that is never referenced is a YAGNI smell; one that IS referenced
+        // is a legitimate seam (e.g. UserRepository → JpaUserRepository) and must not be
+        // flagged as noise.
+        const referencedAbstractions = new Set();
+        for (const ast of asts) {
+            for (const cls of ast.classes) {
+                for (const field of cls.attributes) {
+                    const raw = field.dataType.replace(/<.*>/g, '').trim();
+                    referencedAbstractions.add(raw);
+                }
+                for (const method of cls.methods) {
+                    for (const param of method.parameters) {
+                        const raw = param.dataType.replace(/<.*>/g, '').trim();
+                        referencedAbstractions.add(raw);
+                    }
+                    for (const call of method.calledMethods || []) {
+                        const recv = (call.receiverType || '').replace(/<.*>/g, '').trim();
+                        if (recv)
+                            referencedAbstractions.add(recv);
+                    }
+                }
+            }
+        }
         for (const [fqcn, cls] of this.classIndex(asts)) {
             if (cls.classType !== 'interface' && !cls.isAbstract)
                 continue;
@@ -244,7 +273,13 @@ class DesignPatternAnalyzer {
             const clsAst = asts.find(a => a.classes.some(c => (c.fullyQualifiedName || c.className) === fqcn));
             if (!clsAst)
                 continue;
-            violations.push(this.toViolation('missing-abstraction', `${cls.classType === 'interface' ? 'Interface' : 'Abstract class'} '${cls.className}' has only 1 implementation. Either add more or inline it (YAGNI).`, clsAst.filePath || '', cls.startLine, undefined, undefined, undefined, fqcn));
+            // Only flag when the abstraction is NOT referenced by any client — a referenced
+            // single-impl interface is a legitimate seam, not a YAGNI smell.
+            const simpleName = cls.className;
+            const isReferenced = referencedAbstractions.has(fqcn) || referencedAbstractions.has(simpleName);
+            if (isReferenced)
+                continue;
+            violations.push(this.toViolation('missing-abstraction', `${cls.classType === 'interface' ? 'Interface' : 'Abstract class'} '${cls.className}' has only 1 implementation and is not referenced by any client. Either add more or inline it (YAGNI).`, clsAst.filePath || '', cls.startLine, undefined, undefined, undefined, fqcn));
         }
         return violations;
     }
@@ -255,18 +290,39 @@ class DesignPatternAnalyzer {
                 const fqcn = cls.fullyQualifiedName || cls.className;
                 if (cls.interfaces) {
                     for (const iface of cls.interfaces) {
-                        map.set(fqcn, iface);
+                        const resolved = this.resolveAbstractionFqcn(iface, asts);
+                        if (resolved)
+                            map.set(fqcn, resolved);
                     }
                 }
                 if (cls.superClass && cls.superClass !== 'Object' && cls.superClass !== 'Enum' && cls.superClass !== 'Record') {
                     const superCls = this.findClass(cls.superClass, asts);
                     if (superCls?.isAbstract) {
-                        map.set(fqcn, cls.superClass);
+                        map.set(fqcn, superCls.fullyQualifiedName || superCls.className);
                     }
                 }
             }
         }
         return map;
+    }
+    resolveAbstractionFqcn(typeName, asts) {
+        const raw = typeName.replace(/<.*>/g, '').trim();
+        if (!raw || raw === 'Object' || raw === 'Enum' || raw === 'Record')
+            return null;
+        const matches = [];
+        for (const ast of asts) {
+            for (const cls of ast.classes) {
+                const fqcn = cls.fullyQualifiedName || cls.className;
+                if (fqcn === raw || cls.className === raw) {
+                    matches.push(fqcn);
+                }
+            }
+        }
+        if (matches.length === 1)
+            return matches[0];
+        if (matches.length > 1 && raw.includes('.'))
+            return raw;
+        return null;
     }
     classIndex(asts) {
         const map = new Map();
@@ -341,7 +397,15 @@ class DesignPatternAnalyzer {
         const instantiationCounts = new Map();
         for (const ast of asts) {
             for (const cls of ast.classes) {
+                // Skip @Configuration classes entirely — @Bean methods ARE the factory.
+                const isConfigClass = cls.annotations?.some(a => a.name === 'Configuration');
+                if (isConfigClass)
+                    continue;
                 for (const method of cls.methods) {
+                    // Skip @Bean methods — they are the idiomatic Spring factory.
+                    const isBeanMethod = method.annotations?.some(a => a.name === 'Bean');
+                    if (isBeanMethod)
+                        continue;
                     for (const creation of method.createdObjects) {
                         const target = creation.className;
                         if (!target || target.includes('Builder'))
@@ -740,7 +804,7 @@ class DesignPatternAnalyzer {
         for (const ast of allAsts) {
             for (const cls of ast.classes) {
                 for (const method of cls.methods) {
-                    if ((method.calledMethods || []).length < 4)
+                    if (!this.isDuplicateAlgorithmCandidate(cls, method))
                         continue;
                     methods.push({ ast, cls, method });
                 }
@@ -752,7 +816,8 @@ class DesignPatternAnalyzer {
                 const a = methods[i], b = methods[j];
                 if (a.cls.fullyQualifiedName === b.cls.fullyQualifiedName)
                     continue;
-                const seqA = a.method.calledMethods, seqB = b.method.calledMethods;
+                const seqA = this.meaningfulAlgorithmCalls(a.method.calledMethods || []);
+                const seqB = this.meaningfulAlgorithmCalls(b.method.calledMethods || []);
                 const sim = this.sequenceSimilarity(seqA, seqB);
                 if (sim < similarity)
                     continue;
@@ -768,6 +833,30 @@ class DesignPatternAnalyzer {
             }
         }
         return violations;
+    }
+    isDuplicateAlgorithmCandidate(cls, method) {
+        if (/Mapper$|Converter$|Config$|Configuration$/.test(cls.className))
+            return false;
+        if (/^(get|set|is|has|toString|hashCode|equals|compareTo)/.test(method.name))
+            return false;
+        const calls = this.meaningfulAlgorithmCalls(method.calledMethods || []);
+        if (calls.length < 5)
+            return false;
+        const uniqueNames = new Set(calls.map(c => c.calledMethodName));
+        const receiverTypes = new Set(calls.map(c => c.receiverType || c.targetClass || '').filter(Boolean));
+        return uniqueNames.size >= 3 && receiverTypes.size >= 1;
+    }
+    meaningfulAlgorithmCalls(calls) {
+        return calls.filter(call => {
+            const name = call.calledMethodName || '';
+            if (/^(get|set|is|has)[A-Z]/.test(name))
+                return false;
+            if (/^(toString|hashCode|equals|compareTo|valueOf)$/i.test(name))
+                return false;
+            if (this.CROSS_CUTTING_CALL_RE.test(name))
+                return false;
+            return true;
+        });
     }
     sequenceSimilarity(a, b) {
         const s1 = a.map(c => c.calledMethodName);
@@ -819,6 +908,25 @@ class DesignPatternAnalyzer {
                     const topLevel = dps.filter(d => d.type === 'if' && ((d.nestingDepth ?? 0) <= 1));
                     if (topLevel.length < limit)
                         continue;
+                    // Distinguish a validation PIPELINE (guards on many distinct targets, then real
+                    // logic) from a defensive null LADDER (repeated guards on one root, e.g. o != null,
+                    // o.user != null, o.user.name != null). Only the former is a CoR smell.
+                    const roots = new Set();
+                    let nullLadder = 0;
+                    for (const d of topLevel) {
+                        const cond = d.condition || '';
+                        if (/(==|!=)\s*null|null\s*(==|!=)/i.test(cond)) {
+                            nullLadder++;
+                            const t = this.nullCheckTarget(cond) || '';
+                            roots.add(t.split('.')[0]);
+                        }
+                        else {
+                            roots.add(cond.trim());
+                        }
+                    }
+                    // If most top-level ifs are null-guards over few distinct roots, treat as ladder.
+                    if (nullLadder >= topLevel.length * 0.6 && roots.size <= 2)
+                        continue;
                     violations.push(this.toViolation('monolithic-pipeline', `Method '${method.name}' runs ${topLevel.length} sequential guard/validation clauses. Decompose into a Chain-of-Responsibility pipeline.`, ast.filePath || '', method.startLine, undefined, method.name));
                 }
             }
@@ -845,6 +953,22 @@ class DesignPatternAnalyzer {
         return violations;
     }
     // ─── V321 Excessive Defensive Null Checking ──────────────────────
+    /** Extracts the left-hand target token of a null check, e.g. "o.user" from "o.user == null".
+     *  Handles both source order ("o.user == null") and parser token order ("o . . user name null ==").
+     *  Returns the ROOT (first identifier) since callers group by receiver root. */
+    nullCheckTarget(condition) {
+        // Token-scrambled parser form: first identifier in the condition is the receiver root
+        const tokens = condition.match(/[\w$]+/g) || [];
+        const idx = tokens.findIndex(t => t.toLowerCase() === 'null');
+        if (idx > 0)
+            return tokens[0] || null;
+        if (idx === 0 && tokens.length > 1)
+            return tokens[1] || null;
+        // Normal source form: "x == null" / "null != x"
+        const m = condition.match(/([\w.$]+)\s*(?:==|!=)\s*null/i) || condition.match(/null\s*(?:==|!=)\s*([\w.$]+)/i);
+        const t = m?.[1] || '';
+        return t ? (t.split('.')[0]) : null;
+    }
     checkExcessiveNullChecks(asts) {
         const violations = [];
         const limit = this.config.nullCheckLimit ?? 3;
@@ -854,6 +978,16 @@ class DesignPatternAnalyzer {
                     const nullChecks = (method.complexityMetrics?.decisionPoints || [])
                         .filter(d => /(==|!=)\s*null|null\s*(==|!=)/i.test(d.condition || ''));
                     if (nullChecks.length < limit)
+                        continue;
+                    // Defensive chains on ONE target (o != null, o.user != null, o.user.name != null)
+                    // are a guard ladder, not scattered null paranoia — count distinct roots instead.
+                    const roots = new Set();
+                    for (const d of nullChecks) {
+                        const t = this.nullCheckTarget(d.condition || '') || '';
+                        // root = first identifier segment
+                        roots.add(t.split('.')[0]);
+                    }
+                    if (roots.size < Math.max(2, limit - 1))
                         continue;
                     violations.push(this.toViolation('excessive-null-checks', `Method '${method.name}' performs ${nullChecks.length} defensive null checks. Return Null Objects / empty collections (or Optional) instead.`, ast.filePath || '', method.startLine, undefined, method.name));
                 }
@@ -941,14 +1075,14 @@ class DesignPatternAnalyzer {
         return violations;
     }
     // ─── V323 Missing Bridge ─────────────────────────────────────────
-    checkMissingBridge(asts, _allAsts) {
+    checkMissingBridge(asts, allAsts) {
         const violations = [];
         const threshold = this.config.bridgeHierarchyThreshold ?? 4;
         // Group classes by their inheritance family (abstract parent FQCN → concrete children)
         const familyMap = new Map();
         const classByFqcn = new Map();
         const astByFqcn = new Map();
-        for (const ast of asts) {
+        for (const ast of allAsts) {
             for (const cls of ast.classes) {
                 const fqcn = cls.fullyQualifiedName || cls.className;
                 classByFqcn.set(fqcn, cls);
@@ -964,7 +1098,7 @@ class DesignPatternAnalyzer {
                 const parent = cls.superClass;
                 if (!parent || parent === 'Object' || parent === 'Enum' || parent === 'Record')
                     continue;
-                const parentCls = this.findClass(parent, asts);
+                const parentCls = this.findClass(parent, allAsts);
                 if (!parentCls || !parentCls.isAbstract)
                     continue;
                 const parentFqcn = parentCls.fullyQualifiedName || parentCls.className;
@@ -984,6 +1118,11 @@ class DesignPatternAnalyzer {
             // Alternative heuristic: children share repetitive suffix/prefix combinatorial pattern
             const hasRepeatedAffixes = this.hasRepetitiveAffixes(children.map(c => c.className));
             if (!hasCombinatorialExplosion && !hasRepeatedAffixes)
+                continue;
+            // Require at least one method to have a body (non-abstract) so we know the
+            // children actually implement behavior rather than being pure markers.
+            const hasConcreteMethod = children.some(c => c.methods.some(m => m.methodType !== 'abstract' && m.methodType !== 'native'));
+            if (!hasConcreteMethod)
                 continue;
             const parentCls = classByFqcn.get(parentFqcn);
             const parentAst = astByFqcn.get(parentFqcn);

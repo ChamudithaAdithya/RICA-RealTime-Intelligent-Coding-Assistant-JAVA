@@ -31,6 +31,7 @@ export class VscodeConfigProvider implements ConfigProvider {
       guardClauseLimit: cfg.get<number>('guardClauseLimit', 5),
       nullCheckLimit: cfg.get<number>('nullCheckLimit', 3),
       templateMethodSimilarity: cfg.get<number>('templateMethodSimilarity', 0.8),
+      bridgeHierarchyThreshold: cfg.get<number>('bridgeHierarchyThreshold', 4),
       excludePatterns: cfg.get<string[]>('excludePatterns', []),
       layerBoundaries: layerBoundaries as Record<string, { packages: string[]; allowedDeps: string[] }> || DEFAULT_LAYER_BOUNDARIES,
       ai,

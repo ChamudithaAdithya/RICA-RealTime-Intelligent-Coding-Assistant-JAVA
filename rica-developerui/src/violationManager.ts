@@ -113,6 +113,7 @@ export class ViolationManager {
 
     // Unified violation cache for UI consumers
     private activeViolations: Violation[] = [];
+    private onViolationsChanged?: () => void;
 
     // Optional AI Reasoning advisory findings (RICA-V000). Never part of the
     // deterministic audit; surfaced separately to the UI and combined on read.
@@ -164,10 +165,12 @@ export class ViolationManager {
         this.config = configProvider.getConfig();
         this.applyBusinessLogicThreshold();
         this.packageBoundaryAnalyzer.setConfig(this.config);
+        this.designPatternAnalyzer.setConfig(this.config);
         configProvider.onConfigChange(() => {
             this.config = configProvider.getConfig();
             this.applyBusinessLogicThreshold();
             this.packageBoundaryAnalyzer.setConfig(this.config);
+            this.designPatternAnalyzer.setConfig(this.config);
             this.update();
         });
     }
@@ -206,6 +209,11 @@ export class ViolationManager {
     /** Re-creates diagnostics from cached violations, filtering out ignored ones. */
     private refreshDiagnostics(): void {
         this.diagnosticReporter.report([...this.activeViolations, ...this.advisoryViolations], this.ignoredViolationIds);
+        this.onViolationsChanged?.();
+    }
+
+    public setOnViolationsChanged(callback?: () => void): void {
+        this.onViolationsChanged = callback;
     }
 
     /**
@@ -218,6 +226,10 @@ export class ViolationManager {
         try {
             newAst = this.parserService.parse(fileContent, filePath);
         } catch (e: any) {
+            // Parse failure (e.g. mid-edit syntax error): drop the file's AST from
+            // the cache so its previous violations do NOT linger as stale findings.
+            // The file re-enters analysis automatically once it parses again.
+            delete this.filesMap[filePath];
             this.update();
             return;
         }
@@ -227,6 +239,12 @@ export class ViolationManager {
 
         // 3. Update the AST cache
         this.filesMap[filePath] = newAst;
+
+        // A method-body edit can change calls, relationships, or design-pattern
+        // evidence without changing the public signature. Rebuild all derived
+        // state so cross-file findings never remain stale.
+        this.update();
+        return;
 
         // 4. Run Stage 1 (local) detectors on the changed file only
         const fileAsts = [newAst];
@@ -243,18 +261,10 @@ export class ViolationManager {
         const affectedFiles = new Set<string>();
 
         if (sigChanged) {
-            patchGraphForFile(this.graph, filePath, oldAst, newAst, this.filesMap);
-            ImpactAnalyzer.updateMapsForFile(filePath, oldAst, newAst, this.filesMap, this.graphMaps);
-            const radius = ImpactAnalyzer.computeBlastRadius(filePath, this.graphMaps);
-            for (const f of radius) affectedFiles.add(f);
-            affectedFiles.add(filePath);
-
-            const scopedFiles: Record<string, FullASTOutput> = {};
-            for (const f of affectedFiles) {
-                const ast = this.filesMap[f];
-                if (ast) scopedFiles[f] = ast;
-            }
-            crossFileViolations = this.crossFileAnalyzer.analyze(this.graph, scopedFiles);
+            // Public signature changes can affect any dependent file. Rebuild all
+            // derived analysis state so local and cross-file findings stay aligned.
+            this.update();
+            return;
         } else {
             affectedFiles.add(filePath);
         }
@@ -280,8 +290,23 @@ export class ViolationManager {
             ...dpViolations,
         ];
 
-        this.activeViolations = this.filterByConfig(merged);
+        this.activeViolations = this.filterByConfig(this.deduplicate(merged));
         this.refreshDiagnostics();
+    }
+
+    /**
+     * Global deduplication: the same underlying issue can be emitted by more than
+     * one detector (e.g. a local layer detector AND a graph rule both flag
+     * controller → repository access). Keep the first occurrence per stable key.
+     */
+    private deduplicate(violations: Violation[]): Violation[] {
+        const seen = new Set<string>();
+        return violations.filter(v => {
+            const key = `${v.code || v.ruleName}|${v.filePath}|${v.lineNumber || 0}|${v.message}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
     }
 
     public update(): void {
@@ -334,8 +359,18 @@ export class ViolationManager {
             }
         }
 
-        this.activeViolations = this.filterByConfig(unifiedViolations);
+        this.activeViolations = this.filterByConfig(this.deduplicate(unifiedViolations));
         this.refreshDiagnostics();
+    }
+
+    /**
+     * File lifecycle: a .java file was deleted (or renamed away). Drop its AST
+     * and every violation attributed to it so deleted files cannot keep
+     * reporting findings. Renames combine this with onFileSaved for the new path.
+     */
+    public onFileDeleted(filePath: string): void {
+        delete this.filesMap[filePath];
+        this.update();
     }
 
     /** Seeds the AST cache with pre-parsed data (called by the framework adapter after parsing). */
@@ -441,9 +476,11 @@ export class ViolationManager {
         const suppressedCode: string = v.code;
         const ast = this.filesMap[v.filePath];
         if (!ast) return false;
-        // Inline comment suppression: // rica-disable-next-line (check ±5 lines window)
+        // Inline comment suppression: // rica-disable-next-line. The comment sits on
+        // the line immediately ABOVE the suppressed statement, so only a ±1 window
+        // is honored — wider windows silently hid unrelated violations.
         const line = v.lineNumber || v.range?.start.line || 0;
-        for (let d = -5; d <= 5; d++) {
+        for (let d = -1; d <= 1; d++) {
             const suppressedForLine = ast.suppressedLines?.[line + d];
             if (suppressedForLine && (suppressedForLine.includes('all') || suppressedForLine.includes(suppressedCode))) return true;
         }

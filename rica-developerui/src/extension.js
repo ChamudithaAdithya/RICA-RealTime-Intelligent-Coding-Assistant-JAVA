@@ -104,6 +104,7 @@ async function activate(context) {
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration('javaAstAnalyzer')) {
             outputChannel.appendLine('Configuration changed — re-analyzing...');
+            astManager.setExcludePatterns(vscode.workspace.getConfiguration('javaAstAnalyzer').get('excludePatterns', []));
             aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
             violationManager.update();
             runAiAdvisory();

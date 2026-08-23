@@ -657,9 +657,40 @@ class JavaParser {
     extractEnumConstructor(enumName) {
         return `private ${enumName}() {}`; // Simplified, would need to extract actual constructor params
     }
+    /**
+     * Enum bodies may also contain methods (e.g. `SIZE { int value(); int getValue() { return value; } }`).
+     * Return the declared method names so enum behavior is no longer silently
+     * dropped from analysis.
+     */
     extractEnumMethods(node) {
-        // Extract methods defined in enum
-        return [];
+        const methods = [];
+        // Enum body has zero or more classBodyDeclarations, each of which may
+        // contain classMemberDeclarations that are methodDeclarations.
+        const enumBody = node?.children?.enumBody?.[0];
+        if (!enumBody?.children?.classBodyDeclaration)
+            return methods;
+        const classBodyDecls = enumBody.children.classBodyDeclaration || [];
+        for (const cbd of classBodyDecls) {
+            const classMemberDecls = cbd?.children?.classMemberDeclaration || [];
+            for (const cmd of classMemberDecls) {
+                if (cmd?.children?.methodDeclaration) {
+                    const md = cmd.children.methodDeclaration[0];
+                    const name = this.extractMethodNameFromDeclaration(md);
+                    if (name && !methods.includes(name))
+                        methods.push(name);
+                }
+            }
+        }
+        return methods;
+    }
+    /** Pulls the method name from a methodDeclaration for enum bodies. */
+    extractMethodNameFromDeclaration(md) {
+        if (md?.children?.methodHeader?.[0]?.children?.methodDeclarator?.[0]?.children?.Identifier) {
+            const id = md.children.methodHeader[0].children.methodDeclarator[0].children.Identifier[0];
+            return id.image || '';
+        }
+        // Reuse the standard header name extraction as a fallback.
+        return this.getMethodName(md?.children?.methodHeader?.[0]);
     }
     processNormalInterface(nid, classes, relationships, sourceCode) {
         const interfaceName = this.getTypeIdentifier(nid);
@@ -715,70 +746,9 @@ class JavaParser {
             attributes: [],
             constructors: [],
             methods: [
-                // Abstract methods
-                ...abstractMethods.map(m => ({
-                    name: m,
-                    accessModifier: 'public',
-                    nonAccessModifiers: ['abstract'],
-                    returnType: 'void',
-                    parameters: [],
-                    genericTypeParams: [],
-                    throwsExceptions: [],
-                    methodType: 'abstract',
-                    overrides: undefined,
-                    overloads: [],
-                    isVarArgs: false,
-                    isBridge: false,
-                    isSynthetic: false,
-                    annotations: [],
-                    body: { linesOfCode: 0, localVariables: [], callsThis: false, callsSuper: false, returnsValue: false },
-                    memoryBehavior: { stackFrame: 'pushed on call, popped on return', localVarsOnStack: true },
-                    calledMethods: [],
-                    createdObjects: []
-                })),
-                // Default methods
-                ...defaultMethods.map(dm => ({
-                    name: dm.name,
-                    accessModifier: 'public',
-                    nonAccessModifiers: ['default'],
-                    returnType: 'void',
-                    parameters: [],
-                    genericTypeParams: [],
-                    throwsExceptions: [],
-                    methodType: 'default',
-                    overrides: undefined,
-                    overloads: [],
-                    isVarArgs: false,
-                    isBridge: false,
-                    isSynthetic: false,
-                    annotations: [],
-                    javaDocComment: dm.body,
-                    body: { linesOfCode: 1, localVariables: [], callsThis: false, callsSuper: false, returnsValue: false },
-                    memoryBehavior: { stackFrame: 'pushed on call, popped on return', localVarsOnStack: true },
-                    calledMethods: [],
-                    createdObjects: []
-                })),
-                // Static methods
-                ...staticMethods.map(sm => ({
-                    name: sm.name,
-                    accessModifier: 'public',
-                    nonAccessModifiers: ['static'],
-                    returnType: 'void',
-                    parameters: [],
-                    genericTypeParams: [],
-                    throwsExceptions: [],
-                    methodType: 'static',
-                    overrides: undefined,
-                    overloads: [],
-                    isVarArgs: false,
-                    isBridge: false,
-                    isSynthetic: false,
-                    annotations: [],
-                    body: { linesOfCode: 1, localVariables: [], callsThis: false, callsSuper: false, returnsValue: false },
-                    memoryBehavior: { stackFrame: 'pushed on call, popped on return', localVarsOnStack: true },
-                    calledMethods: [],
-                    createdObjects: []
-                }))
+                ...abstractMethods.map(m => this.buildFabricatedMethod(m, 'abstract')),
+                ...defaultMethods.map(dm => this.buildFabricatedMethod(dm.name, 'default')),
+                ...staticMethods.map(sm => this.buildFabricatedMethod(sm.name, 'static')),
             ],
             staticInitializers: [],
             instanceInitializers: [],
@@ -787,6 +757,34 @@ class JavaParser {
             sourceFile: this.getSourceFileName(nid) || 'Unknown.java'
         };
         classes.push(classWrapper);
+    }
+    /**
+     * Builds a minimal `Method` record for interface members that are only known
+     * by name (abstract / default / static interface methods). Signature details
+     * are not available at this point, so the entry is marked synthetic.
+     */
+    buildFabricatedMethod(name, methodType) {
+        return {
+            name,
+            accessModifier: 'public',
+            nonAccessModifiers: methodType === 'static'
+                ? ['static']
+                : methodType === 'default'
+                    ? ['default']
+                    : ['abstract'],
+            returnType: 'unknown',
+            parameters: [],
+            genericTypeParams: [],
+            throwsExceptions: [],
+            methodType,
+            overloads: [],
+            isVarArgs: false,
+            isBridge: false,
+            isSynthetic: true,
+            annotations: [],
+            calledMethods: [],
+            createdObjects: []
+        };
     }
     processAnnotationInterface(node, classes, sourceCode, filePath) {
         const annotationName = this.getTypeIdentifier(node);
@@ -1011,9 +1009,10 @@ class JavaParser {
                 }
             }
         }
-        // Lombok: detect @AllArgsConstructor, @RequiredArgsConstructor, @Builder
+        // Lombok constructor annotations imply constructor injection; @Builder
+        // only generates a builder and does not wire Spring dependencies.
         // Must run before method processing so symbol tables see isInjected=true.
-        const lombokAnnotations = ['AllArgsConstructor', 'RequiredArgsConstructor', 'Builder'];
+        const lombokAnnotations = ['AllArgsConstructor', 'RequiredArgsConstructor'];
         const hasLombokAnnotation = classAnnotations.some(a => lombokAnnotations.some(l => a.name === l || a.fullyQualifiedName === l));
         if (hasLombokAnnotation) {
             const isRequired = classAnnotations.some(a => a.name === 'RequiredArgsConstructor' || a.fullyQualifiedName === 'RequiredArgsConstructor');
@@ -1027,7 +1026,7 @@ class JavaParser {
                 }
             }
             else {
-                // @AllArgsConstructor or @Builder: all fields are injected
+                // @AllArgsConstructor: all fields are constructor-injected
                 for (const field of fields) {
                     if (!field.isInjected) {
                         field.isInjected = true;
@@ -1173,12 +1172,13 @@ class JavaParser {
         const staticMethods = [];
         const privateMethods = [];
         const constants = [];
+        const methodSignatures = [];
         if (!node?.children?.interfaceBody) {
-            return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants };
+            return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants, methodSignatures };
         }
         const interfaceBody = node.children.interfaceBody[0];
         if (!interfaceBody?.children?.interfaceMemberDeclaration) {
-            return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants };
+            return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants, methodSignatures };
         }
         for (const imd of interfaceBody.children.interfaceMemberDeclaration) {
             // Constant declaration (public static final)
@@ -1207,6 +1207,11 @@ class JavaParser {
                 const isDefault = modifiers.includes('default');
                 const isPrivate = modifiers.includes('private');
                 const isAbstract = modifiers.includes('abstract') || (!isStatic && !isDefault && !isPrivate);
+                // Capture real parameter types from the method declarator so
+                // signature-based rules aren't working on fabricated empty signatures.
+                const parameterTypes = this.getInterfaceMethodParameterTypes(iMethod);
+                const signature = { name: methodName, returnType, parameterTypes };
+                methodSignatures.push(signature);
                 if (isPrivate) {
                     privateMethods.push(methodName);
                 }
@@ -1224,7 +1229,21 @@ class JavaParser {
                 }
             }
         }
-        return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants };
+        return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants, methodSignatures };
+    }
+    /** Extracts the ordered parameter type list from an interface method declaration. */
+    getInterfaceMethodParameterTypes(iMethod) {
+        const declarator = iMethod?.children?.methodHeader?.[0]?.children?.methodDeclarator?.[0];
+        if (!declarator?.children?.formalParameterList)
+            return [];
+        const fpl = declarator.children.formalParameterList[0];
+        if (!fpl?.children?.formalParameter)
+            return [];
+        const types = [];
+        for (const fp of fpl.children.formalParameter) {
+            types.push(this.getParameterType(fp));
+        }
+        return types;
     }
     getFieldModifiers(node) {
         const modifiers = [];
@@ -1296,6 +1315,10 @@ class JavaParser {
     extractType(node) {
         if (!node)
             return 'unknown';
+        const serializedType = this.serializeTypeNode(node);
+        if (serializedType) {
+            return serializedType;
+        }
         // Primitive types
         if (node.children?.unannPrimitiveType) {
             const pt = node.children.unannPrimitiveType[0];
@@ -1339,6 +1362,41 @@ class JavaParser {
             }
         }
         return 'unknown';
+    }
+    serializeTypeNode(node) {
+        const tokens = [];
+        this.collectTerminalTokens(node, tokens);
+        const images = tokens
+            .filter(token => typeof token.image === 'string' && token.image.length > 0)
+            .sort((a, b) => (a.startOffset ?? 0) - (b.startOffset ?? 0))
+            .map(token => token.image);
+        if (images.length === 0) {
+            return '';
+        }
+        return images.join('')
+            .replace(/,/g, ', ')
+            .replace(/\?extends/g, '? extends ')
+            .replace(/\?super/g, '? super ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    collectTerminalTokens(node, tokens) {
+        if (!node)
+            return;
+        if (node.image !== undefined) {
+            tokens.push(node);
+            return;
+        }
+        if (!node.children)
+            return;
+        for (const key of Object.keys(node.children)) {
+            const children = node.children[key];
+            if (!Array.isArray(children))
+                continue;
+            for (const child of children) {
+                this.collectTerminalTokens(child, tokens);
+            }
+        }
     }
     extractClassName(node) {
         if (!node?.children?.unannClassType)
@@ -3537,18 +3595,15 @@ class JavaParser {
         return metrics;
     }
     extractConditionText(node) {
-        if (!node?.children)
+        if (!node)
             return '';
-        const paren = node.children.LParen?.[0] || node.children.LBrace?.[0];
-        if (!paren)
-            return '';
-        // Walk siblings after LParen to capture condition
-        const parts = [];
+        const tokens = [];
         const collect = (n) => {
-            if (!n || n.name === 'RParen')
+            if (!n)
                 return;
-            if (n.image)
-                parts.push(n.image);
+            if (n.image !== undefined) {
+                tokens.push(n);
+            }
             if (n.children) {
                 for (const key of Object.keys(n.children)) {
                     if (Array.isArray(n.children[key])) {
@@ -3558,26 +3613,28 @@ class JavaParser {
                 }
             }
         };
-        // Traverse parent children after LParen
-        const parentChildren = node.children;
-        let capture = false;
-        for (const key of Object.keys(parentChildren)) {
-            if (Array.isArray(parentChildren[key])) {
-                for (const c of parentChildren[key]) {
-                    if (c === paren) {
-                        capture = true;
-                        continue;
-                    }
-                    if (capture && c.name === 'RParen') {
-                        capture = false;
-                        break;
-                    }
-                    if (capture)
-                        collect(c);
+        collect(node);
+        tokens.sort((a, b) => (a.startOffset ?? 0) - (b.startOffset ?? 0));
+        const firstLParenIndex = tokens.findIndex(t => t.image === '(');
+        if (firstLParenIndex === -1)
+            return '';
+        let depth = 0;
+        let matchingRParenIndex = -1;
+        for (let i = firstLParenIndex; i < tokens.length; i++) {
+            if (tokens[i].image === '(')
+                depth++;
+            else if (tokens[i].image === ')') {
+                depth--;
+                if (depth === 0) {
+                    matchingRParenIndex = i;
+                    break;
                 }
             }
         }
-        return parts.join(' ').substring(0, 120);
+        if (matchingRParenIndex === -1)
+            return '';
+        const conditionTokens = tokens.slice(firstLParenIndex + 1, matchingRParenIndex);
+        return conditionTokens.map(t => t.image).join(' ').substring(0, 120);
     }
     calculateBusinessLogicScore(bodyText, linesOfCode, complexity) {
         let score = 0;

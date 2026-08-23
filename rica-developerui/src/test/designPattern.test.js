@@ -21,6 +21,60 @@ function analyzeAll(sources, config) {
     return analyzer.analyze(asts);
 }
 
+describe('DesignPatternAnalyzer - V307 Missing Abstraction', () => {
+
+    it('should resolve simple implements names to project interfaces', () => {
+        const iface = {
+            path: 'src/main/java/com/example/domain/LonelyPort.java',
+            code: `package com.example.domain;
+public interface LonelyPort {
+    void execute();
+}`,
+        };
+        const impl = {
+            path: 'src/main/java/com/example/domain/LonelyPortImpl.java',
+            code: `package com.example.domain;
+public class LonelyPortImpl implements LonelyPort {
+    public void execute() {}
+}`,
+        };
+        const violations = analyzeAll([iface, impl]);
+        const v307 = violations.find(v => v.code === 'RICA-V307');
+        assert.ok(v307, 'single unreferenced implementation should emit V307');
+        assert.match(v307.message, /LonelyPort/);
+    });
+
+    it('should not flag a referenced single-implementation interface', () => {
+        const iface = {
+            path: 'src/main/java/com/example/domain/PaymentPort.java',
+            code: `package com.example.domain;
+public interface PaymentPort {
+    void pay();
+}`,
+        };
+        const impl = {
+            path: 'src/main/java/com/example/domain/StripePaymentPort.java',
+            code: `package com.example.domain;
+public class StripePaymentPort implements PaymentPort {
+    public void pay() {}
+}`,
+        };
+        const client = {
+            path: 'src/main/java/com/example/service/CheckoutService.java',
+            code: `package com.example.service;
+import com.example.domain.PaymentPort;
+public class CheckoutService {
+    private PaymentPort paymentPort;
+    public void checkout() {
+        paymentPort.pay();
+    }
+}`,
+        };
+        const violations = analyzeAll([iface, impl, client]);
+        assert.ok(!violations.some(v => v.code === 'RICA-V307'), 'referenced seam should be allowed');
+    });
+});
+
 describe('DesignPatternAnalyzer — V308 Leaking Construction Logic', () => {
 
     it('should flag heavy nested construction in a business method', () => {
@@ -477,6 +531,27 @@ class B {
         const violations = analyzeAll(sources);
         assert.ok(!violations.some(v => v.code === 'RICA-V317'), 'same receiver type is fine');
     });
+
+    it('should NOT flag duplicate accessor/mapping sequences as template-method candidates', () => {
+        const sources = [
+            { code: `package com.example;
+class CustomerView {
+    public void fill(Customer c, CustomerDto d) {
+        d.setId(c.getId()); d.setName(c.getName()); d.setEmail(c.getEmail());
+        d.setPhone(c.getPhone()); d.setStatus(c.getStatus());
+    }
+}` },
+            { code: `package com.example;
+class AccountView {
+    public void fill(Account a, AccountDto d) {
+        d.setId(a.getId()); d.setName(a.getName()); d.setEmail(a.getEmail());
+        d.setPhone(a.getPhone()); d.setStatus(a.getStatus());
+    }
+}` },
+        ];
+        const violations = analyzeAll(sources);
+        assert.ok(!violations.some(v => v.code === 'RICA-V317'), 'accessor-only copy sequences are mapping noise');
+    });
 });
 
 describe('DesignPatternAnalyzer — V318 Hardcoded Notifications', () => {
@@ -569,7 +644,21 @@ class AppConfig {
 
 describe('DesignPatternAnalyzer — V321 Excessive Null Checking', () => {
 
-    it('should flag a method with 3+ null-testing decision points', () => {
+    it('should flag a method with 3+ null-testing decision points on distinct targets', () => {
+        const code = `package com.example;
+class OrderService {
+    public String render(Order o, User u, Address a) {
+        if (o == null) return "";
+        if (u == null) return "";
+        if (a == null) return "";
+        return "";
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(violations.some(v => v.code === 'RICA-V321'), 'should emit V321');
+    });
+
+    it('should NOT flag a single-target guard ladder chain', () => {
         const code = `package com.example;
 class OrderService {
     public String render(Order o) {
@@ -580,7 +669,7 @@ class OrderService {
     }
 }`;
         const violations = analyze(code);
-        assert.ok(violations.some(v => v.code === 'RICA-V321'), 'should emit V321');
+        assert.ok(!violations.some(v => v.code === 'RICA-V321'), 'should not emit V321 for single target');
     });
 
     it('should NOT flag fewer than 3 null checks', () => {

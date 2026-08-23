@@ -129,9 +129,15 @@ class ApiClientAdapter {
     async get(endpoint) {
         const fullUrl = this.baseUrl + endpoint;
         return new Promise((resolve, reject) => {
+            // Parse with WHATWG URL and request via explicit options — passing a
+            // raw string to http.get() routes through legacy url.parse() and
+            // emits DEP0169 deprecation warnings on every health check.
             const parsed = new url.URL(fullUrl);
             const client = parsed.protocol === 'https:' ? https : http;
-            const req = client.get(fullUrl, {
+            const req = client.get({
+                hostname: parsed.hostname,
+                port: parsed.port,
+                path: parsed.pathname + parsed.search,
                 timeout: 10000,
                 headers: {
                     'Accept': 'application/json'

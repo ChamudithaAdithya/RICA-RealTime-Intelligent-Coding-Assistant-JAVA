@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EntityLayerAnalyzer = void 0;
+const detectorUtils_1 = require("./detectorUtils");
 class EntityLayerAnalyzer {
     constructor() {
         this.businessLogicThreshold = 3;
@@ -176,13 +177,13 @@ class EntityLayerAnalyzer {
                     }
                     // Check for business logic in entity methods
                     const businessLogicScore = method.body?.businessLogicScore ?? 0;
-                    if (businessLogicScore >= this.businessLogicThreshold) { // Lower threshold for entities as they should have minimal logic
+                    if (businessLogicScore >= this.businessLogicThreshold && !this.isSelfContainedEntityBehavior(method)) {
                         violations.push({
                             type: 'business-logic',
                             message: `Entity method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer or keeping entities as simple data containers.`,
                             className: cls.fullyQualifiedName,
                             methodName: method.name,
-                            lineNumber: method.body?.linesOfCode,
+                            lineNumber: method.startLine,
                             range: method.startLine ? {
                                 start: { line: method.startLine, character: method.startColumn || 0 },
                                 end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -266,13 +267,11 @@ class EntityLayerAnalyzer {
         return null;
     }
     isImproperDependency(typeName) {
-        // Strip generics and array brackets
-        const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+        const raw = (0, detectorUtils_1.rawTypeName)(typeName);
         return this.isServiceClassName(raw) || this.isRepositoryClassName(raw) || this.isInfrastructureClassName(raw);
     }
     getDependencyType(typeName) {
-        // Strip generics and array brackets
-        const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+        const raw = (0, detectorUtils_1.rawTypeName)(typeName);
         if (this.isServiceClassName(raw))
             return 'service';
         if (this.isRepositoryClassName(raw))
@@ -288,8 +287,7 @@ class EntityLayerAnalyzer {
         return this.repositoryPatterns.some(pattern => className.endsWith(pattern));
     }
     isRawSQLType(typeName) {
-        // Strip generics and array brackets
-        const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+        const raw = (0, detectorUtils_1.rawTypeName)(typeName);
         return this.rawSQLPatterns.some(p => raw === p || raw.endsWith('.' + p));
     }
     isInfrastructureClassName(className) {
@@ -297,6 +295,28 @@ class EntityLayerAnalyzer {
     }
     isEntityClassName(className) {
         return this.entityPatterns.some(pattern => className.endsWith(pattern));
+    }
+    isSelfContainedEntityBehavior(method) {
+        const persistenceWrites = method.body?.persistenceWrites || [];
+        if (persistenceWrites.length > 0)
+            return false;
+        const createsImproperDependency = (method.createdObjects || []).some(creation => this.isImproperDependency(creation.className) || this.isRawSQLType(creation.className));
+        if (createsImproperDependency)
+            return false;
+        const allowedLibraryTypes = new Set([
+            'String', 'BigDecimal', 'BigInteger', 'Math', 'Objects', 'Optional',
+            'LocalDate', 'LocalDateTime', 'Instant', 'Date', 'List', 'Set', 'Map', 'Collection',
+        ]);
+        return (method.calledMethods || []).every(call => {
+            const type = (0, detectorUtils_1.simpleTypeName)(call.receiverType || call.targetClass || '');
+            if (!type)
+                return true;
+            if (call.receiverVariableName === 'this')
+                return true;
+            if (allowedLibraryTypes.has(type) || call.isLibraryCall)
+                return true;
+            return !this.isImproperDependency(type) && !this.isRawSQLType(type);
+        });
     }
     isAnemicEntity(cls) {
         const totalMethods = cls.methods.length;

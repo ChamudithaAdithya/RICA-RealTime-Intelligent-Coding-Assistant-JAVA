@@ -8,6 +8,10 @@ const CROSS_FILE_CODE_MAP = {
     'LAYER_BYPASS': 'RICA-V401',
     'CROSS_LAYER': 'RICA-V402',
     'CYCLIC_DEP': 'RICA-V403',
+    // The cyclic-dependency graph rule also emits INVERTED_DEP findings
+    // (lower layer depending on a higher layer). Map them to the same
+    // RICA-V403 family instead of falling back to the generic RICA-V400.
+    'INVERTED_DEP': 'RICA-V403',
     'ENTITY_EXPOSURE': 'RICA-V404',
 };
 function toUnifiedViolation(gv, ruleId, ruleName, mitigationHint) {

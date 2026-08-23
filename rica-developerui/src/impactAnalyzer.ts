@@ -59,12 +59,12 @@ export class ImpactAnalyzer {
           }
         }
       }
-    for (const rel of ast.relationships || []) {
-      const targetFile = ImpactAnalyzer.findFileForClass(rel.targetId, files);
-      if (targetFile && targetFile !== filePath) {
-        deps.add(targetFile);
+      for (const rel of ast.relationships || []) {
+        const targetFile = ImpactAnalyzer.findFileForClass(rel.targetId, files);
+        if (targetFile && targetFile !== filePath) {
+          deps.add(targetFile);
+        }
       }
-    }
       dependencies.set(filePath, deps);
       for (const dep of deps) {
         if (!dependents.has(dep)) {
@@ -78,16 +78,22 @@ export class ImpactAnalyzer {
   }
 
   /**
-   * Patch maps when a file changes. Removes old edges and adds new ones.
+   * Patch maps when a file changes.
+   *
+   * Outgoing edges of the changed file are rebuilt from its new AST. Incoming
+   * edges (other files depending on this one) are RECOMPUTED from every other
+   * file's imports/relationships against the classes the NEW ast defines —
+   * blindly deleting them corrupted later blast-radius calculations because a
+   * dependent file's own imports did not change and must keep pointing here.
    */
   public static updateMapsForFile(
     filePath: string,
-    oldAst: FullASTOutput | undefined,
+    _oldAst: FullASTOutput | undefined,
     newAst: FullASTOutput,
     files: Record<string, FullASTOutput>,
     maps: InvalidationMaps,
   ): void {
-    // Remove old outgoing edges
+    // 1. Remove old OUTGOING edges of the changed file
     const oldDeps = maps.dependencies.get(filePath);
     if (oldDeps) {
       for (const dep of oldDeps) {
@@ -99,22 +105,56 @@ export class ImpactAnalyzer {
       }
     }
 
-    // Remove old incoming edges (other files that depended on this file)
-    const oldDependents = maps.dependents.get(filePath);
-    if (oldDependents) {
-      for (const parentFile of oldDependents) {
-        const parentDeps = maps.dependencies.get(parentFile);
-        if (parentDeps) {
-          parentDeps.delete(filePath);
-        }
-      }
+    // 2. Recompute INCOMING edges from scratch: scan every other file and check
+    //    whether any import/relationship still resolves into the new AST.
+    const definedClasses = new Set<string>();
+    for (const cls of newAst.classes || []) {
+      definedClasses.add(cls.fullyQualifiedName);
+      definedClasses.add(cls.className);
     }
 
-    // Clear old entries
-    maps.dependencies.delete(filePath);
-    maps.dependents.delete(filePath);
+    const newDependents = new Set<string>();
+    for (const [fp, ast] of Object.entries(files)) {
+      if (fp === filePath || fp === 'error') continue;
+      let depends = false;
+      for (const imp of ast.imports || []) {
+        if (!imp.isWildcard && imp.qualifiedName && definedClasses.has(imp.qualifiedName)) {
+          depends = true;
+          break;
+        }
+      }
+      if (!depends) {
+        for (const rel of ast.relationships || []) {
+          const simple = rel.targetId.split('.').pop() || rel.targetId;
+          if (definedClasses.has(rel.targetId) || definedClasses.has(simple)) {
+            depends = true;
+            break;
+          }
+        }
+      }
+      if (depends) newDependents.add(fp);
+    }
 
-    // Compute new dependencies
+    // 3. Sync dependents sets with the recomputed truth
+    const oldDependents = maps.dependents.get(filePath) || new Set<string>();
+    for (const parent of oldDependents) {
+      if (!newDependents.has(parent)) {
+        maps.dependencies.get(parent)?.delete(filePath);
+      }
+    }
+    for (const parent of newDependents) {
+      if (!oldDependents.has(parent)) {
+        if (!maps.dependencies.has(parent)) maps.dependencies.set(parent, new Set());
+        maps.dependencies.get(parent)!.add(filePath);
+      }
+    }
+    if (newDependents.size > 0) {
+      maps.dependents.set(filePath, newDependents);
+    } else {
+      maps.dependents.delete(filePath);
+    }
+
+    // 4. Store new OUTGOING edges
     const newDeps = new Set<string>();
     for (const imp of newAst.imports || []) {
       if (!imp.isWildcard && imp.qualifiedName) {
@@ -130,8 +170,6 @@ export class ImpactAnalyzer {
         newDeps.add(targetFile);
       }
     }
-
-    // Store new edges
     if (newDeps.size > 0) {
       maps.dependencies.set(filePath, newDeps);
       for (const dep of newDeps) {
@@ -140,12 +178,14 @@ export class ImpactAnalyzer {
         }
         maps.dependents.get(dep)!.add(filePath);
       }
+    } else {
+      maps.dependencies.delete(filePath);
     }
   }
 
   /**
    * Compute a signature hash for the public API of a parsed AST.
-   * Returns null if unchanged (same as previous hash).
+   * Two ASTs with equal hashes expose identical public surfaces.
    */
   public static computeSignatureHash(ast: FullASTOutput): string {
     const parts: string[] = [];

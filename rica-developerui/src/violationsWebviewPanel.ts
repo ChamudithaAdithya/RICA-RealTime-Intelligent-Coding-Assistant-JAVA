@@ -35,6 +35,7 @@ export class ViolationsWebviewPanel {
     private constructor(panel: vscode.WebviewPanel, violationManager: ViolationManager) {
         this._panel = panel;
         this._violationManager = violationManager;
+        this._violationManager.setOnViolationsChanged(() => this._update());
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
@@ -88,6 +89,7 @@ export class ViolationsWebviewPanel {
     }
 
     public dispose() {
+        this._violationManager.setOnViolationsChanged(undefined);
         ViolationsWebviewPanel.currentPanel = undefined;
         this._panel.dispose();
         while (this._disposables.length) {

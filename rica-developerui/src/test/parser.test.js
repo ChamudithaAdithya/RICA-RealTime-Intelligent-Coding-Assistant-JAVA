@@ -209,7 +209,7 @@ public class MyService {
         assert.strictEqual(nonFinalField.isInjected, false);
     });
 
-    it('should detect Lombok @Builder as all-args injection', () => {
+    it('should not treat Lombok @Builder as dependency injection', () => {
         const code = `package com.example;
 import lombok.Builder;
 import org.springframework.stereotype.Service;
@@ -221,10 +221,9 @@ public class MyService {
 }`;
         const ast = parse(code);
         const cls = findClass(ast, 'MyService');
-        assert.strictEqual(cls.injectionStrategy, 'constructor');
+        assert.strictEqual(cls.injectionStrategy, 'none');
         const repoField = cls.attributes.find(a => a.name === 'someRepository');
-        assert.strictEqual(repoField.isInjected, true);
-        assert.strictEqual(repoField.injectionType, 'lombok-constructor');
+        assert.strictEqual(repoField.isInjected, false);
     });
 });
 
