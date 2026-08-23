@@ -98,7 +98,7 @@ async function activate(context) {
         if (url) {
             vscode.env.openExternal(vscode.Uri.parse(url));
         }
-    }));
+    }), vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', codeActionProvider_1.showFixGuidance));
     fileWatcher = new fileWatcher_1.FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
     // Re-run analysis when relevant settings change
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {

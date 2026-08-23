@@ -14,6 +14,7 @@ import { DiagnosticReporter } from './application/ports/diagnosticReporter';
 import { ParserService } from './application/ports/parserService';
 import { ConfigProvider } from './application/ports/configProvider';
 import { VIOLATION_DOC_BY_CODE, violationDocSlug } from './violationCatalog';
+import { FixSuggestionEngine } from './fixSuggestionEngine';
 
 const MITIGATION_HINTS: Record<string, string> = {
     'self-instantiation': 'Use dependency injection (@Autowired/@Inject) instead of directly instantiating with new()',
@@ -107,6 +108,7 @@ export class ViolationManager {
     private readonly crossFileAnalyzer: CrossFileAnalyzer;
     private readonly packageBoundaryAnalyzer: PackageBoundaryAnalyzer;
     private readonly designPatternAnalyzer: DesignPatternAnalyzer;
+    private readonly fixSuggestionEngine: FixSuggestionEngine;
 
     // Callback for persisting ignored violations (wired by the framework adapter)
     private readonly onIgnoreChanged?: (ignoredIds: string[]) => void;
@@ -157,6 +159,7 @@ export class ViolationManager {
         this.crossFileAnalyzer = new CrossFileAnalyzer();
         this.packageBoundaryAnalyzer = new PackageBoundaryAnalyzer(this.config);
         this.designPatternAnalyzer = new DesignPatternAnalyzer(this.config);
+        this.fixSuggestionEngine = new FixSuggestionEngine();
 
         if (initialIgnoredIds) {
             this.ignoredViolationIds = new Set(initialIgnoredIds);
@@ -290,7 +293,7 @@ export class ViolationManager {
             ...dpViolations,
         ];
 
-        this.activeViolations = this.filterByConfig(this.deduplicate(merged));
+        this.activeViolations = this.withFixSuggestions(this.filterByConfig(this.deduplicate(merged)));
         this.refreshDiagnostics();
     }
 
@@ -359,8 +362,12 @@ export class ViolationManager {
             }
         }
 
-        this.activeViolations = this.filterByConfig(this.deduplicate(unifiedViolations));
+        this.activeViolations = this.withFixSuggestions(this.filterByConfig(this.deduplicate(unifiedViolations)));
         this.refreshDiagnostics();
+    }
+
+    private withFixSuggestions(violations: Violation[]): Violation[] {
+        return this.fixSuggestionEngine.enrich(violations);
     }
 
     /**

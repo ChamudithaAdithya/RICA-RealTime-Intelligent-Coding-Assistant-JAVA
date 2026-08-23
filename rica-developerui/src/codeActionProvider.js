@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AiQuickFixCodeActionProvider = void 0;
+exports.showFixGuidance = showFixGuidance;
 const vscode = __importStar(require("vscode"));
 const path = __importStar(require("path"));
 /** Diagnostics with a clickable doc link carry the violation id in `code.value`. */
@@ -41,8 +42,9 @@ function diagnosticCode(diag) {
     return typeof diag.code === 'object' ? diag.code.value : diag.code;
 }
 /**
- * Surfaces violation `quickFix` edits (produced by the AI Reasoning module) as
- * standard VS Code Quick-Fix lightbulb actions on the offending diagnostic.
+ * Surfaces violation remediation suggestions as standard VS Code Quick-Fix
+ * lightbulb actions. Low-risk suggestions can carry edits; design-heavy
+ * suggestions open guidance instead of applying unsafe rewrites.
  */
 class AiQuickFixCodeActionProvider {
     constructor(getViolations) {
@@ -52,16 +54,43 @@ class AiQuickFixCodeActionProvider {
         const actions = [];
         for (const diag of context.diagnostics) {
             const violation = this.getViolations().find(v => v.id === diagnosticCode(diag));
-            const quickFix = violation?.quickFix ?? violation?.aiInsights?.quickFix;
-            if (!quickFix?.edits?.length)
+            if (!violation)
                 continue;
-            const action = new vscode.CodeAction(`AI Quick Fix: ${quickFix.title}`, vscode.CodeActionKind.QuickFix);
-            action.isPreferred = true;
-            action.diagnostics = [diag];
-            action.edit = this.buildWorkspaceEdit(document, quickFix);
-            actions.push(action);
+            for (const remediation of violation.remediationSuggestions || []) {
+                const action = new vscode.CodeAction(remediation.edits?.length
+                    ? `RICA Fix: ${remediation.title}`
+                    : `RICA Guidance: ${remediation.title}`, vscode.CodeActionKind.QuickFix);
+                action.diagnostics = [diag];
+                if (remediation.edits?.length) {
+                    action.isPreferred = remediation.safety === 'auto-safe' || remediation.safety === 'preview-required';
+                    action.edit = this.buildWorkspaceEdit(document, {
+                        title: remediation.title,
+                        description: remediation.description,
+                        edits: remediation.edits,
+                    });
+                }
+                else {
+                    action.command = {
+                        title: remediation.title,
+                        command: 'javaAstAnalyzer.showFixGuidance',
+                        arguments: [violation, remediation],
+                    };
+                }
+                actions.push(action);
+            }
+            const quickFix = violation.quickFix ?? violation.aiInsights?.quickFix;
+            if (quickFix?.edits?.length && !this.hasSameEditAction(actions, quickFix)) {
+                const action = new vscode.CodeAction(`AI Quick Fix: ${quickFix.title}`, vscode.CodeActionKind.QuickFix);
+                action.isPreferred = true;
+                action.diagnostics = [diag];
+                action.edit = this.buildWorkspaceEdit(document, quickFix);
+                actions.push(action);
+            }
         }
         return actions;
+    }
+    hasSameEditAction(actions, quickFix) {
+        return actions.some(action => action.title.includes(quickFix.title) && !!action.edit);
     }
     buildWorkspaceEdit(document, quickFix) {
         const edit = new vscode.WorkspaceEdit();
@@ -110,4 +139,27 @@ class AiQuickFixCodeActionProvider {
 }
 exports.AiQuickFixCodeActionProvider = AiQuickFixCodeActionProvider;
 AiQuickFixCodeActionProvider.providedCodeActionKinds = [vscode.CodeActionKind.QuickFix];
+async function showFixGuidance(violation, remediation) {
+    const doc = await vscode.workspace.openTextDocument({
+        language: 'markdown',
+        content: [
+            `# ${remediation.title}`,
+            '',
+            `**Rule:** ${violation.code || violation.ruleName}`,
+            `**Safety:** ${remediation.safety}`,
+            `**Location:** ${violation.filePath}${violation.lineNumber ? `:${violation.lineNumber}` : ''}`,
+            '',
+            remediation.description,
+            '',
+            '## Steps',
+            '',
+            ...remediation.steps.map((step, index) => `${index + 1}. ${step}`),
+            '',
+            '## Evidence',
+            '',
+            violation.message,
+        ].join('\n'),
+    });
+    await vscode.window.showTextDocument(doc, { preview: true });
+}
 //# sourceMappingURL=codeActionProvider.js.map

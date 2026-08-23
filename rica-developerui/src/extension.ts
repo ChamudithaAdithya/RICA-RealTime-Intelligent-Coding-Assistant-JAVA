@@ -19,7 +19,7 @@ import { AiAdvisoryCoordinator } from './application/ai/aiAdvisoryCoordinator';
 import { OllamaAiAdapter } from './infrastructure/ai/ollamaAiAdapter';
 import { OpenAICompatibleAiAdapter } from './infrastructure/ai/openaiCompatibleAiAdapter';
 import { FileAuditLogger } from './infrastructure/ai/fileAuditLogger';
-import { AiQuickFixCodeActionProvider } from './codeActionProvider';
+import { AiQuickFixCodeActionProvider, showFixGuidance } from './codeActionProvider';
 import { DocumentationCodeActionProvider } from './documentationCodeActionProvider';
 
 let astManager: ASTManager;
@@ -95,6 +95,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 vscode.env.openExternal(vscode.Uri.parse(url));
             }
         }),
+        vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', showFixGuidance),
     );
 
     fileWatcher = new FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);

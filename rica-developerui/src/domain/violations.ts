@@ -1,6 +1,16 @@
 export type ViolationSeverity = 'error' | 'warning' | 'info';
 
-import { AiInsights, AiQuickFix } from './ai';
+import type { AiInsights, AiQuickFix, AiQuickFixEdit } from './ai';
+
+export type FixSafety = 'auto-safe' | 'preview-required' | 'manual-design-required';
+
+export interface RemediationSuggestion {
+    title: string;
+    description: string;
+    safety: FixSafety;
+    steps: string[];
+    edits?: AiQuickFixEdit[];
+}
 
 export interface DiagnosticRange {
   start: { line: number; character: number };
@@ -50,6 +60,8 @@ export interface Violation {
     aiInsights?: AiInsights;
     /** Optional actionable fix proposed by the advisory pass */
     quickFix?: AiQuickFix;
+    /** Rule-based remediation generated from the violation context. */
+    remediationSuggestions?: RemediationSuggestion[];
 }
 
 export interface ViolationSummary {

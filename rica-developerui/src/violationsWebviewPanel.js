@@ -151,6 +151,7 @@ tr.clickable{cursor:pointer}
 .message-cell{max-width:400px;overflow:hidden;text-overflow:ellipsis}
 .file-cell{max-width:250px;overflow:hidden;text-overflow:ellipsis;font-family:var(--vscode-editor-font-family);font-size:11px}
 .hint-cell{max-width:300px;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:var(--vscode-descriptionForeground)}
+.muted{opacity:.75;font-size:10px;text-transform:uppercase}
 #notificationBar{display:none;padding:8px 16px;font-size:12px;border-bottom:1px solid var(--vscode-panel-border);align-items:center;gap:8px}
 #notificationBar.info{background:var(--vscode-editorInfo-background,#062);color:var(--vscode-editorInfo-foreground)}
 #notificationBar .msg{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -334,7 +335,10 @@ function renderTable() {
         if (!isIgnored && v.documentationUrl) {
             act += '<button class="action-btn docs" onclick="return openDocs(' + i + ')" title="Open documentation for this violation">\u266F Docs</button>';
         }
-        var mit = v.mitigationHint ? escapeAttr(v.mitigationHint) : (v.explanation ? escapeAttr(v.explanation) : '');
+        var fix = v.remediationSuggestions && v.remediationSuggestions.length ? v.remediationSuggestions[0] : null;
+        var mit = fix
+            ? '<strong>' + escapeAttr(fix.title) + '</strong><br><span class="muted">' + escapeAttr(fix.safety) + '</span> ' + escapeAttr(fix.description || '')
+            : (v.mitigationHint ? escapeAttr(v.mitigationHint) : (v.explanation ? escapeAttr(v.explanation) : ''));
         html += '<tr' + rowClass + '>';
         html += '<td><span class="' + cls + '">' + lbl + '</span></td>';
         html += '<td><span class="badge-source">' + escapeAttr(src) + '</span></td>';

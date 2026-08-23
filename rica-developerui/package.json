@@ -305,6 +305,7 @@
     "test:parser": "mocha --grep 'JavaParser' src/test/parser.test.js",
     "test:analyzers": "mocha --grep 'LayerAnalyzer|Multi-layer' src/test/analyzers.test.js",
     "test:crossfile": "mocha --grep 'CrossFile' src/test/crossFile.test.js",
+    "test:projects": "node scripts/verify-test-projects.js",
     "rica:check": "node src/ricaLayerCheck.js",
     "rica:check:self": "node src/ricaLayerCheck.js && node test-lms-analyzer.js",
     "ai:smoke": "node scripts/aiSmokeTest.js",

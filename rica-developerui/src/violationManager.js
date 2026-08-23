@@ -12,6 +12,7 @@ const designPatternAnalyzer_1 = require("./designPatternAnalyzer");
 const analyzerConfig_1 = require("./domain/analyzerConfig");
 const impactAnalyzer_1 = require("./impactAnalyzer");
 const violationCatalog_1 = require("./violationCatalog");
+const fixSuggestionEngine_1 = require("./fixSuggestionEngine");
 const MITIGATION_HINTS = {
     'self-instantiation': 'Use dependency injection (@Autowired/@Inject) instead of directly instantiating with new()',
     'uninjected-repository-access': 'Annotate the field with @Autowired or use constructor injection',
@@ -120,6 +121,7 @@ class ViolationManager {
         this.crossFileAnalyzer = new crossFileAnalyzer_1.CrossFileAnalyzer();
         this.packageBoundaryAnalyzer = new packageBoundaryDetector_1.PackageBoundaryAnalyzer(this.config);
         this.designPatternAnalyzer = new designPatternAnalyzer_1.DesignPatternAnalyzer(this.config);
+        this.fixSuggestionEngine = new fixSuggestionEngine_1.FixSuggestionEngine();
         if (initialIgnoredIds) {
             this.ignoredViolationIds = new Set(initialIgnoredIds);
         }
@@ -234,7 +236,7 @@ class ViolationManager {
             ...packageBoundaryViolations,
             ...dpViolations,
         ];
-        this.activeViolations = this.filterByConfig(this.deduplicate(merged));
+        this.activeViolations = this.withFixSuggestions(this.filterByConfig(this.deduplicate(merged)));
         this.refreshDiagnostics();
     }
     /**
@@ -293,8 +295,11 @@ class ViolationManager {
                 unifiedViolations.push(...dpViolations);
             }
         }
-        this.activeViolations = this.filterByConfig(this.deduplicate(unifiedViolations));
+        this.activeViolations = this.withFixSuggestions(this.filterByConfig(this.deduplicate(unifiedViolations)));
         this.refreshDiagnostics();
+    }
+    withFixSuggestions(violations) {
+        return this.fixSuggestionEngine.enrich(violations);
     }
     /**
      * File lifecycle: a .java file was deleted (or renamed away). Drop its AST

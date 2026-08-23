@@ -1,4 +1,4 @@
-import { ViolationSeverity } from './violations';
+import type { ViolationSeverity } from './violations';
 
 export type AiProviderKind = 'off' | 'ollama' | 'openai-compatible';
 export type AiTriggerKind = 'onDemand' | 'onSave' | 'onFullScan';
