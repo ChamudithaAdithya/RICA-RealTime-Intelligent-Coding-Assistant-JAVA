@@ -18,7 +18,6 @@
     "onLanguage:java",
     "onCommand:javaAstAnalyzer.analyzeProject",
     "onCommand:javaAstAnalyzer.analyzeCurrentFile",
-    "onCommand:javaAstAnalyzer.showAstView",
     "onCommand:javaAstAnalyzer.openBrowserViewer",
     "onCommand:javaAstAnalyzer.showStatus",
     "onCommand:javaAstAnalyzer.resetBackend",
@@ -40,10 +39,6 @@
       {
         "command": "javaAstAnalyzer.analyzeCurrentFile",
         "title": "Java AST: Analyze Current File"
-      },
-      {
-        "command": "javaAstAnalyzer.showAstView",
-        "title": "Java AST: Show AST Viewer"
       },
       {
         "command": "javaAstAnalyzer.openBrowserViewer",
