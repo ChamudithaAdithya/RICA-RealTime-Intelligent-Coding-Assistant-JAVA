@@ -4,7 +4,7 @@ import { AnalyzerConfig } from '../../domain/analyzerConfig';
 import { AiDecisionProvider } from '../ports/aiDecisionProvider';
 import { AiAuditLogger } from '../ports/aiAuditLogger';
 import { FullASTOutput } from '../../domain/astTypes';
-import { ProjectDependencyGraph } from '../../dependencyGraph';
+import type { ProjectDependencyGraph } from '../../dependencyGraph';
 import { triageAll } from './triage';
 import { buildContext } from './contextBuilder';
 import { runHeuristicAdvisor } from './heuristicAdvisor';

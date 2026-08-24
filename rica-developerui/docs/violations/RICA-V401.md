@@ -16,7 +16,7 @@
 
 A Controller directly calls, holds (has-a), or uses a Repository node in the project dependency graph instead of going through a Service.
 
-### Before (violates)
+### Violating example
 
 ```
 @RestController
@@ -31,7 +31,7 @@ public class OrderController {
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 @RestController
@@ -50,15 +50,49 @@ public class OrderController {
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+  @RestController
+  public class OrderController {
+-     @Autowired private OrderRepository orderRepository; // injects repo directly
++     private final OrderService orderService;
+
++     public OrderController(OrderService orderService) {
++         this.orderService = orderService;
++     }
++
+      @GetMapping("/orders/recent")
+      public List<Order> recent() {
+-         return orderRepository.findRecent(); // bypasses the service layer
++         return orderService.recentOrders(); // service owns persistence
+      }
+  }
+```
+
+
 ## Why it matters
 
 Controllers should only reach the persistence layer through services, which carry the business rules and transactional boundaries. A direct controller→repository edge lets HTTP concerns and data access bypass the domain entirely, leading to duplicated logic and inconsistent invariants.
 
 ## How to fix
 
-1. Move the repository call into a service method.
-2. Inject the service into the controller.
-3. Call the service from the controller and let it touch the repository.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Move the repository call into a service method.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+2. **Inject the service into the controller.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+3. **Call the service from the controller and let it touch the repository.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V401 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

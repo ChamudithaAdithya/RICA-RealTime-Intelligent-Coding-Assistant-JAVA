@@ -55,6 +55,22 @@ Every code the analyzers can emit, generated from the single source of truth `sr
 | [RICA-V305](./violations/RICA-V305.md) | Mutable Singleton | warning | any | `enableDesignPatternChecks` |
 | [RICA-V306](./violations/RICA-V306.md) | Raw Thread Spawn | error | any (outside @Configuration) | `enableDesignPatternChecks` |
 | [RICA-V307](./violations/RICA-V307.md) | Missing Abstraction | warning | any | `enableDesignPatternChecks` |
+| [RICA-V308](./violations/RICA-V308.md) | Leaking Construction Logic | warning | service / application | `enableDesignPatternChecks` |
+| [RICA-V309](./violations/RICA-V309.md) | Fat Interface | warning | interface | `enableDesignPatternChecks` |
+| [RICA-V310](./violations/RICA-V310.md) | Missing Command | warning | service | `enableDesignPatternChecks` |
+| [RICA-V311](./violations/RICA-V311.md) | Missing Prototype | warning | service / mapper | `enableDesignPatternChecks` |
+| [RICA-V312](./violations/RICA-V312.md) | Fragmented Factories | warning | factory | `enableDesignPatternChecks` |
+| [RICA-V313](./violations/RICA-V313.md) | Missing Decorator | warning | service / application | `enableDesignPatternChecks` |
+| [RICA-V314](./violations/RICA-V314.md) | Missing Composite | warning | domain / service | `enableDesignPatternChecks` |
+| [RICA-V315](./violations/RICA-V315.md) | Flyweight Missing | warning | any | `enableDesignPatternChecks` |
+| [RICA-V316](./violations/RICA-V316.md) | Scattered State Machine | warning | domain / service | `enableDesignPatternChecks` |
+| [RICA-V317](./violations/RICA-V317.md) | Duplicate Algorithm | warning | any | `enableDesignPatternChecks` |
+| [RICA-V318](./violations/RICA-V318.md) | Hardcoded Notifications | warning | service | `enableDesignPatternChecks` |
+| [RICA-V319](./violations/RICA-V319.md) | Monolithic Pipeline | warning | service / validator | `enableDesignPatternChecks` |
+| [RICA-V320](./violations/RICA-V320.md) | Service Locator | warning | any (outside @Configuration) | `enableDesignPatternChecks` |
+| [RICA-V321](./violations/RICA-V321.md) | Excessive Null Checks | warning | any | `enableDesignPatternChecks` |
+| [RICA-V322](./violations/RICA-V322.md) | Missing Proxy | warning | service / application (non-infrastructure) | `enableDesignPatternChecks` |
+| [RICA-V323](./violations/RICA-V323.md) | Missing Bridge | warning | any (abstract hierarchy) | `enableDesignPatternChecks` |
 
 ## Fallback
 

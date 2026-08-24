@@ -16,7 +16,7 @@
 
 A Controller method creates or calls a database access type (DataSource, JdbcTemplate, EntityManager, Connection, Statement, Session, SqlSession, etc.) directly.
 
-### Before (violates)
+### Violating example
 
 ```
 @RestController
@@ -30,7 +30,7 @@ public class OrderController {
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 @RestController
@@ -45,15 +45,59 @@ public class OrderController {
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+  @RestController
+  public class OrderController {
++     private final OrderRepository orderRepository;
++
+      @GetMapping("/orders/recent")
+      public List<Order> recent() {
+-         JdbcTemplate jt = new JdbcTemplate(dataSource);
+-         return jt.query("SELECT * FROM orders", rowMapper);
++         return orderRepository.findRecent();
+      }
+  }
+```
+
+
 ## Why it matters
 
 Controllers must never touch persistence directly. Database access bypasses the transactional/service layers, scatters SQL across the HTTP boundary, and makes query behavior untestable without the controller. All data access belongs in repositories.
 
+## Common framework cases
+
+### Raw SQL or JDBC appears outside repository/infrastructure
+
+**When you see this:** RICA sees SQL strings, `JdbcTemplate`, `Connection`, `PreparedStatement`, or `EntityManager` access in controller/service/domain code.
+
+**Do this:**
+
+1. Move the query into a repository method.
+2. Use Spring Data derived queries or `@Query` in the repository interface when appropriate.
+3. Let the service call a named repository method that describes the business intent.
+
+**Avoid:** Do not paste SQL into a service to avoid creating a repository method.
+
 ## How to fix
 
-1. Move the query/update into a repository method.
-2. Have a service call the repository.
-3. Inject the service into the controller.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Move the query/update into a repository method.**
+   This keeps persistence behind the correct boundary, so domain and presentation code do not depend on storage details.
+2. **Have a service call the repository.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+3. **Inject the service into the controller.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V114 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

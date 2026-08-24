@@ -16,7 +16,7 @@
 
 An API resource has a service field without injection, or a resource method `new`s a service/repository/infrastructure class or calls one through an uninjected reference.
 
-### Before (violates)
+### Violating example
 
 ```
 @RestController
@@ -30,7 +30,7 @@ public class ReportController {
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 @RestController
@@ -49,14 +49,61 @@ public class ReportController {
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+  @RestController
+  public class ReportController {
++     private final ReportService reportService;
++
++     public ReportController(ReportService reportService) {
++         this.reportService = reportService;
++     }
++
+      @GetMapping("/report")
+      public String report() {
+-         ReportService svc = new ReportService(); // hard-coded
+-         return svc.build();
++         return reportService.build();
+      }
+  }
+```
+
+
 ## Why it matters
 
 Resources must receive services through the DI container. Manual instantiation hard-codes concrete implementations, defeats mocking, and ties the HTTP layer to a specific construction path.
 
+## Common framework cases
+
+### Controller creates service with new
+
+**When you see this:** A controller method uses `new OrderService()` or `new PaymentServiceImpl()`.
+
+**Do this:**
+
+1. Register the service as a Spring bean with `@Service` or configuration.
+2. Inject it into the controller through the constructor.
+3. Remove direct construction from the endpoint method.
+
+**Avoid:** Do not make the service static/global to bypass dependency injection.
+
 ## How to fix
 
-1. Inject services via constructor or `@Autowired`.
-2. Never `new` a service inside a resource method.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Inject services via constructor or `@Autowired`.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+2. **Never `new` a service inside a resource method.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V205 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

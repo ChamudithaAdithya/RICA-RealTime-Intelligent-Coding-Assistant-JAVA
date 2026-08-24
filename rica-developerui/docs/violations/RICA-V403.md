@@ -18,7 +18,7 @@
 
 Tarjan SCC finds a true cycle among classes, or an inverted edge (a lower layer depending on a higher layer) appears when following `calls`/`has-a`/`uses` edges.
 
-### Before (violates)
+### Violating example
 
 ```
 // A depends on B, B depends on C, C depends on A
@@ -34,9 +34,20 @@ Circular dependencies make the code impossible to test in isolation, block other
 
 ## How to fix
 
-1. Break the cycle by extracting the shared members into a separate module/class.
-2. Introduce an interface in the lower layer and let the higher layer implement it.
-3. Apply the Dependency Inversion Principle so high-level policies do not depend on low-level details.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Break the cycle by extracting the shared members into a separate module/class.**
+   This keeps the code aligned with the cross-layer / graph responsibility expected by RICA-V403.
+2. **Introduce an interface in the lower layer and let the higher layer implement it.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+3. **Apply the Dependency Inversion Principle so high-level policies do not depend on low-level details.**
+   This keeps the code aligned with the cross-layer / graph responsibility expected by RICA-V403.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V403 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

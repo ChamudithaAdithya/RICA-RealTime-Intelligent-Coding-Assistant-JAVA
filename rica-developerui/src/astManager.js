@@ -50,6 +50,9 @@ class ASTManager {
     async analyzeFullProject(workspaceRoot, projectName, progressCallback, token) {
         const startTime = Date.now();
         const errors = [];
+        // A full scan is authoritative. Remove entries from prior scans so
+        // deleted or newly excluded files cannot be reintroduced from cache.
+        this.fileASTCache.clear();
         // Find all Java files
         const javaFiles = await this.sourceProvider.findJavaFiles(this.excludePatterns);
         this.outputChannel.appendLine(`Found ${javaFiles.length} Java files`);
@@ -128,12 +131,15 @@ class ASTManager {
             }
             return;
         }
+        const oldRelPath = oldFilePath
+            ? path.relative(workspaceRoot, oldFilePath)
+            : undefined;
+        if (changeType === 'renamed' && oldRelPath) {
+            this.fileASTCache.delete(oldRelPath);
+        }
         try {
             const ast = this.javaParser.parse(content, relativePath);
             this.fileASTCache.set(relativePath, ast);
-            const oldRelPath = oldFilePath
-                ? path.relative(workspaceRoot, oldFilePath)
-                : undefined;
             await this.backendService.sendFileChange(changeType, relativePath, ast, oldRelPath);
             this.outputChannel.appendLine(`${changeType.toUpperCase()}: ${relativePath} sent to backend`);
         }
@@ -157,6 +163,9 @@ class ASTManager {
         catch (error) {
             this.outputChannel.appendLine(`Error handling rename: ${error.message}`);
         }
+    }
+    setExcludePatterns(excludePatterns) {
+        this.excludePatterns = [...excludePatterns];
     }
     getCachedAST(filePath) {
         return this.fileASTCache.get(filePath);

@@ -237,6 +237,8 @@ export interface ObjectCreation {
   targetLayer?: string;
   /** True when the constructor argument subtree contains branching logic (ternary/conditional expressions). */
   hasBranching?: boolean;
+  /** True when the construction is executed inside a loop body (for/while/do/enhanced-for). */
+  insideLoop?: boolean;
 }
 
 export interface ImportInfo {
@@ -381,7 +383,7 @@ export interface ClassInfo {
   sourceFile: string;
   allExternalDependencies?: string[];
   methodCallGraph?: { [methodName: string]: MethodCall[] };
-  detectedLayer?: 'controller' | 'service' | 'repository' | 'dao' | 'entity' | 'dto' | 'config' | 'utility' | 'aspect' | 'view' | 'unknown';
+  detectedLayer?: 'controller' | 'service' | 'repository' | 'dao' | 'entity' | 'dto' | 'config' | 'utility' | 'aspect' | 'view' | 'infrastructure' | 'unknown';
   stereotypes?: string[];
   layerClassification?: LayerClassification;
   injectionStrategy?: 'field' | 'constructor' | 'setter' | 'mixed' | 'none';
@@ -394,6 +396,8 @@ export interface FullASTOutput {
   relationships: Relationship[];
   timestamp: number;
   filePath: string;
+  /** Map of lineNumber → suppressed RICA codes via `// rica-disable-next-line` or `/* rica-disable *\/` */
+  suppressedLines?: Record<number, string[]>;
 }
 
 export interface ASTProjectOutput {

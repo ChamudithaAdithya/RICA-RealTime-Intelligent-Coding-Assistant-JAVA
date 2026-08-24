@@ -12,6 +12,7 @@ const designPatternAnalyzer_1 = require("./designPatternAnalyzer");
 const analyzerConfig_1 = require("./domain/analyzerConfig");
 const impactAnalyzer_1 = require("./impactAnalyzer");
 const violationCatalog_1 = require("./violationCatalog");
+const fixSuggestionEngine_1 = require("./fixSuggestionEngine");
 const MITIGATION_HINTS = {
     'self-instantiation': 'Use dependency injection (@Autowired/@Inject) instead of directly instantiating with new()',
     'uninjected-repository-access': 'Annotate the field with @Autowired or use constructor injection',
@@ -120,16 +121,19 @@ class ViolationManager {
         this.crossFileAnalyzer = new crossFileAnalyzer_1.CrossFileAnalyzer();
         this.packageBoundaryAnalyzer = new packageBoundaryDetector_1.PackageBoundaryAnalyzer(this.config);
         this.designPatternAnalyzer = new designPatternAnalyzer_1.DesignPatternAnalyzer(this.config);
+        this.fixSuggestionEngine = new fixSuggestionEngine_1.FixSuggestionEngine();
         if (initialIgnoredIds) {
             this.ignoredViolationIds = new Set(initialIgnoredIds);
         }
         this.config = configProvider.getConfig();
         this.applyBusinessLogicThreshold();
         this.packageBoundaryAnalyzer.setConfig(this.config);
+        this.designPatternAnalyzer.setConfig(this.config);
         configProvider.onConfigChange(() => {
             this.config = configProvider.getConfig();
             this.applyBusinessLogicThreshold();
             this.packageBoundaryAnalyzer.setConfig(this.config);
+            this.designPatternAnalyzer.setConfig(this.config);
             this.update();
         });
     }
@@ -162,6 +166,20 @@ class ViolationManager {
     /** Re-creates diagnostics from cached violations, filtering out ignored ones. */
     refreshDiagnostics() {
         this.diagnosticReporter.report([...this.activeViolations, ...this.advisoryViolations], this.ignoredViolationIds);
+        this.onViolationsChanged?.();
+    }
+    setOnViolationsChanged(callback) {
+        this.onViolationsChanged = callback;
+    }
+    /**
+     * Clears stale diagnostics for the file currently being edited. Fresh
+     * violations are restored by the debounced parse/save analysis.
+     */
+    markFileDirty(filePath) {
+        this.activeViolations = this.activeViolations.filter(v => v.filePath !== filePath);
+        this.advisoryViolations = this.advisoryViolations.filter(v => v.filePath !== filePath);
+        this.diagnosticReporter.clearFile(filePath);
+        this.onViolationsChanged?.();
     }
     /**
      * Phase 5: Incremental delta pipeline for single-file changes.
@@ -174,6 +192,10 @@ class ViolationManager {
             newAst = this.parserService.parse(fileContent, filePath);
         }
         catch (e) {
+            // Parse failure (e.g. mid-edit syntax error): drop the file's AST from
+            // the cache so its previous violations do NOT linger as stale findings.
+            // The file re-enters analysis automatically once it parses again.
+            delete this.filesMap[filePath];
             this.update();
             return;
         }
@@ -181,6 +203,11 @@ class ViolationManager {
         const sigChanged = impactAnalyzer_1.ImpactAnalyzer.signatureChanged(oldAst, newAst);
         // 3. Update the AST cache
         this.filesMap[filePath] = newAst;
+        // A method-body edit can change calls, relationships, or design-pattern
+        // evidence without changing the public signature. Rebuild all derived
+        // state so cross-file findings never remain stale.
+        this.update();
+        return;
         // 4. Run Stage 1 (local) detectors on the changed file only
         const fileAsts = [newAst];
         const newLocalViolations = [
@@ -194,19 +221,10 @@ class ViolationManager {
         let packageBoundaryViolations = [];
         const affectedFiles = new Set();
         if (sigChanged) {
-            (0, dependencyGraph_1.patchGraphForFile)(this.graph, filePath, oldAst, newAst, this.filesMap);
-            impactAnalyzer_1.ImpactAnalyzer.updateMapsForFile(filePath, oldAst, newAst, this.filesMap, this.graphMaps);
-            const radius = impactAnalyzer_1.ImpactAnalyzer.computeBlastRadius(filePath, this.graphMaps);
-            for (const f of radius)
-                affectedFiles.add(f);
-            affectedFiles.add(filePath);
-            const scopedFiles = {};
-            for (const f of affectedFiles) {
-                const ast = this.filesMap[f];
-                if (ast)
-                    scopedFiles[f] = ast;
-            }
-            crossFileViolations = this.crossFileAnalyzer.analyze(this.graph, scopedFiles);
+            // Public signature changes can affect any dependent file. Rebuild all
+            // derived analysis state so local and cross-file findings stay aligned.
+            this.update();
+            return;
         }
         else {
             affectedFiles.add(filePath);
@@ -228,8 +246,23 @@ class ViolationManager {
             ...packageBoundaryViolations,
             ...dpViolations,
         ];
-        this.activeViolations = this.filterByConfig(merged);
+        this.activeViolations = this.withFixSuggestions(this.filterByConfig(this.deduplicate(merged)));
         this.refreshDiagnostics();
+    }
+    /**
+     * Global deduplication: the same underlying issue can be emitted by more than
+     * one detector (e.g. a local layer detector AND a graph rule both flag
+     * controller → repository access). Keep the first occurrence per stable key.
+     */
+    deduplicate(violations) {
+        const seen = new Set();
+        return violations.filter(v => {
+            const key = `${v.code || v.ruleName}|${v.filePath}|${v.lineNumber || 0}|${v.message}`;
+            if (seen.has(key))
+                return false;
+            seen.add(key);
+            return true;
+        });
     }
     update() {
         const allAsts = Object.values(this.filesMap);
@@ -272,8 +305,20 @@ class ViolationManager {
                 unifiedViolations.push(...dpViolations);
             }
         }
-        this.activeViolations = this.filterByConfig(unifiedViolations);
+        this.activeViolations = this.withFixSuggestions(this.filterByConfig(this.deduplicate(unifiedViolations)));
         this.refreshDiagnostics();
+    }
+    withFixSuggestions(violations) {
+        return this.fixSuggestionEngine.enrich(violations);
+    }
+    /**
+     * File lifecycle: a .java file was deleted (or renamed away). Drop its AST
+     * and every violation attributed to it so deleted files cannot keep
+     * reporting findings. Renames combine this with onFileSaved for the new path.
+     */
+    onFileDeleted(filePath) {
+        delete this.filesMap[filePath];
+        this.update();
     }
     /** Seeds the AST cache with pre-parsed data (called by the framework adapter after parsing). */
     seedCache(asts) {
@@ -353,6 +398,8 @@ class ViolationManager {
         ]);
         const architecturalSources = ['CrossFileAnalyzer', 'GraphAnalyzer', 'PackageBoundaryAnalyzer'];
         return violations.filter(v => {
+            if (this.isSuppressed(v))
+                return false;
             if (architecturalSources.includes(v.detectorSource) && !this.config.enableArchitecturalChecks) {
                 return false;
             }
@@ -365,10 +412,68 @@ class ViolationManager {
             return true;
         });
     }
+    isSuppressed(v) {
+        if (!v.code)
+            return false;
+        const suppressedCode = v.code;
+        const ast = this.filesMap[v.filePath];
+        if (!ast)
+            return false;
+        // Inline comment suppression: // rica-disable-next-line. The comment sits on
+        // the line immediately ABOVE the suppressed statement, so only a ±1 window
+        // is honored — wider windows silently hid unrelated violations.
+        const line = v.lineNumber || v.range?.start.line || 0;
+        for (let d = -1; d <= 1; d++) {
+            const suppressedForLine = ast.suppressedLines?.[line + d];
+            if (suppressedForLine && (suppressedForLine.includes('all') || suppressedForLine.includes(suppressedCode)))
+                return true;
+        }
+        // Annotation suppression: @SuppressWarnings("rica:V111") or "rica:all"
+        const code = suppressedCode;
+        const matchAnnotation = (anns) => {
+            if (!anns)
+                return false;
+            for (const a of anns) {
+                if (a.name !== 'SuppressWarnings')
+                    continue;
+                // If elements empty, parser didn't capture value — treat bare @SuppressWarnings as suppressing all rica codes (conservative)
+                const hasElements = a.elements && Object.keys(a.elements).length > 0;
+                if (!hasElements)
+                    return true;
+                const raw = JSON.stringify(a.elements || a).toLowerCase();
+                if (raw.includes('rica:all') || raw.includes('"all"'))
+                    return true;
+                // check for code substring e.g. v111
+                const num = code.match(/V\d{3}/)?.[0]?.toLowerCase();
+                if (num && raw.includes(num.toLowerCase()))
+                    return true;
+                if (raw.includes(code.toLowerCase()))
+                    return true;
+            }
+            return false;
+        };
+        for (const cls of ast.classes) {
+            const inClass = !v.lineNumber || (v.lineNumber >= (cls.startLine || 0) && v.lineNumber <= (cls.endLine || 999999));
+            if (!inClass)
+                continue;
+            if (matchAnnotation(cls.annotations))
+                return true;
+            for (const m of cls.methods) {
+                const inMethod = v.contextMetadata?.methodName ? m.name === v.contextMetadata.methodName : (v.lineNumber && v.lineNumber >= (m.startLine || 0) && v.lineNumber <= (m.endLine || 999999));
+                if (inMethod && matchAnnotation(m.annotations))
+                    return true;
+            }
+        }
+        return false;
+    }
     clear() {
         this.diagnosticReporter.clear();
         this.activeViolations = [];
         this.advisoryViolations = [];
+        this.filesMap = {};
+        this.graph = new dependencyGraph_1.ProjectDependencyGraph();
+        this.graphMaps = { dependencies: new Map(), dependents: new Map() };
+        this.onViolationsChanged?.();
     }
     buildClassAnnotationsMap() {
         const map = new Map();

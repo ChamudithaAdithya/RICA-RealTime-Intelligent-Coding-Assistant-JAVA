@@ -27,7 +27,7 @@ class OllamaAiAdapter {
         const body = {
             model: this.model,
             messages: (0, prompt_1.buildMessages)(context),
-            stream: false,
+            stream: true,
             format: 'json',
             options: { num_predict: this.options.maxTokensPerRequest, temperature: 0.2 },
         };
@@ -38,15 +38,42 @@ class OllamaAiAdapter {
         if (res.status < 200 || res.status >= 300) {
             throw new Error(`Ollama returned HTTP ${res.status}: ${res.body.slice(0, 200)}`);
         }
-        const json = JSON.parse(res.body);
-        const content = json.message?.content;
-        if (!content)
-            throw new Error('Ollama response had no message content');
-        return (0, parseDecisions_1.parseDecisions)(content);
+        return (0, parseDecisions_1.parseDecisions)(extractOllamaContent(res.body));
     }
     stripSlash(url) {
         return url.replace(/\/+$/, '');
     }
 }
 exports.OllamaAiAdapter = OllamaAiAdapter;
+/**
+ * Streaming responses are NDJSON: one object per line {...,"message":{"content":...},"done":false}.
+ * Accumulate the content deltas. Falls back to a single JSON object for layered gateways
+ * (e.g. tunnels/proxies) that buffer the stream into one non-streamed reply.
+ */
+function extractOllamaContent(body) {
+    const lines = body.split(/\r?\n/).filter(l => l.trim());
+    if (lines.length > 1) {
+        let content = '';
+        for (const line of lines) {
+            try {
+                const chunk = JSON.parse(line);
+                content += chunk.message?.content ?? '';
+                if (chunk.done)
+                    break;
+            }
+            catch {
+                // Non-JSON line — ignore (blank keepalives etc.).
+            }
+        }
+        if (content)
+            return content;
+    }
+    try {
+        const json = JSON.parse(body);
+        return json.message?.content ?? '';
+    }
+    catch {
+        return '';
+    }
+}
 //# sourceMappingURL=ollamaAiAdapter.js.map

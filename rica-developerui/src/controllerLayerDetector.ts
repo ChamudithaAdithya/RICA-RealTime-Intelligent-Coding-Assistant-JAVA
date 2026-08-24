@@ -35,7 +35,7 @@ export class ControllerLayerAnalyzer {
     'HttpClient', 'RestTemplate', 'WebClient', 'OkHttpClient', 'RestClient',
     'HttpURLConnection', 'URLConnection', 'CloseableHttpClient',
     'HttpClients', 'HttpResponse', 'HttpRequest', 'HttpPost', 'HttpGet',
-    'HttpPut', 'HttpDelete', 'HttpPatch', 'HttpEntity', 'HttpHeaders'
+    'HttpPut', 'HttpDelete', 'HttpPatch', 'HttpEntity'
   ];
   // File I/O types — controllers should not read/write files
   private fileIOPatterns = [
@@ -87,9 +87,14 @@ export class ControllerLayerAnalyzer {
           continue;
         }
 
+        // Only flag DI-related violations when the class is actually a
+        // Spring-managed bean. Plain Java controllers (no framework) legitimately
+        // construct their own dependencies and must not be flagged.
+        const isSpringManaged = this.isSpringManaged(cls);
+
         // Check field-level service/repository injection
         for (const field of cls.attributes) {
-          if (this.isServiceType(field.dataType) || this.isRepositoryType(field.dataType)) {
+          if (isSpringManaged && (this.isServiceType(field.dataType) || this.isRepositoryType(field.dataType))) {
             if (!field.isInjected) {
               violations.push({
                   type: 'uninjected-service-access',
@@ -133,7 +138,7 @@ export class ControllerLayerAnalyzer {
             // Skip standard library types (they look like services via suffix matching but aren't)
             const isStandardLib = /^(java\.|javax\.|jakarta\.|com\.sun\.|org\.apache\.|org\.springframework\.)/.test(targetFQCN);
 
-            if (!isStandardLib && ((isServiceByLayer || isServiceByName) || (isRepoByLayer || isRepoByName))) {
+            if (isSpringManaged && !isStandardLib && ((isServiceByLayer || isServiceByName) || (isRepoByLayer || isRepoByName))) {
               if (!call.receiverIsInjected) {
                 violations.push({
                   type: 'uninjected-service-access',
@@ -151,7 +156,7 @@ export class ControllerLayerAnalyzer {
                   explanation: 'Your controller method accesses a service or repository through a field or parameter that was not injected by the DI container. Relying on injection keeps your controller focused on HTTP concerns and leaves object wiring to the framework.'
                 });
               }
-            } else if (!isStandardLib && isInfrastructure && !call.receiverIsInjected) {
+            } else if (isSpringManaged && !isStandardLib && isInfrastructure && !call.receiverIsInjected) {
               // Infrastructure clients should also be injected
               violations.push({
                   type: 'uninjected-service-access',
@@ -184,17 +189,29 @@ export class ControllerLayerAnalyzer {
               });
             }
             if (this.isFileIOType(simpleName)) {
-              violations.push({
-                type: 'file-io',
-                message: `Controller method '${method.name}' performs file I/O via '${call.receiverVariableName || simpleName}' (${simpleName}). Move file operations to a dedicated service.`,
-                className: cls.fullyQualifiedName, methodName: method.name,
-                receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
-                range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
-                severity: 'error', filePath: ast.filePath,
-                explanation: 'Controllers should not read or write files. Extract file I/O operations into a service class that your controller injects.'
-              });
+              // Allowlist: thin wrappers for content-type sniffing, path resolution, or
+              // MultipartFile metadata access are legit in controller. MultipartFile is a
+              // Spring web abstraction — getSize/isEmpty/getContentType/getBytes/transferTo
+              // are the intended way to handle uploads and must not be flagged as file I/O.
+              const allowedFileMethods = new Set([
+                'probeContentType', 'getFile', 'toPath', 'getName', 'getOriginalFilename',
+                'getSize', 'isEmpty', 'getContentType', 'getBytes', 'transferTo',
+                'exists', 'isRegularFile', 'isDirectory', 'getFileName', 'toAbsolutePath',
+                'normalize', 'resolve', 'relativize', 'toUri', 'toFile',
+              ]);
+              if (!allowedFileMethods.has(call.calledMethodName)) {
+                violations.push({
+                  type: 'file-io',
+                  message: `Controller method '${method.name}' performs file I/O via '${call.receiverVariableName || simpleName}' (${simpleName}). Move file operations to a dedicated service.`,
+                  className: cls.fullyQualifiedName, methodName: method.name,
+                  receiverVariable: call.receiverVariableName, lineNumber: call.lineNumber,
+                  range: call.lineNumber ? { start: { line: call.lineNumber, character: call.column || 0 }, end: { line: call.lineNumber, character: (call.column || 0) + (call.calledMethodName?.length || 8) } } : undefined,
+                  severity: 'error', filePath: ast.filePath,
+                  explanation: 'Controllers should not read or write files. Extract file I/O operations into a service class that your controller injects.'
+                });
+              }
             }
-            if (this.isThreadType(simpleName)) {
+            if (this.isThreadType(simpleName) && this.isThreadManagementCall(call.calledMethodName)) {
               violations.push({
                 type: 'background-thread',
                 message: `Controller method '${method.name}' spawns or manages a thread via '${call.receiverVariableName || simpleName}' (${simpleName}). Use @Async or a TaskExecutor service instead.`,
@@ -229,6 +246,8 @@ export class ControllerLayerAnalyzer {
                   severity: 'error', filePath: ast.filePath,
                   explanation: 'Your controller should not directly call HTTP endpoints. Move HTTP client logic into a service or gateway class that your controller injects.'
                 });
+              } else if (this.isFileIOType(fqcnSimple) && this.isAllowedFileMethod(call.calledMethodName)) {
+                // Safe path/file metadata access is not file I/O.
               } else if (this.isFileIOType(fqcnSimple)) {
                 violations.push({
                   type: 'file-io',
@@ -239,7 +258,7 @@ export class ControllerLayerAnalyzer {
                   severity: 'error', filePath: ast.filePath,
                   explanation: 'Controllers should not read or write files. Extract file I/O operations into a service class that your controller injects.'
                 });
-              } else if (this.isThreadType(fqcnSimple)) {
+              } else if (this.isThreadType(fqcnSimple) && this.isThreadManagementCall(call.calledMethodName)) {
                 violations.push({
                   type: 'background-thread',
                   message: `Controller method '${method.name}' spawns or manages a thread via '${targetFQCN}'. Use @Async or a TaskExecutor service instead.`,
@@ -265,7 +284,7 @@ export class ControllerLayerAnalyzer {
           // Check object creations (self-instantiation)
           for (const creation of method.createdObjects) {
             const className = creation.className;
-            if (this.isServiceClassName(className) || this.isRepositoryClassName(className) || this.isInfrastructureClassName(className)) {
+            if (isSpringManaged && (this.isServiceClassName(className) || this.isRepositoryClassName(className) || this.isInfrastructureClassName(className))) {
               violations.push({
                   type: 'self-instantiation',
                   message: `Controller method '${method.name}' instantiates ${this.isServiceClassName(className) ? 'service' : this.isRepositoryClassName(className) ? 'repository' : 'infrastructure'} class '${className}' directly. Use dependency injection.`,
@@ -322,13 +341,16 @@ export class ControllerLayerAnalyzer {
 
           // Check for business logic in controller methods
           const businessLogicScore = method.body?.businessLogicScore ?? 0;
-          if (businessLogicScore >= this.businessLogicThreshold) { // Threshold for significant business logic
+          // Require a minimum method size (LOC) so simple validation like
+          // `if (input == null) throw` is not flagged as business logic.
+          const methodLoc = (method.endLine || method.startLine || 0) - (method.startLine || 0);
+          if (businessLogicScore >= this.businessLogicThreshold && methodLoc >= 5) { // Threshold for significant business logic
             violations.push({
               type: 'business-logic',
               message: `Controller method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer.`,
               className: cls.fullyQualifiedName,
               methodName: method.name,
-              lineNumber: method.body?.linesOfCode,
+              lineNumber: method.startLine,
               range: method.startLine ? {
                 start: { line: method.startLine, character: method.startColumn || 0 },
                 end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -456,6 +478,15 @@ export class ControllerLayerAnalyzer {
     return this.isRepositoryClassName(raw);
   }
 
+  /** True when the class is a Spring-managed bean (has a stereotype annotation). */
+  private isSpringManaged(cls: ClassInfo): boolean {
+    return cls.annotations?.some(a => {
+      const name = a.name;
+      return name === 'Controller' || name === 'RestController' || name === 'Component'
+        || name.endsWith('.Controller') || name.endsWith('.RestController') || name.endsWith('.Component');
+    }) ?? false;
+  }
+
   private isHttpClientType(typeName: string): boolean {
     const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
     return this.httpClientPatterns.some(p => raw === p || raw.endsWith('.' + p));
@@ -469,6 +500,19 @@ export class ControllerLayerAnalyzer {
   private isThreadType(typeName: string): boolean {
     const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
     return this.threadPatterns.some(p => raw === p || raw.endsWith('.' + p));
+  }
+
+  private isThreadManagementCall(methodName: string): boolean {
+    return /^(start|run|execute|submit|schedule|scheduleAtFixedRate|scheduleWithFixedDelay|invokeAll|invokeAny|supplyAsync|runAsync)$/i.test(methodName);
+  }
+
+  private isAllowedFileMethod(methodName: string): boolean {
+    return new Set([
+      'probeContentType', 'getFile', 'toPath', 'getName', 'getOriginalFilename',
+      'getSize', 'isEmpty', 'getContentType', 'getBytes', 'transferTo',
+      'exists', 'isRegularFile', 'isDirectory', 'getFileName', 'toAbsolutePath',
+      'normalize', 'resolve', 'relativize', 'toUri', 'toFile',
+    ]).has(methodName);
   }
 
   private isCacheType(typeName: string): boolean {

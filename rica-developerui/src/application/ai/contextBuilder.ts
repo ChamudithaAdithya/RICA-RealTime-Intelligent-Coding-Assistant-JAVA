@@ -2,7 +2,7 @@ import {
   AiCandidate, AiContextPayload, AiExecutionStep,
 } from '../../domain/ai';
 import { FullASTOutput, ClassInfo, Method } from '../../domain/astTypes';
-import { ProjectDependencyGraph } from '../../dependencyGraph';
+import type { ProjectDependencyGraph } from '../../dependencyGraph';
 import { hasSecurityAnnotation } from './triage';
 
 export interface ContextBuildOptions {

@@ -1,5 +1,6 @@
-import { FullASTOutput, ClassInfo, MethodCall, ObjectCreation, ImportInfo } from './astTypes';
+import { FullASTOutput, ClassInfo, Method, MethodCall, ObjectCreation, ImportInfo } from './astTypes';
 import { DiagnosticRange } from './types/violations';
+import { rawTypeName, simpleTypeName } from './detectorUtils';
 
 export interface EntityLayerViolation {
   type: 'business-logic' | 'direct-layer-access' | 'anemic-entity' | 'improper-data-access';
@@ -201,13 +202,13 @@ export class EntityLayerAnalyzer {
 
           // Check for business logic in entity methods
           const businessLogicScore = method.body?.businessLogicScore ?? 0;
-          if (businessLogicScore >= this.businessLogicThreshold) { // Lower threshold for entities as they should have minimal logic
+          if (businessLogicScore >= this.businessLogicThreshold && !this.isSelfContainedEntityBehavior(method)) {
             violations.push({
               type: 'business-logic',
               message: `Entity method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer or keeping entities as simple data containers.`,
               className: cls.fullyQualifiedName,
               methodName: method.name,
-              lineNumber: method.body?.linesOfCode,
+              lineNumber: method.startLine,
               range: method.startLine ? {
                 start: { line: method.startLine, character: method.startColumn || 0 },
                 end: { line: method.endLine || method.startLine, character: method.endColumn || (method.startColumn || 0) + 1 },
@@ -298,14 +299,12 @@ export class EntityLayerAnalyzer {
   }
 
   private isImproperDependency(typeName: string): boolean {
-    // Strip generics and array brackets
-    const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    const raw = rawTypeName(typeName);
     return this.isServiceClassName(raw) || this.isRepositoryClassName(raw) || this.isInfrastructureClassName(raw);
   }
 
   private getDependencyType(typeName: string): string {
-    // Strip generics and array brackets
-    const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    const raw = rawTypeName(typeName);
     if (this.isServiceClassName(raw)) return 'service';
     if (this.isRepositoryClassName(raw)) return 'repository';
     if (this.isInfrastructureClassName(raw)) return 'infrastructure';
@@ -321,8 +320,7 @@ export class EntityLayerAnalyzer {
   }
 
   private isRawSQLType(typeName: string): boolean {
-    // Strip generics and array brackets
-    const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
+    const raw = rawTypeName(typeName);
     return this.rawSQLPatterns.some(p => raw === p || raw.endsWith('.' + p));
   }
 
@@ -332,6 +330,29 @@ export class EntityLayerAnalyzer {
 
   private isEntityClassName(className: string): boolean {
     return this.entityPatterns.some(pattern => className.endsWith(pattern));
+  }
+
+  private isSelfContainedEntityBehavior(method: Method): boolean {
+    const persistenceWrites = method.body?.persistenceWrites || [];
+    if (persistenceWrites.length > 0) return false;
+
+    const createsImproperDependency = (method.createdObjects || []).some(creation =>
+      this.isImproperDependency(creation.className) || this.isRawSQLType(creation.className)
+    );
+    if (createsImproperDependency) return false;
+
+    const allowedLibraryTypes = new Set([
+      'String', 'BigDecimal', 'BigInteger', 'Math', 'Objects', 'Optional',
+      'LocalDate', 'LocalDateTime', 'Instant', 'Date', 'List', 'Set', 'Map', 'Collection',
+    ]);
+
+    return (method.calledMethods || []).every(call => {
+      const type = simpleTypeName(call.receiverType || call.targetClass || '');
+      if (!type) return true;
+      if (call.receiverVariableName === 'this') return true;
+      if (allowedLibraryTypes.has(type) || call.isLibraryCall) return true;
+      return !this.isImproperDependency(type) && !this.isRawSQLType(type);
+    });
   }
 
   private isAnemicEntity(cls: ClassInfo): boolean {

@@ -351,6 +351,58 @@ It covers:
 
 ---
 
+## Phase 13: Expanded Matrix — Creational & Structural (V311–V315)
+
+Extends the 10-rule design-pattern coverage to 15 across the four GoF families plus architecture smells.
+
+### What to implement
+- Parser (`rica-developerui/src/infrastructure/javaParser.ts`):
+  - Track loop context during object-creation extraction → `ObjectCreation.insideLoop` (`for`/`while`/`do`/enhanced-for depths). Feeds V315.
+- Analyzer (`rica-developerui/src/designPatternAnalyzer.ts`) new ruleType → code registrations:
+  - **V311 Missing Prototype / Deep-Copy Smell** (`warning`): within one method, `>=3` correlated copy pairs `a.setX(b.getX())` where `a`/`b` are distinct receiver variables of the same resolved type (setter/getter name correlation). Suggest a `clone()`/copy constructor → Prototype.
+  - **V312 Fragmented Concrete Factories** (`warning`): classes matching `*Factory` with `>=1` `new` of a product, no implemented factory interface, and `>=2` such factories in the project. Suggest a common Abstract Factory interface.
+  - **V313 Missing Decorator / Interceptor** (`warning`): business method (non-`@Configuration`) with `>=2` cross-cutting calls (`logger.info`, `metrics.increment`, `tracer.span`, audit…) interleaved with real business calls/persistence. Suggest AOP/Decorator.
+  - **V314 Missing Composite** (`warning`): method with a loop AND `>=2` `instanceof` checks in conditions (heterogeneous leaf/container handling). Suggest a uniform `Component` interface.
+  - **V315 Redundant Memory Footprint / Flyweight** (`warning`): `new ValueObject(...)` executed **inside** a loop/stream pipeline. Suggest reuse/immutable cache.
+- Config keys (defaults): `crossCuttingCallLimit`=2, `stateMachineClassLimit`=3, `notifierTargetLimit`=3, `guardClauseLimit`=5, `nullCheckLimit`=3, `templateMethodSimilarity`=0.8.
+
+### Why
+- Covers the five remaining GoF-family gaps (Prototype, Abstract Factory, Decorator, Composite, Flyweight) with AST + control-flow + loop-context mechanics already present in Phase 10's parser.
+
+---
+
+## Phase 14: Expanded Matrix — Behavioral (V316–V319)
+
+### What to implement (analyzer + existing AST data)
+- **V316 Scattered State Machine** (`warning`): hardcoded status/state enum equality checks (`getStatus() == PENDING`, `STATUS == …`) appearing across `>=3` distinct classes → flag each state-checking method; suggest encapsulating transitions in State objects.
+- **V317 Duplicate Algorithm Structure / Template Method** (`warning`): pairwise method comparison across classes — ordered `calledMethodName` sequence similarity `>=0.8` (LCS-based, sequence length `>=4`) with **differing** implementation targets (`receiverType`) at `>=1` position. Flag both methods; suggest extracting a Template Method.
+- **V318 Hardcoded Multi-Notifier** (`warning`): a single method directly invoking `>=3` distinct notification/audit services (`emailService`, `smsService`, `push`, `auditLog`) on a state change. Suggest Observer/event bus.
+- **V319 Monolithic Pipeline (Chain of Responsibility)** (`warning`): `>=5` consecutive guard-clause `if` statements at the top nesting level (validation/filter chain) in one method. Suggest a handler chain.
+
+---
+
+## Phase 15: Expanded Matrix — Architectural & Dependency (V320–V321)
+
+### What to implement
+- **V320 Service Locator Anti-Pattern** (`warning`): `ApplicationContext.getBean(...)`, `ServiceLocator.getInstance(...)` etc. invoked inside business logic (outside `@Configuration` classes). Suggest constructor/field DI.
+- **V321 Excessive Defensive Null Checking** (`warning`): method with `>=3` decision points whose condition tests `null`. Suggest `Optional`/Null Object/empty collections.
+
+---
+
+## Phase 16: Integration, Docs & Tests (V311–V321)
+
+### What to implement
+- `rica-developerui/package.json`: schema for the 6 new threshold settings under `javaAstAnalyzer.`
+- `rica-developerui/src/infrastructure/vscodeConfigProvider.ts` + `rica-developerui/src/domain/analyzerConfig.ts`: read/plumb the new thresholds.
+- `RICA_VIOLATION_LIST.md`: add V311–V321 rows (Codes defined 38 -> 49; live emitters 35 -> 46), severity/safeguard/trigger updates.
+- Extend `rica-developerui/src/test/designPattern.test.js` with a fixture per new rule (positive + key negative: clean copy via constructor, single factory, no cross-cutting calls, tree handling via polymorphism, loop with invariant hoisting, centralized state enum, divergent algorithms, single notifier, <5 guards, DI-only injection, single null check).
+
+### Verification gates
+- `npx tsc -p ./` clean
+- `npx mocha` all existing + new tests pass
+
+---
+
 ## Final recommendation
 This plan is designed to turn the repository into a true real-time intelligent assistant.
 The most important addition is the project-level dependency graph and incremental cross-file revalidation, because architectural and design-pattern violations almost always span multiple files.

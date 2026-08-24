@@ -13,7 +13,7 @@ exports.DEFAULT_AI_CONFIG = {
     aiAuditLogEnabled: true,
 };
 exports.DEFAULT_LAYER_BOUNDARIES = {
-    domain: { packages: ['**/domain/**', '**/entity/**', '**/dto/**', '**/enum/**'], allowedDeps: [] },
+    domain: { packages: ['**/domain/**', '**/entity/**', '**/dto/**', '**/enum/**', '**/model/**'], allowedDeps: [] },
     application: { packages: ['**/application/**', '**/service/**', '**/useCase/**'], allowedDeps: ['domain', 'infrastructure'] },
     infrastructure: { packages: ['**/infrastructure/**', '**/dao/**', '**/repository/**', '**/adapter/**', '**/config/**', '**/feign/**', '**/feignClient/**'], allowedDeps: ['domain', 'application'] },
     presentation: { packages: ['**/controller/**', '**/view/**', '**/ui/**', '**/presentation/**'], allowedDeps: ['domain', 'application'] },

@@ -16,7 +16,7 @@
 
 A file residing in layer A imports a type that lives in layer B, where B is not in A's `allowedDeps`. Example: an `application/` class importing a `presentation/` controller.
 
-### Before (violates)
+### Violating example
 
 ```
 // application/OrderService.java
@@ -29,7 +29,7 @@ public class OrderService {
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 // application/OrderService.java depends only inward
@@ -43,15 +43,83 @@ public class OrderService {
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+- // application/OrderService.java
+- import com.foo.presentation.UserController; // outer layer import — not allowed
++ // application/OrderService.java depends only inward
++ import com.foo.domain.model.Order;
+
+  @Service
+  public class OrderService {
+-     public void register(UserController controller) { ... }
++     public Order register(OrderRequest request) { ... }
+  }
++ // presentation/UserController.java calls the service (allowed direction)
+```
+
+
 ## Why it matters
 
 Package boundaries encode the architecture (Clean Architecture / Dependency Rule). Allowing an inner layer to depend on an outer one makes the dependency graph spiral outward and prevents the inner layer from being reused, extracted, or tested in isolation.
 
+## Common framework cases
+
+### Spring Data imports such as @Query, @Modifying, @Param
+
+**When you see this:** The highlighted import is `org.springframework.data.jpa.repository.Query`, `org.springframework.data.jpa.repository.Modifying`, `org.springframework.data.repository.query.Param`, or another repository-only Spring Data type.
+
+**Do this:**
+
+1. Check the package of the current file first. If it is an application/service class, move the annotated method into a repository interface under the repository/infrastructure layer.
+2. Let the service call that repository through constructor injection instead of owning `@Query` or `@Modifying` directly.
+3. If the current file is already a repository and RICA still reports V501 for the Spring framework import, treat the layer boundary config as too broad. Add/adjust framework-package allowances instead of moving the code.
+
+**Avoid:** Do not put JPA query annotations in controllers, services, DTOs, entities, or domain objects just to make the code convenient. They belong at the persistence boundary.
+
+### Controller annotations imported into service/domain code
+
+**When you see this:** The import is a Spring MVC/Web annotation such as `@RestController`, `@RequestMapping`, `@GetMapping`, `ResponseEntity`, or `HttpServletRequest`.
+
+**Do this:**
+
+1. Move request mapping, HTTP status, headers, and servlet objects back to the presentation/controller layer.
+2. Pass plain command/query DTOs or primitives into the service.
+3. Return a domain result or response DTO from the service, then convert it to HTTP response shape in the controller.
+
+**Avoid:** Do not make the service depend on HTTP classes. That makes the application layer impossible to reuse outside REST.
+
+### Repository/domain import from the wrong direction
+
+**When you see this:** An inner layer imports an outer-layer implementation, or a lower-level package imports an application/service package.
+
+**Do this:**
+
+1. Move shared contracts inward as interfaces or simple DTO/value types.
+2. Implement those contracts outward in infrastructure or presentation.
+3. Inject the inward-facing interface where the dependency is needed.
+
+**Avoid:** Do not fix this by simply adding the outer layer to `allowedDeps` unless the architecture rule itself is wrong for your project.
+
 ## How to fix
 
-1. Move the type that is being depended on toward the inner layer, or depend on its interface.
-2. Invert the dependency so the outer layer depends on the inner one.
-3. Adjust `layerBoundaries.allowedDeps` only when the boundary definition itself is wrong.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Move the type that is being depended on toward the inner layer, or depend on its interface.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+2. **Invert the dependency so the outer layer depends on the inner one.**
+   This keeps the code aligned with the package / top-level layer responsibility expected by RICA-V501.
+3. **Adjust `layerBoundaries.allowedDeps` only when the boundary definition itself is wrong.**
+   This keeps the code aligned with the package / top-level layer responsibility expected by RICA-V501.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V501 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

@@ -39,9 +39,14 @@ export class ServiceLayerAnalyzer {
           continue;
         }
 
+        // Only flag DI-related violations when the class is actually a
+        // Spring-managed bean. Plain Java services (no framework) legitimately
+        // construct their own dependencies and must not be flagged.
+        const isSpringManaged = this.isSpringManaged(cls);
+
         // Check field-level repository injection
         for (const field of cls.attributes) {
-          if (this.isRepositoryType(field.dataType) && !field.isInjected) {
+          if (isSpringManaged && this.isRepositoryType(field.dataType) && !field.isInjected) {
             violations.push({
               type: 'uninjected-repository-access',
               message: `Service class '${cls.className}' has uninjected repository field '${field.name}' of type ${field.dataType}. Annotate with @Autowired/@Inject/@Resource.`,
@@ -74,11 +79,13 @@ export class ServiceLayerAnalyzer {
             // Check if target is a repository or infrastructure
             const targetInfo = this.classMap.get(targetFQCN);
             const targetLayer = this.classLayers.get(targetFQCN);
+            // Entity/DTO/model targets are domain objects, never "infrastructure clients"
+            const isDomainTarget = targetLayer === 'entity' || targetLayer === 'dto' || targetLayer === 'domain' || targetLayer === 'unknown';
             const isRepoByLayer = targetLayer === 'repository' || targetLayer === 'dao';
-            const isRepoByName = this.isRepositoryClassName(targetFQCN.split('.').pop() || '');
-            const isInfrastructure = this.isInfrastructureClassName(targetFQCN.split('.').pop() || '');
+            const isRepoByName = !isDomainTarget && this.isRepositoryClassName(targetFQCN.split('.').pop() || '');
+            const isInfrastructure = !isDomainTarget && this.isInfrastructureClassName(targetFQCN.split('.').pop() || '');
 
-            if (isRepoByLayer || isRepoByName) {
+            if (isSpringManaged && (isRepoByLayer || isRepoByName)) {
               if (!call.receiverIsInjected) {
                 violations.push({
                   type: 'uninjected-repository-access',
@@ -96,7 +103,7 @@ export class ServiceLayerAnalyzer {
                   explanation: 'Your service method accesses a repository through an uninjected field or parameter. The framework should supply this dependency so your service stays decoupled from how the repository is created or configured, and so you can easily swap in mocks during testing.'
                 });
               }
-            } else if (isInfrastructure && !call.receiverIsInjected) {
+            } else if (isSpringManaged && isInfrastructure && !call.receiverIsInjected) {
               // Infrastructure clients should also be injected
               violations.push({
                   type: 'uninjected-repository-access',
@@ -119,7 +126,11 @@ export class ServiceLayerAnalyzer {
           // Check object creations (self-instantiation)
           for (const creation of method.createdObjects) {
             const className = creation.className;
-            if (this.isRepositoryClassName(className) || this.isInfrastructureClassName(className)) {
+            // Entities/DTOs created via new are domain object construction, not DI bypass
+            const createdFqcn = this.resolveTypeName(className, ast.imports, ast.packageInfo?.name);
+            const createdLayer = createdFqcn ? this.classLayers.get(createdFqcn) : undefined;
+            const isDomainCreation = createdLayer === 'entity' || createdLayer === 'dto' || createdLayer === 'domain';
+            if (isSpringManaged && !isDomainCreation && (this.isRepositoryClassName(className) || this.isInfrastructureClassName(className))) {
               violations.push({
                   type: 'self-instantiation',
                   message: `Service method '${method.name}' instantiates ${this.isRepositoryClassName(className) ? 'repository' : 'infrastructure'} class '${className}' directly. Use dependency injection.`,
@@ -229,14 +240,24 @@ export class ServiceLayerAnalyzer {
     return this.isRepositoryClassName(raw);
   }
 
+  /** True when the class is a Spring-managed bean (has a stereotype annotation). */
+  private isSpringManaged(cls: ClassInfo): boolean {
+    return cls.annotations?.some(a => {
+      const name = a.name;
+      return name === 'Service' || name === 'Component' || name === 'Repository'
+        || name.endsWith('.Service') || name.endsWith('.Component') || name.endsWith('.Repository');
+    }) ?? false;
+  }
+
   private isAnemicService(cls: ClassInfo): boolean {
     if (cls.classType !== 'class') {
       return false;
     }
     const concrete = cls.methods.filter(m => m.methodType !== 'abstract' && m.methodType !== 'native');
-    // An empty (marker-only) service has no business logic by definition.
+    // Marker and lifecycle-only services do not provide enough evidence for
+    // an anemic-service finding.
     if (concrete.length === 0) {
-      return true;
+      return false;
     }
     // Require multiple methods before calling it anemic to avoid noise on thin 1-method pass-throughs.
     if (concrete.length < 2) {

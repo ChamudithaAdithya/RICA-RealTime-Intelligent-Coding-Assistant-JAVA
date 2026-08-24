@@ -14,8 +14,8 @@ Verified against `src/violationManager.ts`, `src/designPatternAnalyzer.ts`, `src
 
 | Metric | Count |
 |---|---|
-| Codes defined | **38** (V101–V104, V106–V114, V201–V207, V300–V310, V400–V404, V501, V000) |
-| Codes with a live emitter | **35** (31 + V104, V109, V202, V203, V207, V308, V309, V310) |
+| Codes defined | **51** (V101–V104, V106–V114, V201–V207, V300–V323, V400–V404, V501, V000) |
+| Codes with a live emitter | **48** (31 + V104, V109, V202, V203, V207, V308–V323) |
 | Codes declared but never emitted (dead) | **0** |
 | Fallback codes | **3** (V000, V300, V400) |
 | Detectors | **7** |
@@ -108,6 +108,19 @@ Safeguards:
 | V308 | Leaking Construction Logic | `warning` | Business method performs >N construction statements in one `new` OR construction contains branching (ternary) logic (skips builders/anonymous) | ✅ |
 | V309 | Fat Interface (ISP) | `warning` | Project interface declares >N methods OR clients use <50% of declared methods (usage ratio) | ✅ |
 | V310 | Missing Command Pattern | `warning` | Method sequences ≥2 persistence writes at cyclomatic ≥6 (skips `@Transactional`) | ✅ |
+| V311 | Missing Prototype / Deep-Copy Smell | `warning` | Method contains ≥3 correlated copy pairs `a.setX(b.getX())` (distinct receivers, same resolved type) | ✅ |
+| V312 | Fragmented Factories | `warning` | ≥2 classes each expose a single no-arg `create()` returning the same type (should centralize into one Abstract Factory) | ✅ |
+| V313 | Missing Decorator | `warning` | Method performs cross-cutting concerns (logging `Logger.*` / `AuditLogService.*` / `TransactionTemplate.*` calls) interleaved with a domain operation | ✅ |
+| V314 | Missing Composite | `warning` | Block with loop + nested `instanceof` type-checks on a common variable (should use Composite + polymorphism) | ✅ |
+| V315 | Flyweight Missing | `warning` | Immutable value object (`*Money*`, `*Currency*`, `*Config*`, `*Setting*`) constructed inside a loop | ✅ |
+| V316 | Scattered State Machine | `warning` | ≥3 classes each branch on the same enum status value (state logic scattered; should centralize in State pattern) | ✅ |
+| V317 | Duplicate Algorithm | `warning` | 2+ methods share ≥50% call-sequence with the same slot types but different receiver types (template-method smell) | ✅ |
+| V318 | Hardcoded Notifications | `warning` | Method directly invokes ≥3 notifier targets (email/SMS/push/AuditLog) instead of a single Observer-based publisher | ✅ |
+| V319 | Monolithic Validation Pipeline | `warning` | Method contains ≥5 guard clauses (null/empty/negative) before the real logic (should use Chain of Responsibility) | ✅ |
+| V320 | Service Locator | `warning` | `*Service`/`*Controller` outside `@Configuration` calls `getBean()` / `getService()` / service-locator lookup | ✅ |
+| V321 | Excessive Defensive Null Checking | `warning` | Method has ≥3 decision points whose condition tests `null` (should use `Optional`/Null Object) | ✅ |
+| V322 | Missing Proxy | `warning` | Non-infrastructure method directly `new`s or accesses heavy resource (`EntityManager`, `DataSource`, `Socket`, `RemoteService`, etc.) without Proxy/wrapper | ✅ |
+| V323 | Missing Bridge | `warning` | Abstract parent has ≥4 concrete subclasses with combinatorial naming (e.g., `RedSquare`/`BlueSquare`/`RedCircle`/`BlueCircle`) → decouple via composition | ✅ |
 | V300 | *(fallback)* | — | Any unmapped design-pattern ruleType → V300 | ⚠️ fallback |
 
 Safeguards:
@@ -117,6 +130,19 @@ Safeguards:
 - V308 skips `*Builder*` / `.withX()` cascades and anonymous `Thread`/`Runnable`; counts nested `new`/compound args and flags ternaries inside the construction
 - V309 flags by declared-method count (>N) or usage ratio (<50% of declared methods actually referenced by clients); requires ≥4 declared methods for the ratio branch
 - V310 exempts `@Transactional` methods
+- V311 requires both receivers resolved to the same type and the setter/getter names to correlate (`getName`→`setName`, strip `get`/`set` prefixes)
+- V312 only considers no-arg `create()`/typed factory methods; treats same-type per-factory as intentional dedup
+- V313 ignores cross-cutting calls that are the only statement in a method (would be noise); counts `Logger.*`/`AuditLogService.*`/`TransactionTemplate.*`/`NotificationService`/`EmailService`/`SmsService` receivers
+- V314 requires loop + nested `instanceof` on a shared variable; skips primitive/primitives wrappers
+- V315 restricts to immutable value-object type names (`Money`, `Currency`, `Config`, `Setting` families)
+- V316 requires ≥3 distinct classes branching on the same enum accessor (`getStatus()`/`getState()` → `.getValue()`); skips `switch`/`if` on same local variable (may be legitimate)
+- V317 matches call sequences via `sequenceSimilarity` (LCS-based, threshold 0.8); requires differing receiver types to avoid flagging identical straight-line wrappers
+- V318 counts distinct public notifier method targets; takes max per method
+- V319 counts guard clauses among decision points; skips `@Configuration` classes
+- V320 skips classes annotated `@Configuration` and code-behind `getBean` calls on the DI container
+- V321 counts decision points whose condition tests `null`; skips `null` checks <3
+- V322 skips `infrastructure` and `@Configuration` classes; requires heavy resource type (`EntityManager`, `DataSource`, `Socket`, etc.) and absence of proxy wrapper (infra interface or `@Proxy`/`@Lazy`); checks both `createdObjects` and sensitive `getConnection`/`open`/`connect` calls
+- V323 groups concrete subclasses by abstract parent; requires ≥4 children with combinatorial naming (≥2 orthogonal dimensions each with ≥2 values, or repeated prefix+suffix affixes); reports once per abstract parent
 
 ---
 
@@ -125,6 +151,11 @@ Safeguards:
 | Severity | Codes |
 |---|---|
 | **error** | V101, V102, V103, V110, V111, V114, V107, V109, V205, V301, V304, V306, V401, V403, V501 |
+| **warning** | V104, V106, V112, V113, V108†, V201, V202, V203, V204, V207, V302, V303, V305, V307, V308, V309, V310, V311, V312, V313, V314, V315, V316, V317, V318, V319, V320, V321, V322, V323, V402, V404 |
+| **info** | V108‡, V206 |
+
+† V108 is `info` in EntityLayerDetector
+‡ V108 as emitted by EntityLayerDetector is `info`
 | **warning** | V104, V106, V112, V113, V201, V202, V203, V204, V207, V302, V303, V305, V307, V402, V404 |
 | **info** | V108, V206 |
 
@@ -154,6 +185,19 @@ Safeguards:
 | V309 | `interface AllInOne {` with 12 unrelated methods |
 | V309b | `interface PaymentWriter {` with 5 methods where clients call only 1 (usage ratio <50%) |
 | V310 | Complex service method that calls `repo.save()`, `repo.deleteById()` in sequence without `@Transactional` |
+| V311 | `Order to = new Order(); to.setId(from.getId()); to.setName(from.getName()); to.setQty(from.getQty());` (≥3 pairs) |
+| V312 | `SqlOrderFactory.create()` + `MongoOrderFactory.create()` each returning `Order` |
+| V313 | `logger.info("start"); repo.save(o); logger.info("end");` inside one service method |
+| V314 | `for (...) { if (node instanceof Folder) { if (child instanceof FileItem) { … } } }` |
+| V315 | `for (Row r : rows) { Money m = new Money(r.amount, "USD"); }` |
+| V316 | 3 classes each doing `if (o.getStatus() == PENDING)` |
+| V317 | Two report classes with identical `open(); header(); body(); footer(); close();` call sequence on different writer types |
+| V318 | Method calling `emailService.send(o)`, `smsService.send(o)`, `auditLogService.record(o)` |
+| V319 | `validate(Order)` with 5+ `if (x == null) throw …` guard clauses |
+| V320 | `OrderRepository r = ctx.getBean(OrderRepository.class);` outside `@Configuration` |
+| V321 | Method with 3+ `if (o.user.name == null)` style null checks |
+| V322 | `DataSource ds = new DataSource(...); ds.getConnection();` inside `service/` method |
+| V323 | `abstract Shape` with `RedSquare`, `BlueSquare`, `RedCircle`, `BlueCircle` |
 | V401 | Controller injects `UserRepository` and calls `.findById()` |
 | V501 | `application/OrderService.java` does `import com.foo.presentation.UserController;` |
 | V403 | `A depends on B, B depends on C, C depends on A` |

@@ -39,6 +39,14 @@ export class PackageBoundaryAnalyzer {
     if (!boundaries) return violations;
 
     const layers = Object.keys(boundaries);
+    const classesByName = new Map<string, string[]>();
+    for (const ast of astOutputs) {
+      for (const cls of ast.classes || []) {
+        const existing = classesByName.get(cls.className) || [];
+        existing.push(cls.fullyQualifiedName);
+        classesByName.set(cls.className, existing);
+      }
+    }
 
     for (const fileAst of astOutputs) {
       const filePath = fileAst.filePath || '';
@@ -76,6 +84,33 @@ export class PackageBoundaryAnalyzer {
           });
         }
       }
+
+      // Imports are insufficient for same-package references and wildcard
+      // imports. Relationships carry the resolved usage site when available.
+      for (const relationship of fileAst.relationships || []) {
+        if (!fileAst.classes.some(cls => cls.fullyQualifiedName === relationship.sourceId)) continue;
+        const targetFqn = this.resolveRelationshipTarget(
+          relationship.targetId,
+          fileAst.packageInfo?.name || '',
+          classesByName,
+        );
+        if (!targetFqn) continue;
+        const targetLayer = this.matchLayerByFqn(targetFqn, boundaries, layers);
+        if (!targetLayer || targetLayer === fileLayer) continue;
+        const allowed = boundaries[fileLayer].allowedDeps;
+        if (allowed.includes(targetLayer)) continue;
+        violations.push({
+          type: 'package-violation',
+          message: `Layer '${fileLayer}' should not depend on layer '${targetLayer}'. Allowed deps: [${allowed.join(', ')}]`,
+          className: filePath,
+          filePath,
+          lineNumber: relationship.metadata?.line,
+          severity: 'error',
+          sourceLayer: fileLayer,
+          targetLayer,
+          targetType: targetFqn,
+        });
+      }
     }
 
     return this.deduplicate(violations);
@@ -99,15 +134,28 @@ export class PackageBoundaryAnalyzer {
 
   private matchLayerByFqn(fqn: string, boundaries: Record<string, LayerBoundary>, layers: string[]): string | null {
     const pkgPath = fqn.replace(/\./g, '/');
+    // Prefer the MOST SPECIFIC layer match (longest matching package pattern).
+    // This avoids false cross-layer violations when packages overlap, e.g. a class
+    // in `com.example.domain` importing `com.example.domain.dto` — both match the
+    // `domain` pattern `**/domain/**` AND the `dto` pattern `**/dto/**`. The longest
+    // pattern wins so `domain.dto` is classified as `dto`, not `domain`.
+    let bestLayer: string | null = null;
+    let bestPatternLen = -1;
     for (const layer of layers) {
       const boundary = boundaries[layer];
       for (const pattern of boundary.packages) {
         if (this.globMatch(pkgPath, pattern) || this.globMatch('/' + pkgPath, pattern)) {
-          return layer;
+          // Use the pattern's literal length (after stripping glob chars) as a
+          // specificity proxy — longer = more specific.
+          const specificity = pattern.replace(/\*\*/g, '').replace(/\*/g, '').length;
+          if (specificity > bestPatternLen) {
+            bestPatternLen = specificity;
+            bestLayer = layer;
+          }
         }
       }
     }
-    return null;
+    return bestLayer;
   }
 
   private globMatch(path: string, pattern: string): boolean {
@@ -134,9 +182,28 @@ export class PackageBoundaryAnalyzer {
     });
   }
 
+  private resolveRelationshipTarget(
+    targetId: string,
+    ownPackage: string,
+    classesByName: Map<string, string[]>,
+  ): string | null {
+    const normalized = targetId.replace(/<.*>/g, '').trim();
+    if (!normalized) return null;
+    if (normalized.includes('.')) return normalized;
+    const samePackage = classesByName.get(normalized)?.filter(fqn =>
+      fqn.substring(0, fqn.lastIndexOf('.')) === ownPackage
+    ) || [];
+    if (samePackage.length === 1) return samePackage[0];
+    const candidates = classesByName.get(normalized) || [];
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+
   toUnifiedViolations(layerViolations: LayerBoundaryViolation[]): Violation[] {
+    // Deterministic ID: same violation always produces the same ID so that
+    // "ignore" persists across analysis runs (Date.now()/random() made IDs
+    // unstable and ignored findings reappeared on every re-analysis).
     return layerViolations.map(v => ({
-      id: `rica-v501-${v.className}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: `RICA-V501-${v.filePath}-${v.lineNumber || 0}-${v.sourceLayer}-${v.targetLayer}-${v.targetType}`,
       ruleName: 'Package Boundary Violation',
       severity: v.severity,
       message: v.message,

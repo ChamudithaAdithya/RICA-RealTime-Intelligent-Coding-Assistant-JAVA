@@ -19,8 +19,9 @@ import { AiAdvisoryCoordinator } from './application/ai/aiAdvisoryCoordinator';
 import { OllamaAiAdapter } from './infrastructure/ai/ollamaAiAdapter';
 import { OpenAICompatibleAiAdapter } from './infrastructure/ai/openaiCompatibleAiAdapter';
 import { FileAuditLogger } from './infrastructure/ai/fileAuditLogger';
-import { AiQuickFixCodeActionProvider } from './codeActionProvider';
+import { AiQuickFixCodeActionProvider, showFixGuidance } from './codeActionProvider';
 import { DocumentationCodeActionProvider } from './documentationCodeActionProvider';
+import { openRicaDocumentation } from './documentation';
 
 let astManager: ASTManager;
 let sourceProvider: SourceProvider;
@@ -91,10 +92,9 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     context.subscriptions.push(
         vscode.commands.registerCommand('javaAstAnalyzer.openDocumentation', (url?: string) => {
-            if (url) {
-                vscode.env.openExternal(vscode.Uri.parse(url));
-            }
+            return openRicaDocumentation(context.extensionUri, url);
         }),
+        vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', showFixGuidance),
     );
 
     fileWatcher = new FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
@@ -104,6 +104,9 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('javaAstAnalyzer')) {
                 outputChannel.appendLine('Configuration changed — re-analyzing...');
+                astManager.setExcludePatterns(
+                    vscode.workspace.getConfiguration('javaAstAnalyzer').get<string[]>('excludePatterns', [])
+                );
                 aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
                 violationManager.update();
                 runAiAdvisory();
@@ -143,7 +146,13 @@ export async function activate(context: vscode.ExtensionContext) {
             ViolationsWebviewPanel.createOrShow(context.extensionUri, violationManager);
         }),
 
-        vscode.commands.registerCommand('javaAstAnalyzer.openBrowserViewer', () => {
+        vscode.commands.registerCommand('javaAstAnalyzer.openBrowserViewer', async () => {
+            const isHealthy = await apiClient.checkHealth();
+            if (!isHealthy) {
+                vscode.window.showWarningMessage('Backend server is not reachable. The browser AST viewer is unavailable in offline mode.');
+                updateStatusBar('disconnected');
+                return;
+            }
             const url = `${backendUrl}/view`;
             vscode.env.openExternal(vscode.Uri.parse(url));
         }),

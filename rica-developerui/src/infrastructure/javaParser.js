@@ -102,13 +102,15 @@ class JavaParser {
                 }
             }
         }
+        const suppressedLines = this.extractSuppressedLines(sourceCode);
         return {
             packageInfo,
             classes,
             imports,
             relationships,
             timestamp: Date.now(),
-            filePath
+            filePath,
+            suppressedLines
         };
     }
     createEmptyPackageInfo(filePath) {
@@ -655,9 +657,40 @@ class JavaParser {
     extractEnumConstructor(enumName) {
         return `private ${enumName}() {}`; // Simplified, would need to extract actual constructor params
     }
+    /**
+     * Enum bodies may also contain methods (e.g. `SIZE { int value(); int getValue() { return value; } }`).
+     * Return the declared method names so enum behavior is no longer silently
+     * dropped from analysis.
+     */
     extractEnumMethods(node) {
-        // Extract methods defined in enum
-        return [];
+        const methods = [];
+        // Enum body has zero or more classBodyDeclarations, each of which may
+        // contain classMemberDeclarations that are methodDeclarations.
+        const enumBody = node?.children?.enumBody?.[0];
+        if (!enumBody?.children?.classBodyDeclaration)
+            return methods;
+        const classBodyDecls = enumBody.children.classBodyDeclaration || [];
+        for (const cbd of classBodyDecls) {
+            const classMemberDecls = cbd?.children?.classMemberDeclaration || [];
+            for (const cmd of classMemberDecls) {
+                if (cmd?.children?.methodDeclaration) {
+                    const md = cmd.children.methodDeclaration[0];
+                    const name = this.extractMethodNameFromDeclaration(md);
+                    if (name && !methods.includes(name))
+                        methods.push(name);
+                }
+            }
+        }
+        return methods;
+    }
+    /** Pulls the method name from a methodDeclaration for enum bodies. */
+    extractMethodNameFromDeclaration(md) {
+        if (md?.children?.methodHeader?.[0]?.children?.methodDeclarator?.[0]?.children?.Identifier) {
+            const id = md.children.methodHeader[0].children.methodDeclarator[0].children.Identifier[0];
+            return id.image || '';
+        }
+        // Reuse the standard header name extraction as a fallback.
+        return this.getMethodName(md?.children?.methodHeader?.[0]);
     }
     processNormalInterface(nid, classes, relationships, sourceCode) {
         const interfaceName = this.getTypeIdentifier(nid);
@@ -713,70 +746,9 @@ class JavaParser {
             attributes: [],
             constructors: [],
             methods: [
-                // Abstract methods
-                ...abstractMethods.map(m => ({
-                    name: m,
-                    accessModifier: 'public',
-                    nonAccessModifiers: ['abstract'],
-                    returnType: 'void',
-                    parameters: [],
-                    genericTypeParams: [],
-                    throwsExceptions: [],
-                    methodType: 'abstract',
-                    overrides: undefined,
-                    overloads: [],
-                    isVarArgs: false,
-                    isBridge: false,
-                    isSynthetic: false,
-                    annotations: [],
-                    body: { linesOfCode: 0, localVariables: [], callsThis: false, callsSuper: false, returnsValue: false },
-                    memoryBehavior: { stackFrame: 'pushed on call, popped on return', localVarsOnStack: true },
-                    calledMethods: [],
-                    createdObjects: []
-                })),
-                // Default methods
-                ...defaultMethods.map(dm => ({
-                    name: dm.name,
-                    accessModifier: 'public',
-                    nonAccessModifiers: ['default'],
-                    returnType: 'void',
-                    parameters: [],
-                    genericTypeParams: [],
-                    throwsExceptions: [],
-                    methodType: 'default',
-                    overrides: undefined,
-                    overloads: [],
-                    isVarArgs: false,
-                    isBridge: false,
-                    isSynthetic: false,
-                    annotations: [],
-                    javaDocComment: dm.body,
-                    body: { linesOfCode: 1, localVariables: [], callsThis: false, callsSuper: false, returnsValue: false },
-                    memoryBehavior: { stackFrame: 'pushed on call, popped on return', localVarsOnStack: true },
-                    calledMethods: [],
-                    createdObjects: []
-                })),
-                // Static methods
-                ...staticMethods.map(sm => ({
-                    name: sm.name,
-                    accessModifier: 'public',
-                    nonAccessModifiers: ['static'],
-                    returnType: 'void',
-                    parameters: [],
-                    genericTypeParams: [],
-                    throwsExceptions: [],
-                    methodType: 'static',
-                    overrides: undefined,
-                    overloads: [],
-                    isVarArgs: false,
-                    isBridge: false,
-                    isSynthetic: false,
-                    annotations: [],
-                    body: { linesOfCode: 1, localVariables: [], callsThis: false, callsSuper: false, returnsValue: false },
-                    memoryBehavior: { stackFrame: 'pushed on call, popped on return', localVarsOnStack: true },
-                    calledMethods: [],
-                    createdObjects: []
-                }))
+                ...abstractMethods.map(m => this.buildFabricatedMethod(m, 'abstract')),
+                ...defaultMethods.map(dm => this.buildFabricatedMethod(dm.name, 'default')),
+                ...staticMethods.map(sm => this.buildFabricatedMethod(sm.name, 'static')),
             ],
             staticInitializers: [],
             instanceInitializers: [],
@@ -785,6 +757,34 @@ class JavaParser {
             sourceFile: this.getSourceFileName(nid) || 'Unknown.java'
         };
         classes.push(classWrapper);
+    }
+    /**
+     * Builds a minimal `Method` record for interface members that are only known
+     * by name (abstract / default / static interface methods). Signature details
+     * are not available at this point, so the entry is marked synthetic.
+     */
+    buildFabricatedMethod(name, methodType) {
+        return {
+            name,
+            accessModifier: 'public',
+            nonAccessModifiers: methodType === 'static'
+                ? ['static']
+                : methodType === 'default'
+                    ? ['default']
+                    : ['abstract'],
+            returnType: 'unknown',
+            parameters: [],
+            genericTypeParams: [],
+            throwsExceptions: [],
+            methodType,
+            overloads: [],
+            isVarArgs: false,
+            isBridge: false,
+            isSynthetic: true,
+            annotations: [],
+            calledMethods: [],
+            createdObjects: []
+        };
     }
     processAnnotationInterface(node, classes, sourceCode, filePath) {
         const annotationName = this.getTypeIdentifier(node);
@@ -843,10 +843,15 @@ class JavaParser {
         return '';
     }
     getSuperClass(node) {
-        if (!node?.children?.superclass)
+        // java-parser 2.x uses classExtends, legacy used superclass
+        const clause = node?.children?.superclass?.[0] || node?.children?.classExtends?.[0];
+        if (!clause)
             return null;
-        const sc = node.children.superclass[0];
-        const typeName = this.extractClassName(sc);
+        // classExtends wraps classType { Identifier: [Shape] }
+        if (clause.children?.classType?.[0]?.children?.Identifier) {
+            return clause.children.classType[0].children.Identifier.map((id) => id.image).join('.');
+        }
+        const typeName = this.extractClassName(clause);
         return typeName || null;
     }
     getSuperInterfaces(node) {
@@ -1004,9 +1009,10 @@ class JavaParser {
                 }
             }
         }
-        // Lombok: detect @AllArgsConstructor, @RequiredArgsConstructor, @Builder
+        // Lombok constructor annotations imply constructor injection; @Builder
+        // only generates a builder and does not wire Spring dependencies.
         // Must run before method processing so symbol tables see isInjected=true.
-        const lombokAnnotations = ['AllArgsConstructor', 'RequiredArgsConstructor', 'Builder'];
+        const lombokAnnotations = ['AllArgsConstructor', 'RequiredArgsConstructor'];
         const hasLombokAnnotation = classAnnotations.some(a => lombokAnnotations.some(l => a.name === l || a.fullyQualifiedName === l));
         if (hasLombokAnnotation) {
             const isRequired = classAnnotations.some(a => a.name === 'RequiredArgsConstructor' || a.fullyQualifiedName === 'RequiredArgsConstructor');
@@ -1020,7 +1026,7 @@ class JavaParser {
                 }
             }
             else {
-                // @AllArgsConstructor or @Builder: all fields are injected
+                // @AllArgsConstructor: all fields are constructor-injected
                 for (const field of fields) {
                     if (!field.isInjected) {
                         field.isInjected = true;
@@ -1166,12 +1172,13 @@ class JavaParser {
         const staticMethods = [];
         const privateMethods = [];
         const constants = [];
+        const methodSignatures = [];
         if (!node?.children?.interfaceBody) {
-            return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants };
+            return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants, methodSignatures };
         }
         const interfaceBody = node.children.interfaceBody[0];
         if (!interfaceBody?.children?.interfaceMemberDeclaration) {
-            return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants };
+            return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants, methodSignatures };
         }
         for (const imd of interfaceBody.children.interfaceMemberDeclaration) {
             // Constant declaration (public static final)
@@ -1200,6 +1207,11 @@ class JavaParser {
                 const isDefault = modifiers.includes('default');
                 const isPrivate = modifiers.includes('private');
                 const isAbstract = modifiers.includes('abstract') || (!isStatic && !isDefault && !isPrivate);
+                // Capture real parameter types from the method declarator so
+                // signature-based rules aren't working on fabricated empty signatures.
+                const parameterTypes = this.getInterfaceMethodParameterTypes(iMethod);
+                const signature = { name: methodName, returnType, parameterTypes };
+                methodSignatures.push(signature);
                 if (isPrivate) {
                     privateMethods.push(methodName);
                 }
@@ -1217,7 +1229,21 @@ class JavaParser {
                 }
             }
         }
-        return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants };
+        return { abstractMethods, defaultMethods, staticMethods, privateMethods, constants, methodSignatures };
+    }
+    /** Extracts the ordered parameter type list from an interface method declaration. */
+    getInterfaceMethodParameterTypes(iMethod) {
+        const declarator = iMethod?.children?.methodHeader?.[0]?.children?.methodDeclarator?.[0];
+        if (!declarator?.children?.formalParameterList)
+            return [];
+        const fpl = declarator.children.formalParameterList[0];
+        if (!fpl?.children?.formalParameter)
+            return [];
+        const types = [];
+        for (const fp of fpl.children.formalParameter) {
+            types.push(this.getParameterType(fp));
+        }
+        return types;
     }
     getFieldModifiers(node) {
         const modifiers = [];
@@ -1289,6 +1315,10 @@ class JavaParser {
     extractType(node) {
         if (!node)
             return 'unknown';
+        const serializedType = this.serializeTypeNode(node);
+        if (serializedType) {
+            return serializedType;
+        }
         // Primitive types
         if (node.children?.unannPrimitiveType) {
             const pt = node.children.unannPrimitiveType[0];
@@ -1333,12 +1363,49 @@ class JavaParser {
         }
         return 'unknown';
     }
+    serializeTypeNode(node) {
+        const tokens = [];
+        this.collectTerminalTokens(node, tokens);
+        const images = tokens
+            .filter(token => typeof token.image === 'string' && token.image.length > 0)
+            .sort((a, b) => (a.startOffset ?? 0) - (b.startOffset ?? 0))
+            .map(token => token.image);
+        if (images.length === 0) {
+            return '';
+        }
+        return images.join('')
+            .replace(/,/g, ', ')
+            .replace(/\?extends/g, '? extends ')
+            .replace(/\?super/g, '? super ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    collectTerminalTokens(node, tokens) {
+        if (!node)
+            return;
+        if (node.image !== undefined) {
+            tokens.push(node);
+            return;
+        }
+        if (!node.children)
+            return;
+        for (const key of Object.keys(node.children)) {
+            const children = node.children[key];
+            if (!Array.isArray(children))
+                continue;
+            for (const child of children) {
+                this.collectTerminalTokens(child, tokens);
+            }
+        }
+    }
     extractClassName(node) {
         if (!node?.children?.unannClassType)
             return '';
         const uct = node.children.unannClassType[0];
         if (uct.children?.Identifier) {
-            return uct.children.Identifier[0].image;
+            // Dotted class types (org.slf4j.Logger) expose every segment as a
+            // direct Identifier child — join them for the fully-qualified type.
+            return uct.children.Identifier.map((id) => id.image).join('.');
         }
         return '';
     }
@@ -1615,7 +1682,9 @@ class JavaParser {
                             arguments: args
                         });
                     }
-                    return; // Don't traverse deeper into this primary
+                    // Deliberately do NOT return here — descend so nested method
+                    // invocations inside argument lists (e.g. b.getX() in a.setX(b.getX()))
+                    // are captured as their own MethodCall entries.
                 }
             }
             // Also handle the old methodCall format (legacy)
@@ -1699,7 +1768,11 @@ class JavaParser {
         const creations = [];
         if (!methodBody)
             return creations;
-        const traverse = (node) => {
+        const LOOP_NODES = new Set([
+            'forStatement', 'basicForStatement', 'enhancedForStatement',
+            'whileStatement', 'doStatement',
+        ]);
+        const traverse = (node, loopDepth = 0) => {
             if (!node)
                 return;
             if (node.name === 'newExpression' || node.name === 'objectCreationExpression') {
@@ -1711,6 +1784,7 @@ class JavaParser {
                         lineNumber: node.location?.startLine ?? 0,
                         constructorArgs: this.extractCreationArgs(node),
                         hasBranching: this.containsConditionalExpression(node),
+                        insideLoop: loopDepth > 0,
                     });
                 }
             }
@@ -1718,7 +1792,7 @@ class JavaParser {
                 for (const key of Object.keys(node.children)) {
                     if (Array.isArray(node.children[key])) {
                         for (const child of node.children[key]) {
-                            traverse(child);
+                            traverse(child, LOOP_NODES.has(node.name) ? loopDepth + 1 : loopDepth);
                         }
                     }
                 }
@@ -2526,6 +2600,18 @@ class JavaParser {
                 const locals = this.extractLocalVariables(statement);
                 localVariables.push(...locals);
             }
+            else {
+                // java-parser 2.x wraps locals in localVariableDeclarationStatement
+                linesOfCode++;
+                this.analyzeStatementForCalls(stmt, c => {
+                    if (c === 'this')
+                        callsThis = true;
+                    if (c === 'super')
+                        callsSuper = true;
+                });
+                const locals = this.extractLocalVariables(stmt);
+                localVariables.push(...locals);
+            }
         }
         return {
             linesOfCode,
@@ -2740,7 +2826,6 @@ class JavaParser {
         const locals = [];
         if (!statement)
             return locals;
-        // Check for local variable declaration
         if (statement.name === 'localVariableDeclaration') {
             const type = this.getLocalVarType(statement);
             const names = this.getLocalVarNames(statement);
@@ -2764,7 +2849,48 @@ class JavaParser {
                     usedInLambda: false
                 });
             }
+            return locals;
         }
+        // java-parser 2.x: scan the subtree for localVariableDeclaration nodes
+        // (e.g. wrapped under localVariableDeclarationStatement).
+        const findDecls = (n) => {
+            if (!n)
+                return;
+            if (n.name === 'localVariableDeclaration') {
+                const type = this.getLocalVarType(n);
+                const names = this.getLocalVarNames(n);
+                const loc = this.extractLocation(n);
+                const declaredAtLine = loc?.startLine ?? 0;
+                for (let i = 0; i < names.length; i++) {
+                    locals.push({
+                        name: names[i],
+                        dataType: type,
+                        ...loc,
+                        isVarInferred: false,
+                        inferredType: undefined,
+                        isFinal: false,
+                        isEffectivelyFinal: true,
+                        initialValue: null,
+                        scope: {
+                            declaredAtLine,
+                            scopeBlock: 'method'
+                        },
+                        memoryType: 'stack',
+                        usedInLambda: false
+                    });
+                }
+                return;
+            }
+            if (n.children) {
+                for (const key of Object.keys(n.children)) {
+                    if (Array.isArray(n.children[key])) {
+                        for (const c of n.children[key])
+                            findDecls(c);
+                    }
+                }
+            }
+        };
+        findDecls(statement);
         // Check for enhanced for loop
         if (statement.name === 'enhancedForStatement') {
             const loopVar = this.extractEnhancedForVariable(statement);
@@ -2788,6 +2914,13 @@ class JavaParser {
     getLocalVarType(statement) {
         if (statement.children?.unannType) {
             return this.extractType(statement.children.unannType[0]);
+        }
+        // java-parser 2.x wraps the type under localVariableType
+        if (statement.children?.localVariableType) {
+            const lvt = statement.children.localVariableType[0];
+            if (lvt.children?.unannType) {
+                return this.extractType(lvt.children.unannType[0]);
+            }
         }
         if (statement.children?.varType) {
             return 'var'; // Inferred type
@@ -3154,7 +3287,20 @@ class JavaParser {
         let namingScore = 0;
         let packageScore = 0;
         // Annotation-based layer detection (Spring/Java EE conventions)
-        if (annotationNames.includes('Service') || annotationNames.includes('Component')) {
+        // Special cases before generic @Component to avoid misclassification
+        if (annotationNames.includes('FeignClient')) {
+            layer = 'infrastructure';
+            annotationScore = 1.0;
+        }
+        else if ((annotationNames.includes('ControllerAdvice') || annotationNames.includes('RestControllerAdvice'))) {
+            layer = 'config';
+            annotationScore = 1.0;
+        }
+        else if (annotationNames.includes('Component') && cls.className.endsWith('Filter')) {
+            layer = 'infrastructure';
+            annotationScore = 1.0;
+        }
+        else if (annotationNames.includes('Service') || annotationNames.includes('Component')) {
             layer = 'service';
             annotationScore = 1.0;
         }
@@ -3380,7 +3526,7 @@ class JavaParser {
                 traverse(node.children?.statement?.[0], depth + 1);
                 return;
             }
-            if (node.name === 'forStatement' || node.name === 'basicForStatement' || node.name === 'enhancedForStatement') {
+            if (node.name === 'basicForStatement' || node.name === 'enhancedForStatement') {
                 metrics.cyclomaticComplexity++;
                 metrics.decisionPoints.push({
                     type: 'for', line: getLine(node), nestingDepth: depth
@@ -3449,18 +3595,15 @@ class JavaParser {
         return metrics;
     }
     extractConditionText(node) {
-        if (!node?.children)
+        if (!node)
             return '';
-        const paren = node.children.LParen?.[0] || node.children.LBrace?.[0];
-        if (!paren)
-            return '';
-        // Walk siblings after LParen to capture condition
-        const parts = [];
+        const tokens = [];
         const collect = (n) => {
-            if (!n || n.name === 'RParen')
+            if (!n)
                 return;
-            if (n.image)
-                parts.push(n.image);
+            if (n.image !== undefined) {
+                tokens.push(n);
+            }
             if (n.children) {
                 for (const key of Object.keys(n.children)) {
                     if (Array.isArray(n.children[key])) {
@@ -3470,59 +3613,72 @@ class JavaParser {
                 }
             }
         };
-        // Traverse parent children after LParen
-        const parentChildren = node.children;
-        let capture = false;
-        for (const key of Object.keys(parentChildren)) {
-            if (Array.isArray(parentChildren[key])) {
-                for (const c of parentChildren[key]) {
-                    if (c === paren) {
-                        capture = true;
-                        continue;
-                    }
-                    if (capture && c.name === 'RParen') {
-                        capture = false;
-                        break;
-                    }
-                    if (capture)
-                        collect(c);
+        collect(node);
+        tokens.sort((a, b) => (a.startOffset ?? 0) - (b.startOffset ?? 0));
+        const firstLParenIndex = tokens.findIndex(t => t.image === '(');
+        if (firstLParenIndex === -1)
+            return '';
+        let depth = 0;
+        let matchingRParenIndex = -1;
+        for (let i = firstLParenIndex; i < tokens.length; i++) {
+            if (tokens[i].image === '(')
+                depth++;
+            else if (tokens[i].image === ')') {
+                depth--;
+                if (depth === 0) {
+                    matchingRParenIndex = i;
+                    break;
                 }
             }
         }
-        return parts.join(' ').substring(0, 120);
+        if (matchingRParenIndex === -1)
+            return '';
+        const conditionTokens = tokens.slice(firstLParenIndex + 1, matchingRParenIndex);
+        return conditionTokens.map(t => t.image).join(' ').substring(0, 120);
     }
     calculateBusinessLogicScore(bodyText, linesOfCode, complexity) {
         let score = 0;
+        // Semantic weighting: defensive guard clauses (null-checks) weight 0.
+        // Strip null-check fragments before counting `==`/`!=` and guard `if`s.
+        const nullCheckEq = (bodyText.match(/==\s*null|null\s*==/g) || []).length;
+        const nullCheckNe = (bodyText.match(/!=\s*null|null\s*!=/g) || []).length;
+        // Count guard `if (...null...) return/throw` to discount the `if` itself
+        const guardIfNull = (bodyText.match(/if\s*\([^)]*null[^)]*\)\s*(return|throw)/g) || []).length;
         const patterns = [
-            /if\s*\(/g,
-            /for\s*\(/g,
-            /while\s*\(/g,
-            /switch\s*\(/g,
-            /\|\|/g,
-            /&&/g,
-            /==/g,
-            /!=/g,
-            /<=?/g,
-            />=?/g,
-            /\+\+/g,
-            /--/g,
-            /\+=/g,
-            /-=/g,
-            /\*=/g,
-            /\/=/g,
-            /%=/g,
-            /new\s+java\.sql\./g,
-            /EntityManager/g,
-            /CriteriaQuery/g,
-            /Query\s*\(/g,
-            /prepareStatement/g,
-            /executeQuery/g,
-            /executeUpdate/g
+            { re: /if\s*\(/g, weight: 1, adjust: -guardIfNull }, // defensive null-guard if weight 0
+            { re: /for\s*\(/g, weight: 1 },
+            { re: /while\s*\(/g, weight: 1 },
+            { re: /switch\s*\(/g, weight: 1 },
+            { re: /\|\|/g, weight: 1 },
+            { re: /&&/g, weight: 1 },
+            { re: /==/g, weight: 1, adjust: -nullCheckEq }, // null equality not business
+            { re: /!=/g, weight: 1, adjust: -nullCheckNe },
+            { re: /<=/g, weight: 1 },
+            { re: />=/g, weight: 1 },
+            { re: /</g, weight: 1 }, // keep simple compare, but null already stripped
+            { re: />/g, weight: 1 },
+            { re: /\+\+/g, weight: 1 },
+            { re: /--/g, weight: 1 },
+            { re: /\+=/g, weight: 1 },
+            { re: /-=/g, weight: 1 },
+            { re: /\*=/g, weight: 1 },
+            { re: /\/=/g, weight: 1 },
+            { re: /%=/g, weight: 1 },
+            { re: /new\s+java\.sql\./g, weight: 1 },
+            { re: /EntityManager/g, weight: 1 },
+            { re: /CriteriaQuery/g, weight: 1 },
+            { re: /Query\s*\(/g, weight: 1 },
+            { re: /prepareStatement/g, weight: 1 },
+            { re: /executeQuery/g, weight: 1 },
+            { re: /executeUpdate/g, weight: 1 },
         ];
-        for (const pattern of patterns) {
-            const matches = bodyText.match(pattern);
+        for (const { re, weight, adjust } of patterns) {
+            const matches = bodyText.match(re);
             if (matches) {
-                score += matches.length;
+                let cnt = matches.length + (adjust || 0);
+                if (cnt < 0)
+                    cnt = 0;
+                score += cnt * weight;
             }
         }
         if (linesOfCode > 10)
@@ -3531,7 +3687,60 @@ class JavaParser {
             score += 2;
         if (complexity > 3)
             score += 2;
-        return score;
+        return score < 0 ? 0 : score;
+    }
+    extractSuppressedLines(sourceCode) {
+        const suppressed = {};
+        const lines = sourceCode.split(/\r?\n/);
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            // // rica-disable-next-line V111, V112  or  // rica-disable-next-line rica:all
+            const m = line.match(/rica-disable-next-line\s+([^\n]+)/i);
+            if (m) {
+                const raw = m[1].trim();
+                let codes = [];
+                if (/rica:\s*all/i.test(raw) || /\ball\b/i.test(raw) && raw.toLowerCase().includes('rica')) {
+                    codes = ['all'];
+                }
+                else {
+                    // extract Vxxx tokens or rica:Vxxx
+                    const tokens = raw.match(/V\d{3}/gi) || [];
+                    for (const t of tokens) {
+                        const norm = t.toUpperCase().startsWith('RICA-') ? t.toUpperCase() : `RICA-${t.toUpperCase()}`;
+                        codes.push(norm);
+                    }
+                    // also handle rica:V111
+                    const ricaTokens = raw.match(/rica:\s*V\d{3}/gi) || [];
+                    for (const t of ricaTokens) {
+                        const v = t.match(/V\d{3}/i)[0].toUpperCase();
+                        const norm = `RICA-${v}`;
+                        if (!codes.includes(norm))
+                            codes.push(norm);
+                    }
+                    if (codes.length === 0 && raw.includes('V')) {
+                        // fallback: try to capture any Vxxx
+                        const anyV = raw.match(/V\d{3}/gi) || [];
+                        for (const t of anyV)
+                            codes.push(`RICA-${t.toUpperCase()}`);
+                    }
+                }
+                if (codes.length > 0) {
+                    const targetLine = i + 2; // next line is i+1 1-indexed => i+2
+                    suppressed[targetLine] = [...(suppressed[targetLine] || []), ...codes];
+                }
+            }
+            // Block disable: /* rica-disable */ ... /* rica-enable */  (file-level, treat as all lines)
+            if (/rica-disable(?!\s*-\s*next)/i.test(line) && !/rica-disable-next-line/i.test(line)) {
+                // treat remaining file as suppressed for all
+                for (let j = i + 1; j < lines.length; j++) {
+                    const jl = j + 1;
+                    suppressed[jl] = [...(suppressed[jl] || []), 'all'];
+                    if (/rica-enable/i.test(lines[j]))
+                        break;
+                }
+            }
+        }
+        return suppressed;
     }
     extractAccessedFields(bodyNode, fieldNames) {
         const accessed = new Set();

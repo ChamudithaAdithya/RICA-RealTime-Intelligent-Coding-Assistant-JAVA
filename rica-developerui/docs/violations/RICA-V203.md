@@ -16,7 +16,7 @@
 
 An endpoint throws or declares a raw generic exception (`throws Exception`, `throw new Exception(...)`), or calls `printStackTrace()`. Private helper methods are skipped.
 
-### Before (violates)
+### Violating example
 
 ```
 @RestController
@@ -31,7 +31,7 @@ public class UserController {
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 @RestController
@@ -50,15 +50,65 @@ public class UserController {
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+  @RestController
+  public class UserController {
+      @GetMapping("/users/{id}")
+-     public User getUser(@PathVariable long id) throws Exception {
+-         User u = userService.findById(id);
+-         if (u == null) throw new Exception("user missing");
+-         return u;
++     public UserResponse getUser(@PathVariable long id) {
++         return userService.getUserResponse(id); // throws UserNotFoundException
+      }
++
++     @ExceptionHandler(UserNotFoundException.class)
++     @ResponseStatus(HttpStatus.NOT_FOUND)
++     public ErrorResponse notFound(UserNotFoundException e) {
++         return new ErrorResponse(404, e.getMessage());
++     }
+  }
+```
+
+
 ## Why it matters
 
 A bare `Exception` surfacing from an endpoint becomes an opaque 500 to the client — no status code, no actionable message — and stack traces (`printStackTrace`) leak implementation details. Errors should be translated at the API boundary into meaningful HTTP responses.
 
+## Common framework cases
+
+### Endpoint throws broad exceptions
+
+**When you see this:** A controller/resource method declares or throws `Exception`, `RuntimeException`, or returns raw error strings.
+
+**Do this:**
+
+1. Throw domain-specific exceptions from the service.
+2. Map them in `@ControllerAdvice`/exception handlers.
+3. Return stable error DTOs with the right HTTP status.
+
+**Avoid:** Do not catch everything in the endpoint and return `500` for all failures.
+
 ## How to fix
 
-1. Catch domain exceptions at the boundary and map them to HTTP status codes via `@ExceptionHandler` or `ResponseStatusException`.
-2. Define typed exceptions (NotFound, Conflict, etc.) in the service layer.
-3. Remove `printStackTrace()` calls.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Catch domain exceptions at the boundary and map them to HTTP status codes via `@ExceptionHandler` or `ResponseStatusException`.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+2. **Define typed exceptions (NotFound, Conflict, etc.) in the service layer.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+3. **Remove `printStackTrace()` calls.**
+   This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V203 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

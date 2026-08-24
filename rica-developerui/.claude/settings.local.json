@@ -1,7 +1,31 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "0",
+    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+    "ANTHROPIC_AUTH_TOKEN": "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",
+    "ANTHROPIC_MODEL": "google/gemini-2.5-flash",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "google/gemini-2.5-flash",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "google/gemini-2.5-flash",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "google/gemini-2.5-flash",
+    "ANTHROPIC_SMALL_FAST_MODEL": "google/gemini-2.5-flash",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "google/gemini-2.5-flash",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8000"
+  },
   "permissions": {
     "allow": [
-      "Bash(npx tsc:*)"
-    ]
+      "Bash(npx tsc:*)",
+      "Bash(*)",
+      "WebSearch",
+      "WebFetch",
+      "Edie",
+      "Write",
+      "Ncp_google-calendar",
+      "Ncp_mcp-registry_search_mcp_registry",
+      "Scp_chrome.devtools _* ",
+      "Olob",
+      "Skill(codex:setup)",
+      "Mcp_claude_ai_Firecrawl __ firecrawl_scrape"
+    ],
+    "deny": []
   }
 }

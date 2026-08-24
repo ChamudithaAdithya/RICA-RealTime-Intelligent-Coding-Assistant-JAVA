@@ -63,6 +63,8 @@ class FileWatcher {
         createWatcher.onDidDelete(async (uri) => {
             this.outputChannel.appendLine(`File deleted: ${uri.fsPath}`);
             await this.astManager.handleFileDeleted(uri.fsPath);
+            const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+            this.violationManager.onFileDeleted(path.relative(workspaceRoot, uri.fsPath));
         });
         this.disposables.push(createWatcher);
         context.subscriptions.push(createWatcher);
@@ -74,10 +76,15 @@ class FileWatcher {
                     if (file.newUri.fsPath.endsWith('.java')) {
                         const document = await vscode.workspace.openTextDocument(file.newUri);
                         await this.astManager.handleFileRenamed(file.newUri.fsPath, document.getText(), file.oldUri.fsPath);
+                        const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+                        this.violationManager.onFileDeleted(path.relative(workspaceRoot, file.oldUri.fsPath));
+                        this.violationManager.onFileSaved(path.relative(workspaceRoot, file.newUri.fsPath), document.getText());
                     }
                     else {
                         // Renamed away from .java
                         await this.astManager.handleFileDeleted(file.oldUri.fsPath);
+                        const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+                        this.violationManager.onFileDeleted(path.relative(workspaceRoot, file.oldUri.fsPath));
                     }
                 }
             }
@@ -91,6 +98,9 @@ class FileWatcher {
      * Uses debouncing to avoid excessive parsing.
      */
     onDocumentChanged(document) {
+        const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+        const relativePath = path.relative(workspaceRoot, document.uri.fsPath);
+        this.violationManager.markFileDirty(relativePath);
         this.debouncedHandleDocumentChange(document);
     }
     /**

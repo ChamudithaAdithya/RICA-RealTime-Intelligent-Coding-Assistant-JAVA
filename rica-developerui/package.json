@@ -1,9 +1,11 @@
 {
-  "name": "rica-developerui",
-  "displayName": "RICA - developerUi",
+  "name": "rica-realtime-code-violations-analyzer",
+  "displayName": "RICA - Code Analyzer",
   "description": "violations detection and guidance to solve",
-  "version": "0.0.1",
-  "publisher": "your-name",
+  "version": "0.0.3",
+  "publisher": "Geeth-Chamuditha-Adithya-Herath",
+  "license": "MIT",
+  "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.110.0"
   },
@@ -12,7 +14,21 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:**/*.java"
+    "workspaceContains:**/*.java",
+    "onLanguage:java",
+    "onCommand:javaAstAnalyzer.analyzeProject",
+    "onCommand:javaAstAnalyzer.analyzeCurrentFile",
+    "onCommand:javaAstAnalyzer.showAstView",
+    "onCommand:javaAstAnalyzer.openBrowserViewer",
+    "onCommand:javaAstAnalyzer.showStatus",
+    "onCommand:javaAstAnalyzer.resetBackend",
+    "onCommand:javaAstAnalyzer.showViolationsView",
+    "onCommand:javaAstAnalyzer.openDocumentation",
+    "onCommand:javaAstAnalyzer.showFixGuidance",
+    "onCommand:rica.analyzeProject",
+    "onCommand:rica.quickScanFile",
+    "onCommand:rica.aiReview",
+    "onCommand:rica.showStatusSummary"
   ],
   "main": "./src/extension.js",
   "contributes": {
@@ -111,6 +127,55 @@
           "maximum": 100,
           "description": "V310: minimum cyclomatic complexity for a method with multiple persistence writes to flag missing Command pattern"
         },
+        "javaAstAnalyzer.crossCuttingCallLimit": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "V313: minimum cross-cutting calls (logging/metrics/tracing) interleaved with business logic before flagging a missing Decorator"
+        },
+        "javaAstAnalyzer.stateMachineClassLimit": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V316: minimum distinct classes with hardcoded status/state comparisons before flagging a scattered state machine"
+        },
+        "javaAstAnalyzer.notifierTargetLimit": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V318: minimum distinct notification/audit services called in one method before flagging a hardcoded multi-notifier"
+        },
+        "javaAstAnalyzer.guardClauseLimit": {
+          "type": "number",
+          "default": 5,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V319: minimum sequential guard clauses in one method before flagging a monolithic pipeline"
+        },
+        "javaAstAnalyzer.nullCheckLimit": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V321: minimum defensive null checks in one method before flagging excessive null checking"
+        },
+        "javaAstAnalyzer.templateMethodSimilarity": {
+          "type": "number",
+          "default": 0.8,
+          "minimum": 0.5,
+          "maximum": 1,
+          "description": "V317: structural similarity threshold (0..1) for duplicate algorithm sequences across classes"
+        },
+        "javaAstAnalyzer.bridgeHierarchyThreshold": {
+          "type": "number",
+          "default": 4,
+          "minimum": 2,
+          "maximum": 100,
+          "description": "V323: minimum concrete subclasses of an abstract parent before flagging a combinatorial hierarchy as missing Bridge"
+        },
         "javaAstAnalyzer.excludePatterns": {
           "type": "array",
           "default": [
@@ -133,7 +198,10 @@
             "domain": {
               "packages": [
                 "**/domain/**",
-                "**/entity/**"
+                "**/entity/**",
+                "**/dto/**",
+                "**/enum/**",
+                "**/model/**"
               ],
               "allowedDeps": []
             },
@@ -239,7 +307,7 @@
         "javaAstAnalyzer.documentationBaseUrl": {
           "type": "string",
           "default": "http://localhost:5173",
-          "description": "Base URL for the RICA docs site. The violations webview opens `<base>/violations/<CODE>.html` when you click Docs on a violation row"
+          "description": "Optional external base URL for RICA docs links in diagnostics. The violations webview and command palette open bundled docs inside VS Code."
         }
       }
     }
@@ -253,6 +321,7 @@
     "test:parser": "mocha --grep 'JavaParser' src/test/parser.test.js",
     "test:analyzers": "mocha --grep 'LayerAnalyzer|Multi-layer' src/test/analyzers.test.js",
     "test:crossfile": "mocha --grep 'CrossFile' src/test/crossFile.test.js",
+    "test:projects": "node scripts/verify-test-projects.js",
     "rica:check": "node src/ricaLayerCheck.js",
     "rica:check:self": "node src/ricaLayerCheck.js && node test-lms-analyzer.js",
     "ai:smoke": "node scripts/aiSmokeTest.js",

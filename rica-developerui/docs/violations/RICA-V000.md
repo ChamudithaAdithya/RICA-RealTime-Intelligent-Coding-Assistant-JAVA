@@ -22,7 +22,16 @@ Guarantees every violation still carries a code even when the mapping is incompl
 
 ## How to fix
 
-1. Add the new detector `type` to `RULE_CODE_MAP` and document it.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Add the new detector `type` to `RULE_CODE_MAP` and document it.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V000 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

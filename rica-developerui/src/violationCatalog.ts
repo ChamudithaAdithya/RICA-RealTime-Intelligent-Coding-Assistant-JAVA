@@ -1438,6 +1438,435 @@ public class StripeGateway { public void charge(double amount) { ... } }
 });
 
 d({
+  code: 'RICA-V308',
+  name: 'Leaking Construction Logic',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkLeakingConstruction',
+  layer: 'service / application',
+  trigger:
+    'A business method performs complex object construction, nested constructor calls, or branching inside constructor arguments beyond the configured construction-statement limit.',
+  whyItMatters:
+    'Construction-heavy business methods mix orchestration with object assembly. That makes the method harder to test and hides construction policy in unrelated logic. A Builder or Factory centralizes the assembly rules and leaves the business method focused on the use case.',
+  howToFix: [
+    'Move complex construction into a Builder, Factory, or assembler.',
+    'Keep branching decisions out of constructor argument lists.',
+    'Inject the factory/builder when construction requires external policy.',
+  ],
+  mitigationHint: 'Extract complex object initialization into a Builder or Factory so business methods stay focused on orchestration',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V304', 'RICA-V101'],
+  sourceRef: 'src/designPatternAnalyzer.ts:535',
+  tags: ['builder', 'factory', 'construction'],
+});
+
+d({
+  code: 'RICA-V309',
+  name: 'Fat Interface',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkFatInterface',
+  layer: 'interface',
+  trigger:
+    'An interface declares more methods than the configured limit, or clients use less than half of a reasonably sized interface surface.',
+  whyItMatters:
+    'Large interfaces force clients to depend on operations they do not use. This violates the Interface Segregation Principle and makes changes ripple through unrelated callers.',
+  howToFix: [
+    'Split the interface by cohesive responsibilities.',
+    'Point each client at the smallest interface it actually needs.',
+    'Keep broad facade contracts separate from focused domain ports.',
+  ],
+  mitigationHint: 'Split this interface by responsibility (ISP) - clients should depend only on the methods they actually use',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V307', 'RICA-V302'],
+  sourceRef: 'src/designPatternAnalyzer.ts:588',
+  tags: ['isp', 'interface', 'solid'],
+});
+
+d({
+  code: 'RICA-V310',
+  name: 'Missing Command',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingCommand',
+  layer: 'service',
+  trigger:
+    'A complex method performs multiple distinct persistence writes without a transactional boundary or command object.',
+  whyItMatters:
+    'Multi-step writes are workflow units. When they are left inline, retry, rollback, auditing, and testing concerns become tangled with service logic. A Command object or explicit transaction boundary makes the write sequence intentional.',
+  howToFix: [
+    'Wrap the write sequence in an explicit Command object or use-case class.',
+    'Add a transactional boundary where the unit of work must commit atomically.',
+    'Keep validation and write orchestration visible at one boundary.',
+  ],
+  mitigationHint: 'Encapsulate each multi-step write sequence as a Command object (or @Transactional boundary) to keep transactions explicit',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V304', 'RICA-V302'],
+  sourceRef: 'src/designPatternAnalyzer.ts:664',
+  tags: ['command', 'transaction', 'persistence'],
+});
+
+d({
+  code: 'RICA-V311',
+  name: 'Missing Prototype',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingPrototype',
+  layer: 'service / mapper',
+  trigger:
+    'A method manually copies several matching fields with getter-to-setter pairs instead of using a clone, copy constructor, or mapper abstraction.',
+  whyItMatters:
+    'Manual field copying is brittle. New fields are easy to forget, copy semantics are duplicated, and deep-copy behavior becomes inconsistent across the codebase.',
+  howToFix: [
+    'Use a copy constructor, clone method, or explicit copy factory.',
+    'For DTO mapping, use a dedicated mapper and keep it exempt from prototype findings.',
+    'Keep deep-copy behavior in one reviewed implementation.',
+  ],
+  mitigationHint: 'Copy objects via clone()/copy constructors (Prototype) instead of manual field-by-field getter-to-setter copying',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V312'],
+  sourceRef: 'src/designPatternAnalyzer.ts:691',
+  tags: ['prototype', 'copy', 'mapping'],
+});
+
+d({
+  code: 'RICA-V312',
+  name: 'Fragmented Factories',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkFragmentedFactories',
+  layer: 'factory',
+  trigger:
+    'Multiple concrete `*Factory` classes create products but share no common factory abstraction.',
+  whyItMatters:
+    'A set of unrelated concrete factories makes product-family creation inconsistent and hard to extend. An Abstract Factory gives callers one stable creation contract.',
+  howToFix: [
+    'Introduce a common factory interface.',
+    'Group related product creation behind that interface.',
+    'Inject the abstraction instead of selecting concrete factories throughout the code.',
+  ],
+  mitigationHint: 'Introduce an Abstract Factory interface so related product families are created through a unified hierarchy',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V304', 'RICA-V307'],
+  sourceRef: 'src/designPatternAnalyzer.ts:736',
+  tags: ['abstract-factory', 'factory', 'creation'],
+});
+
+d({
+  code: 'RICA-V313',
+  name: 'Missing Decorator',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingDecorator',
+  layer: 'service / application',
+  trigger:
+    'A method interleaves repeated cross-cutting calls such as logging, metrics, tracing, or audit with business calls.',
+  whyItMatters:
+    'Cross-cutting behavior embedded in business methods is duplicated and easy to apply inconsistently. Decorators or AOP advisors keep those concerns composable and testable.',
+  howToFix: [
+    'Extract logging, metrics, tracing, or audit behavior into a decorator/advisor.',
+    'Keep the core service method focused on business work.',
+    'Apply the decorator consistently at composition time.',
+  ],
+  mitigationHint: 'Extract cross-cutting concerns (logging, metrics, tracing, audit) into dedicated decorators or AOP advisors',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V318'],
+  sourceRef: 'src/designPatternAnalyzer.ts:767',
+  tags: ['decorator', 'aop', 'cross-cutting'],
+});
+
+d({
+  code: 'RICA-V314',
+  name: 'Missing Composite',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingComposite',
+  layer: 'domain / service',
+  trigger:
+    'A loop branches on multiple `instanceof` checks to handle leaf and container-like objects differently.',
+  whyItMatters:
+    'Repeated type checks make tree-like structures hard to extend. A Composite interface lets leaves and containers expose one operation so clients stop branching on concrete types.',
+  howToFix: [
+    'Extract a shared component interface.',
+    'Move type-specific behavior behind polymorphic implementations.',
+    'Iterate over the component abstraction instead of branching with `instanceof`.',
+  ],
+  mitigationHint: 'Expose a uniform Component interface so leaves and containers are treated identically - drop instanceof/loop branching',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V303'],
+  sourceRef: 'src/designPatternAnalyzer.ts:795',
+  tags: ['composite', 'instanceof', 'polymorphism'],
+});
+
+d({
+  code: 'RICA-V315',
+  name: 'Flyweight Missing',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkRedundantMemory',
+  layer: 'any',
+  trigger:
+    'A loop repeatedly allocates immutable value-like objects such as Money, Currency, Price, Amount, Rate, or Config.',
+  whyItMatters:
+    'Repeated value-object allocation inside hot loops creates unnecessary memory pressure. Reusing immutable values or caching shared instances reduces allocation churn without changing behavior.',
+  howToFix: [
+    'Hoist invariant value construction outside the loop.',
+    'Cache frequently reused immutable values.',
+    'Prefer shared constants for stable configuration-like values.',
+  ],
+  mitigationHint: 'Reuse immutable value objects (Flyweight/cache) instead of allocating them inside loops or stream pipelines',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V305'],
+  sourceRef: 'src/designPatternAnalyzer.ts:825',
+  tags: ['flyweight', 'memory', 'allocation'],
+});
+
+d({
+  code: 'RICA-V316',
+  name: 'Scattered State Machine',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkScatteredStateMachine',
+  layer: 'domain / service',
+  trigger:
+    'The same status/state comparisons appear across at least the configured number of classes.',
+  whyItMatters:
+    'State transition rules scattered across classes drift over time. Encapsulating state-specific behavior keeps transitions explicit, local, and easier to test.',
+  howToFix: [
+    'Identify the state enum or discriminator.',
+    'Move state-specific behavior into State objects or a transition table.',
+    'Make callers delegate to the state abstraction instead of branching directly.',
+  ],
+  mitigationHint: 'Encapsulate status/state transitions in State objects instead of scattering hardcoded enum comparisons',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V303'],
+  sourceRef: 'src/designPatternAnalyzer.ts:848',
+  tags: ['state', 'state-machine', 'conditional'],
+});
+
+d({
+  code: 'RICA-V317',
+  name: 'Duplicate Algorithm',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkDuplicateAlgorithm',
+  layer: 'any',
+  trigger:
+    'Two methods in different classes have highly similar call sequences while varying receiver types or sub-steps.',
+  whyItMatters:
+    'Duplicated algorithm skeletons drift independently. Template Method keeps the invariant sequence in one place and lets subclasses or collaborators supply the varying steps.',
+  howToFix: [
+    'Extract the common call sequence into a shared template method.',
+    'Move differing operations behind abstract hooks or strategy collaborators.',
+    'Keep only true variation points outside the template.',
+  ],
+  mitigationHint: 'Extract the common skeleton into a Template Method and vary only the differing sub-steps per class',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V303', 'RICA-V323'],
+  sourceRef: 'src/designPatternAnalyzer.ts:879',
+  tags: ['template-method', 'duplication', 'algorithm'],
+});
+
+d({
+  code: 'RICA-V318',
+  name: 'Hardcoded Notifications',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkHardcodedNotifier',
+  layer: 'service',
+  trigger:
+    'One method directly calls several notification, audit, event, or publisher targets.',
+  whyItMatters:
+    'Hardcoding every side effect into the use case makes notification policy difficult to change and test. Observer/event publication lets subscribers vary independently from the core workflow.',
+  howToFix: [
+    'Publish a domain/application event at the state change.',
+    'Move each notification or audit side effect into a subscriber/listener.',
+    'Keep the core method unaware of concrete notification channels.',
+  ],
+  mitigationHint: 'Decouple notification/audit side-effects via an Observer/event bus instead of direct multi-service calls',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V313'],
+  sourceRef: 'src/designPatternAnalyzer.ts:938',
+  tags: ['observer', 'events', 'notifications'],
+});
+
+d({
+  code: 'RICA-V319',
+  name: 'Monolithic Pipeline',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMonolithicPipeline',
+  layer: 'service / validator',
+  trigger:
+    'A method contains at least the configured number of sequential top-level guard or validation clauses across distinct targets.',
+  whyItMatters:
+    'Long linear validation blocks are hard to reorder, reuse, or configure. Chain of Responsibility turns each guard into a focused handler and makes the pipeline explicit.',
+  howToFix: [
+    'Extract each validation step into a handler.',
+    'Compose handlers in the required order.',
+    'Keep simple one-target null guard ladders inline when they are only defensive navigation.',
+  ],
+  mitigationHint: 'Decompose the linear guard/validation chain into configurable Chain-of-Responsibility handlers',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V321'],
+  sourceRef: 'src/designPatternAnalyzer.ts:965',
+  tags: ['chain-of-responsibility', 'validation', 'guards'],
+});
+
+d({
+  code: 'RICA-V320',
+  name: 'Service Locator',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkServiceLocator',
+  layer: 'any (outside @Configuration)',
+  trigger:
+    'Code outside configuration dynamically looks up dependencies through ApplicationContext, BeanFactory, ServiceLocator, Registry, or similar APIs.',
+  whyItMatters:
+    'Service Locator hides dependencies until runtime and makes tests depend on container state. Constructor or field injection keeps dependencies explicit and replaceable.',
+  howToFix: [
+    'Declare the dependency as a constructor parameter or injected field.',
+    'Keep dynamic bean lookup in configuration/composition code only.',
+    'Replace generic locator access with typed ports where possible.',
+  ],
+  mitigationHint: 'Inject dependencies constructor/field-style instead of looking them up via ApplicationContext/ServiceLocator',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V101', 'RICA-V103'],
+  sourceRef: 'src/designPatternAnalyzer.ts:1005',
+  tags: ['service-locator', 'dependency-injection', 'spring'],
+});
+
+d({
+  code: 'RICA-V321',
+  name: 'Excessive Null Checks',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkExcessiveNullChecks',
+  layer: 'any',
+  trigger:
+    'A method performs at least the configured number of null checks across multiple distinct target roots.',
+  whyItMatters:
+    'Scattered null checks usually mean upstream contracts are unclear. Null Objects, Optional return types, and empty collections make absence explicit and reduce defensive boilerplate.',
+  howToFix: [
+    'Return empty collections instead of null collections.',
+    'Use Optional at boundaries where absence is expected.',
+    'Introduce Null Object defaults for common nullable collaborators.',
+  ],
+  mitigationHint: 'Replace repetitive null checks with Optional, Null Objects, or empty collections at the source',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V319'],
+  sourceRef: 'src/designPatternAnalyzer.ts:1044',
+  tags: ['null-object', 'optional', 'defensive-code'],
+});
+
+d({
+  code: 'RICA-V322',
+  name: 'Missing Proxy',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingProxy',
+  layer: 'service / application (non-infrastructure)',
+  trigger:
+    'A non-infrastructure business method directly instantiates or accesses a heavy resource type (EntityManager, DataSource, Connection, Socket, HttpClient, RestTemplate, etc.) via `new` or sensitive factory calls (`getConnection`, `open`, `connect`) without a Proxy/managed wrapper or interface indirection in the infrastructure layer.',
+  whyItMatters:
+    'Heavy resources require lifecycle, access-control, and caching concerns (lazy loading, pooling, security checks) that a Proxy centralizes. Direct creation scatters construction cost, leaks connection handling into business logic, and makes testing and resource pooling impossible. A Proxy or injected bean keeps the business layer decoupled from resource acquisition.',
+  howToFix: [
+    'Create a Proxy or wrapper interface in the application layer (e.g., ConnectionProvider, ResourceProxy).',
+    'Implement it in infrastructure with pooling/lazy/access-control logic.',
+    'Inject the proxy interface into business methods instead of calling `new` or `getConnection()` directly.',
+  ],
+  beforeCode: `@Service
+public class OrderService {
+    public void process() {
+        DataSource ds = new DataSource("jdbc:mysql://...");
+        Connection conn = ds.getConnection();
+        conn.execute("SELECT ...");
+    }
+}`,
+  afterCode: `@Service
+public class OrderService {
+    private final ConnectionProxy connectionProxy;
+    public OrderService(ConnectionProxy connectionProxy) {
+        this.connectionProxy = connectionProxy;
+    }
+    public void process() {
+        connectionProxy.execute("SELECT ...");
+    }
+}`,
+  mitigationHint:
+    'Access heavy resources through a Proxy or managed wrapper/bean (lazy loading, access control, caching) instead of direct instantiation in business logic',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V301', 'RICA-V306'],
+  sourceRef: 'src/designPatternAnalyzer.ts:970',
+  tags: ['proxy', 'resource', 'heavy-resource', 'structural'],
+});
+
+d({
+  code: 'RICA-V323',
+  name: 'Missing Bridge',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingBridge',
+  layer: 'any (abstract hierarchy)',
+  trigger:
+    'An abstract class has ≥4 concrete subclasses whose names exhibit combinatorial naming (e.g., RedSquare, BlueSquare, RedCircle, BlueCircle or DatabaseLogger, FileLogger, DatabaseNotifier, FileNotifier) indicating two orthogonal dimensions collapsed into one inheritance hierarchy. Both prefix and suffix repetition must appear.',
+  whyItMatters:
+    'Collapsing two independent dimensions (e.g., color × shape, storage × notifier) into a single hierarchy causes combinatorial explosion: adding one value to either dimension multiplies the class count. The Bridge pattern decouples abstraction from implementation via composition, keeping hierarchies linear and extensible.',
+  howToFix: [
+    'Identify the two orthogonal dimensions (e.g., abstraction = Shape, implementation = Color).',
+    'Extract the second dimension as a composed interface/strategy (e.g., `private final Color color`).',
+    'Let concrete abstractions delegate to the implementation instead of encoding it in the class name.',
+  ],
+  beforeCode: `abstract class Shape { abstract void draw(); }
+class RedSquare extends Shape { void draw() { /* red square */ } }
+class BlueSquare extends Shape { void draw() { /* blue square */ } }
+class RedCircle extends Shape { void draw() { /* red circle */ } }
+class BlueCircle extends Shape { void draw() { /* blue circle */ } }`,
+  afterCode: `interface Color { void apply(); }
+class Red implements Color { void apply() { /* red */ } }
+abstract class Shape { protected final Color color; Shape(Color c){this.color=c;} abstract void draw(); }
+class Square extends Shape { Square(Color c){super(c);} void draw(){ color.apply(); /* square */ } }`,
+  mitigationHint:
+    'Decouple orthogonal dimensions via composition (Bridge) instead of exploding into combinatorial subclasses',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V307', 'RICA-V303'],
+  sourceRef: 'src/designPatternAnalyzer.ts:1030',
+  tags: ['bridge', 'hierarchy', 'structural', 'composition'],
+});
+
+d({
   code: 'RICA-V300',
   name: 'Unmapped Design-Pattern Rule (fallback)',
   severity: 'warning',

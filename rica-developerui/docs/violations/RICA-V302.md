@@ -16,7 +16,7 @@
 
 A class with 8+ incoming dependencies, 500+ lines, and at least 60% of its methods being trivial delegation.
 
-### Before (violates)
+### Violating example
 
 ```
 // 8+ dependents, 600 lines, 70% pass-through methods
@@ -29,7 +29,7 @@ public class MegaService {
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 @Service
@@ -41,15 +41,47 @@ public class PricingService { ... }
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+- // 8+ dependents, 600 lines, 70% pass-through methods
+- public class MegaService {
+-     public void a() { repoA.find(); }
+-     public void b() { repoB.find(); }
+-     public void c() { repoC.find(); }
+-     // ... dozens more 1-line delegations
+- }
++ @Service
++ public class ProductService { ... }
++ @Service
++ public class InventoryService { ... }
++ @Service
++ public class PricingService { ... }
+```
+
+
 ## Why it matters
 
 God facades concentrate too much responsibility: many dependents, too much code, and huge surface area. Any change is risky and testing is slow because one class coordinates everything. Responsibilities should be split into focused services.
 
 ## How to fix
 
-1. Group the delegated responsibilities into distinct services.
-2. Split the facade by cohesive behavior, not by convenience.
-3. Keep dependents pointing at the small focused services instead of the monolith.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Group the delegated responsibilities into distinct services.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+2. **Split the facade by cohesive behavior, not by convenience.**
+   This keeps the code aligned with the service / facade responsibility expected by RICA-V302.
+3. **Keep dependents pointing at the small focused services instead of the monolith.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V302 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 
