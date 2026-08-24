@@ -120,6 +120,12 @@ export class AiQuickFixCodeActionProvider implements vscode.CodeActionProvider {
 }
 
 export async function showFixGuidance(violation: Violation, remediation: RemediationSuggestion): Promise<void> {
+  const hasEdit = remediation.edits?.length ? 'Yes, previewable editor edit is available.' : 'No automatic edit is applied. This needs a design decision.';
+  const safetyMeaning = remediation.safety === 'auto-safe'
+    ? 'Mechanical edit with low risk.'
+    : remediation.safety === 'preview-required'
+      ? 'RICA can prepare an edit, but you should review imports, naming, and project conventions.'
+      : 'Do not auto-apply. Use the steps as a refactoring plan.';
   const doc = await vscode.workspace.openTextDocument({
     language: 'markdown',
     content: [
@@ -127,17 +133,27 @@ export async function showFixGuidance(violation: Violation, remediation: Remedia
       '',
       `**Rule:** ${violation.code || violation.ruleName}`,
       `**Safety:** ${remediation.safety}`,
+      `**Meaning:** ${safetyMeaning}`,
+      `**Automatic edit:** ${hasEdit}`,
       `**Location:** ${violation.filePath}${violation.lineNumber ? `:${violation.lineNumber}` : ''}`,
+      '',
+      '## What Is Wrong',
+      '',
+      violation.message,
+      '',
+      '## Recommended Fix',
       '',
       remediation.description,
       '',
-      '## Steps',
+      '## Exact Steps',
       '',
       ...remediation.steps.map((step, index) => `${index + 1}. ${step}`),
       '',
-      '## Evidence',
+      '## Review Before Applying',
       '',
-      violation.message,
+      '- Does this match the project injection/refactoring style?',
+      '- Are imports, annotations, and package boundaries still correct?',
+      '- For manual-design fixes, choose the smallest refactor that restores the intended architecture.',
     ].join('\n'),
   });
   await vscode.window.showTextDocument(doc, { preview: true });

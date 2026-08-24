@@ -1,71 +1,74 @@
-# rica-developerui README
+# RICA Architecture Analyzer
 
-This is the README for your extension "rica-developerui". After writing up a brief description, we recommend including the following sections.
+RICA helps Java developers find architecture, layer, API boundary, and design-pattern violations directly inside VS Code.
 
-## Features
+It is designed for projects that care about clean architecture, maintainable service boundaries, and clear separation between controllers, services, repositories, entities, DTOs, and infrastructure code.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+## What RICA Does
 
-For example if there is an image subfolder under your extension project workspace:
+- Detects layered architecture violations across Java projects.
+- Finds controller, service, entity, repository, API, and design-pattern issues.
+- Shows violations in a dedicated Architecture Violations panel.
+- Opens the exact source file and line for each violation.
+- Provides rule documentation with examples, highlighted changes, and fix guidance.
+- Includes bundled documentation, so rule help is available from inside VS Code.
 
-\!\[feature X\]\(images/feature-x.png\)
+## Main Workflow
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+1. Open a Java workspace in VS Code.
+2. Run `Java AST: Analyze Full Project`.
+3. Run `Java AST: Show Architecture Violations`.
+4. Review violations by severity, detector source, file, and line.
+5. Use `Docs` or `Fix` from the violations panel to understand and resolve each issue.
 
-## Requirements
+## Commands
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+| Command | Purpose |
+| --- | --- |
+| `Java AST: Analyze Full Project` | Scans the full Java workspace. |
+| `Java AST: Analyze Current File` | Re-analyzes only the active Java file. |
+| `Java AST: Show Architecture Violations` | Opens the violations dashboard. |
+| `Java AST: Open RICA Documentation` | Opens the bundled RICA documentation. |
+| `Java AST: Show AST Viewer` | Opens the AST viewer inside VS Code. |
+| `Java AST: Open Browser Viewer` | Opens the optional browser AST viewer when the backend is running. |
+| `Java AST: Show Status` | Shows RICA status and quick actions. |
+| `Java AST: Reset Backend Data` | Clears stored AST and violation state. |
 
-## Extension Settings
+## Violation Guidance
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+Each documented rule explains:
 
-For example:
+- what triggers the violation
+- why it matters
+- a violating example
+- a fixed version
+- what changed between the two versions
+- common framework-specific cases
+- how to verify the fix
 
-This extension contributes the following settings:
+For example, package boundary violations explain what to do when the issue is caused by Spring Data imports such as `@Query`, `@Modifying`, or `@Param`.
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## Local Analysis
 
-## Known Issues
+RICA's deterministic violation detection runs locally inside VS Code.
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+The optional browser AST viewer uses the configured backend URL. If the backend is offline, architecture violation detection still works.
 
-## Release Notes
+## Settings
 
-Users appreciate release notes as you update your extension.
+RICA can be configured from VS Code settings under `javaAstAnalyzer`.
 
-### 1.0.0
+Common settings include:
 
-Initial release of ...
+- `javaAstAnalyzer.autoAnalyzeOnOpen`
+- `javaAstAnalyzer.excludePatterns`
+- `javaAstAnalyzer.enableArchitecturalChecks`
+- `javaAstAnalyzer.enableDesignPatternChecks`
+- `javaAstAnalyzer.enableBusinessLogicChecks`
+- `javaAstAnalyzer.backendUrl`
 
-### 1.0.1
+## Documentation
 
-Fixed issue #.
+Use `Java AST: Open RICA Documentation` to open the built-in documentation.
 
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+From the Architecture Violations panel, click `Docs` on a violation row to open the relevant rule page.

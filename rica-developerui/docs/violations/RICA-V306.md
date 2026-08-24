@@ -16,7 +16,7 @@
 
 Code creates a raw thread/executor type (`new Thread`, `Executors.*`, `new ThreadPoolExecutor`) or calls `Executors.execute()` directly, outside of `@Configuration` classes.
 
-### Before (violates)
+### Violating example
 
 ```
 @Service
@@ -28,7 +28,7 @@ public class ReportService {
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 @Service
@@ -41,15 +41,44 @@ public class ReportService {
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+  @Service
+  public class ReportService {
+-     public void generateAsync() {
+-         new Thread(() -> generate()).start(); // unmanaged thread
+-     }
++     public void generate() { ... }
++
++     @Async
++     public void generateAsync() { generate(); } // managed by executor bean
+  }
+```
+
+
 ## Why it matters
 
 Raw thread management bypasses the container: no pooling, no monitoring, no graceful shutdown, no task distribution on a multi-node deployment. Use a managed executor so concurrency is bounded and observable.
 
 ## How to fix
 
-1. Inject a `TaskExecutor`/`ExecutorService` bean instead of creating threads.
-2. Or annotate the method with `@Async` and call it through the container proxy.
-3. Never spawn bare threads from controllers or services.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Inject a `TaskExecutor`/`ExecutorService` bean instead of creating threads.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+2. **Or annotate the method with `@Async` and call it through the container proxy.**
+   This gives threading lifecycle to the framework or infrastructure layer instead of scattering it through business methods.
+3. **Never spawn bare threads from controllers or services.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V306 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

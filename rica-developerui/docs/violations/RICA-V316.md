@@ -22,9 +22,20 @@ State transition rules scattered across classes drift over time. Encapsulating s
 
 ## How to fix
 
-1. Identify the state enum or discriminator.
-2. Move state-specific behavior into State objects or a transition table.
-3. Make callers delegate to the state abstraction instead of branching directly.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Identify the state enum or discriminator.**
+   This replaces branching with named behaviors, making each variation easier to test and change independently.
+2. **Move state-specific behavior into State objects or a transition table.**
+   This replaces branching with named behaviors, making each variation easier to test and change independently.
+3. **Make callers delegate to the state abstraction instead of branching directly.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V316 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

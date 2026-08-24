@@ -20,11 +20,36 @@ Code outside configuration dynamically looks up dependencies through Application
 
 Service Locator hides dependencies until runtime and makes tests depend on container state. Constructor or field injection keeps dependencies explicit and replaceable.
 
+## Common framework cases
+
+### ApplicationContext.getBean or service locator used in business code
+
+**When you see this:** A service/controller asks the container for dependencies dynamically.
+
+**Do this:**
+
+1. Inject the dependency directly through the constructor.
+2. If selection is dynamic, inject a map/list of strategies and choose by key.
+3. Keep `getBean` usage in configuration/bootstrap code only.
+
+**Avoid:** Do not hide dependencies behind service lookup. It makes tests and architecture analysis weaker.
+
 ## How to fix
 
-1. Declare the dependency as a constructor parameter or injected field.
-2. Keep dynamic bean lookup in configuration/composition code only.
-3. Replace generic locator access with typed ports where possible.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Declare the dependency as a constructor parameter or injected field.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+2. **Keep dynamic bean lookup in configuration/composition code only.**
+   This keeps the code aligned with the any (outside @Configuration) responsibility expected by RICA-V320.
+3. **Replace generic locator access with typed ports where possible.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V320 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

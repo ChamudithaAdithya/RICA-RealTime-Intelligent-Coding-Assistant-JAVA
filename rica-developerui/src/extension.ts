@@ -21,6 +21,7 @@ import { OpenAICompatibleAiAdapter } from './infrastructure/ai/openaiCompatibleA
 import { FileAuditLogger } from './infrastructure/ai/fileAuditLogger';
 import { AiQuickFixCodeActionProvider, showFixGuidance } from './codeActionProvider';
 import { DocumentationCodeActionProvider } from './documentationCodeActionProvider';
+import { openRicaDocumentation } from './documentation';
 
 let astManager: ASTManager;
 let sourceProvider: SourceProvider;
@@ -91,9 +92,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     context.subscriptions.push(
         vscode.commands.registerCommand('javaAstAnalyzer.openDocumentation', (url?: string) => {
-            if (url) {
-                vscode.env.openExternal(vscode.Uri.parse(url));
-            }
+            return openRicaDocumentation(context.extensionUri, url);
         }),
         vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', showFixGuidance),
     );
@@ -147,7 +146,13 @@ export async function activate(context: vscode.ExtensionContext) {
             ViolationsWebviewPanel.createOrShow(context.extensionUri, violationManager);
         }),
 
-        vscode.commands.registerCommand('javaAstAnalyzer.openBrowserViewer', () => {
+        vscode.commands.registerCommand('javaAstAnalyzer.openBrowserViewer', async () => {
+            const isHealthy = await apiClient.checkHealth();
+            if (!isHealthy) {
+                vscode.window.showWarningMessage('Backend server is not reachable. The browser AST viewer is unavailable in offline mode.');
+                updateStatusBar('disconnected');
+                return;
+            }
             const url = `${backendUrl}/view`;
             vscode.env.openExternal(vscode.Uri.parse(url));
         }),

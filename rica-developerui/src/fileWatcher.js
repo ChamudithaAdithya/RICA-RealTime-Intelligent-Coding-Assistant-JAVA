@@ -98,6 +98,9 @@ class FileWatcher {
      * Uses debouncing to avoid excessive parsing.
      */
     onDocumentChanged(document) {
+        const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+        const relativePath = path.relative(workspaceRoot, document.uri.fsPath);
+        this.violationManager.markFileDirty(relativePath);
         this.debouncedHandleDocumentChange(document);
     }
     /**

@@ -22,9 +22,20 @@ Duplicated algorithm skeletons drift independently. Template Method keeps the in
 
 ## How to fix
 
-1. Extract the common call sequence into a shared template method.
-2. Move differing operations behind abstract hooks or strategy collaborators.
-3. Keep only true variation points outside the template.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Extract the common call sequence into a shared template method.**
+   This keeps the code aligned with the any responsibility expected by RICA-V317.
+2. **Move differing operations behind abstract hooks or strategy collaborators.**
+   This replaces branching with named behaviors, making each variation easier to test and change independently.
+3. **Keep only true variation points outside the template.**
+   This keeps the code aligned with the any responsibility expected by RICA-V317.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V317 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

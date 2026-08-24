@@ -16,7 +16,7 @@
 
 An endpoint parameter is an internal domain/entity class instead of a DTO. Private helper methods are skipped.
 
-### Before (violates)
+### Violating example
 
 ```
 @PostMapping("/orders")
@@ -26,7 +26,7 @@ public Order create(@RequestBody Order order) { // internal/entity type
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 @PostMapping("/orders")
@@ -36,15 +36,54 @@ public OrderResponse create(@RequestBody @Valid OrderRequest req) {
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+  @PostMapping("/orders")
+- public Order create(@RequestBody Order order) { // internal/entity type
+-     return orderService.save(order);
++ public OrderResponse create(@RequestBody @Valid OrderRequest req) {
++     return orderService.create(req);
+  }
+```
+
+
 ## Why it matters
 
 Accepting domain objects directly as request payloads couples your API contract to the internal model and skips the boundary where validation/transformation should happen. Request DTOs let you validate input (see V206) and map only what is needed into the domain.
 
+## Common framework cases
+
+### Endpoint accepts an Entity as request body
+
+**When you see this:** A controller/resource parameter uses a domain/entity type for incoming JSON.
+
+**Do this:**
+
+1. Create a request DTO for the endpoint input.
+2. Validate the DTO at the boundary.
+3. Map the DTO into domain commands/entities inside the service layer.
+
+**Avoid:** Do not expose entity setters and persistence fields to clients through request JSON.
+
 ## How to fix
 
-1. Create a request DTO containing the input fields and validation annotations.
-2. Change the endpoint parameter to the DTO.
-3. Map the DTO to the domain object in the service layer.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Create a request DTO containing the input fields and validation annotations.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+2. **Change the endpoint parameter to the DTO.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+3. **Map the DTO to the domain object in the service layer.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V202 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

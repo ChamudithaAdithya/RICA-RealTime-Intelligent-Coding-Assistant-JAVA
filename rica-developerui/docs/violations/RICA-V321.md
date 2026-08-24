@@ -22,9 +22,20 @@ Scattered null checks usually mean upstream contracts are unclear. Null Objects,
 
 ## How to fix
 
-1. Return empty collections instead of null collections.
-2. Use Optional at boundaries where absence is expected.
-3. Introduce Null Object defaults for common nullable collaborators.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Return empty collections instead of null collections.**
+   This keeps the code aligned with the any responsibility expected by RICA-V321.
+2. **Use Optional at boundaries where absence is expected.**
+   This keeps the code aligned with the any responsibility expected by RICA-V321.
+3. **Introduce Null Object defaults for common nullable collaborators.**
+   This keeps the code aligned with the any responsibility expected by RICA-V321.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V321 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

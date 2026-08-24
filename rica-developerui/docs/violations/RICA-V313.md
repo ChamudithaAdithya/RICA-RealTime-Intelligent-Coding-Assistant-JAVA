@@ -22,9 +22,20 @@ Cross-cutting behavior embedded in business methods is duplicated and easy to ap
 
 ## How to fix
 
-1. Extract logging, metrics, tracing, or audit behavior into a decorator/advisor.
-2. Keep the core service method focused on business work.
-3. Apply the decorator consistently at composition time.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Extract logging, metrics, tracing, or audit behavior into a decorator/advisor.**
+   This keeps the code aligned with the service / application responsibility expected by RICA-V313.
+2. **Keep the core service method focused on business work.**
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+3. **Apply the decorator consistently at composition time.**
+   This keeps the code aligned with the service / application responsibility expected by RICA-V313.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V313 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

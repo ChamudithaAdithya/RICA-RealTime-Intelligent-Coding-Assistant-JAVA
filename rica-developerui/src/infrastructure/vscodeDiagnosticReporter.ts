@@ -47,6 +47,14 @@ export class VscodeDiagnosticReporter implements DiagnosticReporter {
     this.collection.clear();
     this.advisoryCollection?.clear();
   }
+
+  clearFile(filePath: string): void {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) return;
+    const uri = workspaceUri(workspaceFolders[0], filePath);
+    this.collection.delete(uri);
+    this.advisoryCollection?.delete(uri);
+  }
 }
 
 function workspaceUri(workspaceFolder: vscode.WorkspaceFolder, relativePath: string): vscode.Uri {

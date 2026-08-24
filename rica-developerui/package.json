@@ -1,9 +1,11 @@
 {
-  "name": "rica-developerui",
-  "displayName": "RICA - developerUi",
+  "name": "rica-realtime-code-violations-analyzer",
+  "displayName": "RICA - Code Analyzer",
   "description": "violations detection and guidance to solve",
-  "version": "0.0.1",
-  "publisher": "your-name",
+  "version": "0.0.3",
+  "publisher": "Geeth-Chamuditha-Adithya-Herath",
+  "license": "MIT",
+  "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.110.0"
   },
@@ -12,7 +14,21 @@
     "Other"
   ],
   "activationEvents": [
-    "workspaceContains:**/*.java"
+    "workspaceContains:**/*.java",
+    "onLanguage:java",
+    "onCommand:javaAstAnalyzer.analyzeProject",
+    "onCommand:javaAstAnalyzer.analyzeCurrentFile",
+    "onCommand:javaAstAnalyzer.showAstView",
+    "onCommand:javaAstAnalyzer.openBrowserViewer",
+    "onCommand:javaAstAnalyzer.showStatus",
+    "onCommand:javaAstAnalyzer.resetBackend",
+    "onCommand:javaAstAnalyzer.showViolationsView",
+    "onCommand:javaAstAnalyzer.openDocumentation",
+    "onCommand:javaAstAnalyzer.showFixGuidance",
+    "onCommand:rica.analyzeProject",
+    "onCommand:rica.quickScanFile",
+    "onCommand:rica.aiReview",
+    "onCommand:rica.showStatusSummary"
   ],
   "main": "./src/extension.js",
   "contributes": {
@@ -291,7 +307,7 @@
         "javaAstAnalyzer.documentationBaseUrl": {
           "type": "string",
           "default": "http://localhost:5173",
-          "description": "Base URL for the RICA docs site. The violations webview opens `<base>/violations/<CODE>.html` when you click Docs on a violation row"
+          "description": "Optional external base URL for RICA docs links in diagnostics. The violations webview and command palette open bundled docs inside VS Code."
         }
       }
     }

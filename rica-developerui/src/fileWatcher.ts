@@ -94,6 +94,9 @@ export class FileWatcher {
      * Uses debouncing to avoid excessive parsing.
      */
     onDocumentChanged(document: vscode.TextDocument): void {
+        const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
+        const relativePath = path.relative(workspaceRoot, document.uri.fsPath);
+        this.violationManager.markFileDirty(relativePath);
         this.debouncedHandleDocumentChange(document);
     }
 

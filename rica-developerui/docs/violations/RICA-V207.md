@@ -16,7 +16,7 @@
 
 An endpoint returns a non-DTO internal project class instead of a DTO. Entity returns are reported as V201 instead; private helper methods are skipped.
 
-### Before (violates)
+### Violating example
 
 ```
 @GetMapping("/invoices/{id}")
@@ -26,7 +26,7 @@ public Invoice getInvoice(@PathVariable long id) { // Invoice is an internal mod
 ```
 
 
-### After (fixed)
+### Fixed version
 
 ```
 @GetMapping("/invoices/{id}")
@@ -36,15 +36,40 @@ public InvoiceResponse getInvoice(@PathVariable long id) {
 ```
 
 
+## What changed
+
+The highlighted diff below shows the real refactor: lines marked with `-` are removed from the violating version, and lines marked with `+` are added in the fixed version.
+
+```diff
+  @GetMapping("/invoices/{id}")
+- public Invoice getInvoice(@PathVariable long id) { // Invoice is an internal model
+-     return invoiceService.findById(id);
++ public InvoiceResponse getInvoice(@PathVariable long id) {
++     return invoiceService.getInvoiceResponse(id);
+  }
+```
+
+
 ## Why it matters
 
 Returning internal domain objects (beyond entities) still leaks the internal model into the API contract. A DTO keeps the contract stable even when domain internals change and gives you a place to shape exactly what the client sees.
 
 ## How to fix
 
-1. Create a response DTO.
-2. Map the domain object to the DTO in the service layer.
-3. Return the DTO from the endpoint.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Create a response DTO.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+2. **Map the domain object to the DTO in the service layer.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+3. **Return the DTO from the endpoint.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V207 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

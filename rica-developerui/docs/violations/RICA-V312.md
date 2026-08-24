@@ -22,9 +22,20 @@ A set of unrelated concrete factories makes product-family creation inconsistent
 
 ## How to fix
 
-1. Introduce a common factory interface.
-2. Group related product creation behind that interface.
-3. Inject the abstraction instead of selecting concrete factories throughout the code.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Introduce a common factory interface.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+2. **Group related product creation behind that interface.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+3. **Inject the abstraction instead of selecting concrete factories throughout the code.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V312 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

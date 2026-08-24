@@ -55,6 +55,7 @@ const openaiCompatibleAiAdapter_1 = require("./infrastructure/ai/openaiCompatibl
 const fileAuditLogger_1 = require("./infrastructure/ai/fileAuditLogger");
 const codeActionProvider_1 = require("./codeActionProvider");
 const documentationCodeActionProvider_1 = require("./documentationCodeActionProvider");
+const documentation_1 = require("./documentation");
 let astManager;
 let sourceProvider;
 let apiClient;
@@ -95,9 +96,7 @@ async function activate(context) {
     // Docs lightbulb: "Open RICA documentation" on every deterministic violation
     context.subscriptions.push(vscode.languages.registerCodeActionsProvider('java', new documentationCodeActionProvider_1.DocumentationCodeActionProvider(), { providedCodeActionKinds: documentationCodeActionProvider_1.DocumentationCodeActionProvider.providedCodeActionKinds }));
     context.subscriptions.push(vscode.commands.registerCommand('javaAstAnalyzer.openDocumentation', (url) => {
-        if (url) {
-            vscode.env.openExternal(vscode.Uri.parse(url));
-        }
+        return (0, documentation_1.openRicaDocumentation)(context.extensionUri, url);
     }), vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', codeActionProvider_1.showFixGuidance));
     fileWatcher = new fileWatcher_1.FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
     // Re-run analysis when relevant settings change
@@ -133,7 +132,13 @@ async function activate(context) {
         webviewPanel_1.ASTWebviewPanel.createOrShow(context.extensionUri, apiClient);
     }), vscode.commands.registerCommand('javaAstAnalyzer.showViolationsView', () => {
         violationsWebviewPanel_1.ViolationsWebviewPanel.createOrShow(context.extensionUri, violationManager);
-    }), vscode.commands.registerCommand('javaAstAnalyzer.openBrowserViewer', () => {
+    }), vscode.commands.registerCommand('javaAstAnalyzer.openBrowserViewer', async () => {
+        const isHealthy = await apiClient.checkHealth();
+        if (!isHealthy) {
+            vscode.window.showWarningMessage('Backend server is not reachable. The browser AST viewer is unavailable in offline mode.');
+            updateStatusBar('disconnected');
+            return;
+        }
         const url = `${backendUrl}/view`;
         vscode.env.openExternal(vscode.Uri.parse(url));
     }), vscode.commands.registerCommand('javaAstAnalyzer.showStatus', () => {

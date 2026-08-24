@@ -22,9 +22,20 @@ Large interfaces force clients to depend on operations they do not use. This vio
 
 ## How to fix
 
-1. Split the interface by cohesive responsibilities.
-2. Point each client at the smallest interface it actually needs.
-3. Keep broad facade contracts separate from focused domain ports.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Split the interface by cohesive responsibilities.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+2. **Point each client at the smallest interface it actually needs.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+3. **Keep broad facade contracts separate from focused domain ports.**
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V309 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

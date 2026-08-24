@@ -22,9 +22,20 @@ Repeated value-object allocation inside hot loops creates unnecessary memory pre
 
 ## How to fix
 
-1. Hoist invariant value construction outside the loop.
-2. Cache frequently reused immutable values.
-3. Prefer shared constants for stable configuration-like values.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Hoist invariant value construction outside the loop.**
+   This keeps the code aligned with the any responsibility expected by RICA-V315.
+2. **Cache frequently reused immutable values.**
+   This keeps the code aligned with the any responsibility expected by RICA-V315.
+3. **Prefer shared constants for stable configuration-like values.**
+   This keeps the code aligned with the any responsibility expected by RICA-V315.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V315 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

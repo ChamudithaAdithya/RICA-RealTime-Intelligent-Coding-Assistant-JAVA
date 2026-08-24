@@ -22,9 +22,20 @@ Long linear validation blocks are hard to reorder, reuse, or configure. Chain of
 
 ## How to fix
 
-1. Extract each validation step into a handler.
-2. Compose handlers in the required order.
-3. Keep simple one-target null guard ladders inline when they are only defensive navigation.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Extract each validation step into a handler.**
+   This keeps the code aligned with the service / validator responsibility expected by RICA-V319.
+2. **Compose handlers in the required order.**
+   This keeps the code aligned with the service / validator responsibility expected by RICA-V319.
+3. **Keep simple one-target null guard ladders inline when they are only defensive navigation.**
+   This keeps the code aligned with the service / validator responsibility expected by RICA-V319.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V319 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

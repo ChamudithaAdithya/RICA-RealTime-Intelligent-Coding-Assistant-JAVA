@@ -22,9 +22,20 @@ Manual field copying is brittle. New fields are easy to forget, copy semantics a
 
 ## How to fix
 
-1. Use a copy constructor, clone method, or explicit copy factory.
-2. For DTO mapping, use a dedicated mapper and keep it exempt from prototype findings.
-3. Keep deep-copy behavior in one reviewed implementation.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Use a copy constructor, clone method, or explicit copy factory.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+2. **For DTO mapping, use a dedicated mapper and keep it exempt from prototype findings.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+3. **Keep deep-copy behavior in one reviewed implementation.**
+   This keeps the code aligned with the service / mapper responsibility expected by RICA-V311.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V311 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

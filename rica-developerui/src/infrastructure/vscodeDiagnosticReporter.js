@@ -78,6 +78,14 @@ class VscodeDiagnosticReporter {
         this.collection.clear();
         this.advisoryCollection?.clear();
     }
+    clearFile(filePath) {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0)
+            return;
+        const uri = workspaceUri(workspaceFolders[0], filePath);
+        this.collection.delete(uri);
+        this.advisoryCollection?.delete(uri);
+    }
 }
 exports.VscodeDiagnosticReporter = VscodeDiagnosticReporter;
 function workspaceUri(workspaceFolder, relativePath) {

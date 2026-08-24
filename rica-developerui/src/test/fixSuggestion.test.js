@@ -25,6 +25,9 @@ describe('FixSuggestionEngine', () => {
     assert.ok(violation.remediationSuggestions.length >= 2);
     const editSuggestion = violation.remediationSuggestions.find(s => s.edits && s.edits.length);
     assert.ok(editSuggestion, 'should include an editable suggestion');
+    assert.match(editSuggestion.title, /Preview: insert @Autowired/);
+    assert.match(editSuggestion.description, /Constructor injection/);
+    assert.match(editSuggestion.steps[0], /Preview the edit/);
     assert.strictEqual(editSuggestion.safety, 'preview-required');
     assert.strictEqual(editSuggestion.edits[0].text, '@Autowired');
     assert.strictEqual(editSuggestion.edits[0].line, 7);

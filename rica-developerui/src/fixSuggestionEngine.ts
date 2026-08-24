@@ -40,9 +40,9 @@ function annotationSuggestion(v: Violation, annotation: string, title: string, d
     description,
     safety: 'preview-required',
     steps: [
-      `Insert ${annotation} at the flagged declaration.`,
-      'Verify the required import is present or use the fully qualified annotation name.',
-      'Prefer constructor injection or domain-specific authorization/validation when possible.',
+      `Preview the edit that inserts ${annotation} above the flagged declaration.`,
+      `If the file does not already import ${annotation}, add the correct import manually or use the fully qualified annotation.`,
+      'Re-run RICA after applying the edit to confirm the violation disappears.',
     ],
     edits: [{
       filePath: v.filePath,
@@ -108,7 +108,7 @@ export class FixSuggestionEngine {
     switch (v.code) {
       case 'RICA-V102':
         return [
-          annotationSuggestion(v, '@Autowired', 'Inject repository field', `Inject ${target(v)} through Spring instead of leaving it unmanaged.`),
+          annotationSuggestion(v, '@Autowired', 'Preview: insert @Autowired on repository field', `This fixes the immediate unmanaged-field smell by marking ${target(v)} for dependency injection. Constructor injection is still the cleaner design if you can refactor the class.`),
           suggestion(v, 'Prefer constructor injection', 'manual-design-required', [
             `Add ${target(v)} as a constructor parameter.`,
             `Assign it to the field '${v.contextMetadata?.fieldName || 'repository'}'.`,
@@ -118,7 +118,7 @@ export class FixSuggestionEngine {
       case 'RICA-V103':
       case 'RICA-V205':
         return [
-          annotationSuggestion(v, '@Autowired', 'Inject service dependency', `Inject ${target(v)} instead of constructing or accessing it directly.`),
+          annotationSuggestion(v, '@Autowired', 'Preview: insert @Autowired on service field', `This fixes the immediate unmanaged dependency by marking ${target(v)} for dependency injection. Prefer constructor injection when editing the class more deeply.`),
           suggestion(v, 'Route controller/resource work through an injected service', 'manual-design-required', [
             'Create or reuse a service method that owns the application workflow.',
             'Inject the service into the controller/resource.',
@@ -127,7 +127,7 @@ export class FixSuggestionEngine {
         ].filter(Boolean) as RemediationSuggestion[];
       case 'RICA-V206':
         return [
-          annotationSuggestion(v, '@Valid', 'Add request validation marker', 'Mark the flagged request object for validation.'),
+          annotationSuggestion(v, '@Valid', 'Preview: insert @Valid on request parameter', 'This marks the request object for validation. You still need field-level constraints on the DTO for meaningful validation.'),
           suggestion(v, 'Add precise validation constraints', 'preview-required', [
             'Add @Valid to request-body DTO parameters.',
             'Add field constraints such as @NotNull, @NotBlank, @Size, @Min, or @Max.',

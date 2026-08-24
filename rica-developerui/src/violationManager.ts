@@ -220,6 +220,17 @@ export class ViolationManager {
     }
 
     /**
+     * Clears stale diagnostics for the file currently being edited. Fresh
+     * violations are restored by the debounced parse/save analysis.
+     */
+    public markFileDirty(filePath: string): void {
+        this.activeViolations = this.activeViolations.filter(v => v.filePath !== filePath);
+        this.advisoryViolations = this.advisoryViolations.filter(v => v.filePath !== filePath);
+        this.diagnosticReporter.clearFile(filePath);
+        this.onViolationsChanged?.();
+    }
+
+    /**
      * Phase 5: Incremental delta pipeline for single-file changes.
      */
     public onFileSaved(filePath: string, fileContent: string): void {
@@ -525,6 +536,10 @@ export class ViolationManager {
         this.diagnosticReporter.clear();
         this.activeViolations = [];
         this.advisoryViolations = [];
+        this.filesMap = {};
+        this.graph = new ProjectDependencyGraph();
+        this.graphMaps = { dependencies: new Map(), dependents: new Map() };
+        this.onViolationsChanged?.();
     }
 
     private buildClassAnnotationsMap(): Map<string, string[]> {

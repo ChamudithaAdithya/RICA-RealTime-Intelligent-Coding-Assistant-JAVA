@@ -22,9 +22,20 @@ Construction-heavy business methods mix orchestration with object assembly. That
 
 ## How to fix
 
-1. Move complex construction into a Builder, Factory, or assembler.
-2. Keep branching decisions out of constructor argument lists.
-3. Inject the factory/builder when construction requires external policy.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Move complex construction into a Builder, Factory, or assembler.**
+   This moves construction policy into one named place, so callers do not repeat object setup rules.
+2. **Keep branching decisions out of constructor argument lists.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+3. **Inject the factory/builder when construction requires external policy.**
+   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V308 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

@@ -1,10 +1,14 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { Violation } from './types/violations';
 import { ViolationManager } from './violationManager';
+import { showFixGuidance } from './codeActionProvider';
+import { openRicaDocumentation } from './documentation';
 
 export class ViolationsWebviewPanel {
     public static currentPanel: ViolationsWebviewPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
+    private readonly _extensionUri: vscode.Uri;
     private readonly _violationManager: ViolationManager;
     private _disposables: vscode.Disposable[] = [];
 
@@ -29,11 +33,12 @@ export class ViolationsWebviewPanel {
             }
         );
 
-        ViolationsWebviewPanel.currentPanel = new ViolationsWebviewPanel(panel, violationManager);
+        ViolationsWebviewPanel.currentPanel = new ViolationsWebviewPanel(panel, extensionUri, violationManager);
     }
 
-    private constructor(panel: vscode.WebviewPanel, violationManager: ViolationManager) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, violationManager: ViolationManager) {
         this._panel = panel;
+        this._extensionUri = extensionUri;
         this._violationManager = violationManager;
         this._violationManager.setOnViolationsChanged(() => this._update());
 
@@ -46,21 +51,33 @@ export class ViolationsWebviewPanel {
                         if (message.filePath) {
                             const workspaceFolders = vscode.workspace.workspaceFolders;
                             if (workspaceFolders && workspaceFolders.length > 0) {
-                                const uri = vscode.Uri.joinPath(workspaceFolders[0].uri, message.filePath);
-                                const doc = await vscode.workspace.openTextDocument(uri);
-                                const editor = await vscode.window.showTextDocument(doc);
-                                const line = Math.max(0, (message.lineNumber || 1) - 1);
-                                editor.selection = new vscode.Selection(line, 0, line, 0);
-                                editor.revealRange(new vscode.Range(line, 0, line, 0));
+                                const root = workspaceFolders[0].uri.fsPath;
+                                const targetPath = path.resolve(root, message.filePath);
+                                const relative = path.relative(root, targetPath);
+                                if (relative.startsWith('..') || path.isAbsolute(relative)) {
+                                    vscode.window.showErrorMessage(`RICA cannot open a file outside the workspace: ${message.filePath}`);
+                                    break;
+                                }
+                                try {
+                                    const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+                                    const editor = await vscode.window.showTextDocument(doc);
+                                    const line = Math.max(0, (message.lineNumber || 1) - 1);
+                                    editor.selection = new vscode.Selection(line, 0, line, 0);
+                                    editor.revealRange(new vscode.Range(line, 0, line, 0));
+                                } catch (error: any) {
+                                    vscode.window.showErrorMessage(`RICA could not open ${message.filePath}: ${error.message}`);
+                                }
                             }
                         }
                         break;
                     case 'openViolationDocs':
                         if (message.url) {
-                            const cfg = vscode.workspace.getConfiguration('javaAstAnalyzer');
-                            const base = cfg.get<string>('documentationBaseUrl', 'http://localhost:5173');
-                            const target = base.replace(/\/+$/, '') + message.url;
-                            vscode.env.openExternal(vscode.Uri.parse(target));
+                            await openRicaDocumentation(this._extensionUri, message.url);
+                        }
+                        break;
+                    case 'showFixGuidance':
+                        if (message.violation && message.remediation) {
+                            await showFixGuidance(message.violation, message.remediation);
                         }
                         break;
                     case 'ignoreViolation':
@@ -108,6 +125,7 @@ export class ViolationsWebviewPanel {
     private _getHtmlContent(violations: Violation[], ignoredIds: string[]): string {
         const dataJson = JSON.stringify(violations).replace(/<\/script>/gi, '<\\/script>');
         const ignoredJson = JSON.stringify(ignoredIds).replace(/<\/script>/gi, '<\\/script>');
+        const sourceOptions = this._renderSourceOptions(violations);
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,7 +158,7 @@ tr.clickable{cursor:pointer}
 .badge-source{background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:10px;padding:1px 6px;border-radius:4px;margin-right:4px}
 .message-cell{max-width:400px;overflow:hidden;text-overflow:ellipsis}
 .file-cell{max-width:250px;overflow:hidden;text-overflow:ellipsis;font-family:var(--vscode-editor-font-family);font-size:11px}
-.hint-cell{max-width:300px;overflow:hidden;text-overflow:ellipsis;font-size:11px;color:var(--vscode-descriptionForeground)}
+.hint-cell{max-width:360px;font-size:11px;color:var(--vscode-descriptionForeground);line-height:1.35}
 .muted{opacity:.75;font-size:10px;text-transform:uppercase}
 #notificationBar{display:none;padding:8px 16px;font-size:12px;border-bottom:1px solid var(--vscode-panel-border);align-items:center;gap:8px}
 #notificationBar.info{background:var(--vscode-editorInfo-background,#062);color:var(--vscode-editorInfo-foreground)}
@@ -170,6 +188,8 @@ tr.clickable{cursor:pointer}
 .action-btn.unignore:hover{background:var(--vscode-textLink-foreground);color:#fff}
 .action-btn.docs{border-color:var(--vscode-textLink-foreground);color:var(--vscode-textLink-foreground);background:transparent;margin-left:4px}
 .action-btn.docs:hover{background:var(--vscode-textLink-foreground);color:#fff}
+.action-btn.fix{border-color:var(--vscode-button-background);color:var(--vscode-button-foreground);background:var(--vscode-button-background);margin-left:4px}
+.action-btn.fix:hover{background:var(--vscode-button-hoverBackground)}
 </style>
 </head>
 <body>
@@ -177,7 +197,7 @@ tr.clickable{cursor:pointer}
 <div class="toolbar">
 <span class="title">Architecture Violations</span>
 <span class="count" id="violationCount">0 violations</span>
-<select id="sourceFilter"><option value="all">All sources</option><option value="ServiceLayer">ServiceLayer</option><option value="ControllerLayer">ControllerLayer</option><option value="EntityLayer">EntityLayer</option><option value="APIResourceLayer">APIResourceLayer</option><option value="CrossFileAnalyzer">CrossFileAnalyzer</option></select>
+<select id="sourceFilter"><option value="all">All sources</option>${sourceOptions}</select>
 <select id="severityFilter"><option value="all">All severities</option><option value="error">Errors</option><option value="warning">Warnings</option><option value="info">Info</option></select>
 <input type="text" id="searchInput" placeholder="Search violations..." style="width:180px">
 <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="showIgnored"> Show ignored</label>
@@ -326,8 +346,11 @@ function renderTable() {
             act += '<button class="action-btn docs" onclick="return openDocs(' + i + ')" title="Open documentation for this violation">\u266F Docs</button>';
         }
         var fix = v.remediationSuggestions && v.remediationSuggestions.length ? v.remediationSuggestions[0] : null;
+        if (!isIgnored && fix) {
+            act += '<button class="action-btn fix" onclick="return openFixGuidance(' + i + ')" title="Open exact remediation steps">Fix</button>';
+        }
         var mit = fix
-            ? '<strong>' + escapeAttr(fix.title) + '</strong><br><span class="muted">' + escapeAttr(fix.safety) + '</span> ' + escapeAttr(fix.description || '')
+            ? '<strong>' + escapeAttr(fix.title) + '</strong><br><span class="muted">' + escapeAttr(fix.safety) + '</span> ' + escapeAttr(fix.description || '') + firstStep(fix)
             : (v.mitigationHint ? escapeAttr(v.mitigationHint) : (v.explanation ? escapeAttr(v.explanation) : ''));
         html += '<tr' + rowClass + '>';
         html += '<td><span class="' + cls + '">' + lbl + '</span></td>';
@@ -378,6 +401,20 @@ function openDocs(idx) {
     return false;
 }
 
+function firstStep(fix) {
+    if (!fix || !fix.steps || !fix.steps.length) return '';
+    return '<br><span class="muted">First step</span> ' + escapeAttr(fix.steps[0]);
+}
+
+function openFixGuidance(idx) {
+    var v = filteredRows[idx];
+    var fix = v && v.remediationSuggestions && v.remediationSuggestions.length ? v.remediationSuggestions[0] : null;
+    if (v && fix) {
+        _vscode.postMessage({ command: 'showFixGuidance', violation: v, remediation: fix });
+    }
+    return false;
+}
+
 function openDocsHome() {
     _vscode.postMessage({ command: 'openViolationDocs', url: '/index.html' });
 }
@@ -408,5 +445,36 @@ renderTable();
 </script>
 </body>
 </html>`;
+    }
+
+    private _renderSourceOptions(violations: Violation[]): string {
+        const preferredOrder = [
+            'ServiceLayer',
+            'ControllerLayer',
+            'EntityLayer',
+            'APIResourceLayer',
+            'CrossFileAnalyzer',
+            'GraphAnalyzer',
+            'PackageBoundaryAnalyzer',
+            'DesignPatternAnalyzer',
+            'AiAdvisory',
+        ];
+        const sources = new Set<string>();
+        for (const v of violations) {
+            if (v.detectorSource) sources.add(v.detectorSource);
+        }
+        const ordered = [
+            ...preferredOrder.filter(s => sources.has(s)),
+            ...Array.from(sources).filter(s => !preferredOrder.includes(s)).sort(),
+        ];
+        return ordered.map(s => `<option value="${this._escapeHtml(s)}">${this._escapeHtml(s)}</option>`).join('');
+    }
+
+    private _escapeHtml(value: string): string {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
 }

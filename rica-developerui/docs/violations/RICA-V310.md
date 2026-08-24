@@ -22,9 +22,20 @@ Multi-step writes are workflow units. When they are left inline, retry, rollback
 
 ## How to fix
 
-1. Wrap the write sequence in an explicit Command object or use-case class.
-2. Add a transactional boundary where the unit of work must commit atomically.
-3. Keep validation and write orchestration visible at one boundary.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Wrap the write sequence in an explicit Command object or use-case class.**
+   This keeps the code aligned with the service responsibility expected by RICA-V310.
+2. **Add a transactional boundary where the unit of work must commit atomically.**
+   This keeps the code aligned with the service responsibility expected by RICA-V310.
+3. **Keep validation and write orchestration visible at one boundary.**
+   This keeps the code aligned with the service responsibility expected by RICA-V310.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V310 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

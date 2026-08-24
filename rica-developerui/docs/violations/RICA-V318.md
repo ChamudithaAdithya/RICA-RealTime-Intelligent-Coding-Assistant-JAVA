@@ -22,9 +22,20 @@ Hardcoding every side effect into the use case makes notification policy difficu
 
 ## How to fix
 
-1. Publish a domain/application event at the state change.
-2. Move each notification or audit side effect into a subscriber/listener.
-3. Keep the core method unaware of concrete notification channels.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Publish a domain/application event at the state change.**
+   This replaces branching with named behaviors, making each variation easier to test and change independently.
+2. **Move each notification or audit side effect into a subscriber/listener.**
+   This keeps the code aligned with the service responsibility expected by RICA-V318.
+3. **Keep the core method unaware of concrete notification channels.**
+   This keeps the code aligned with the service responsibility expected by RICA-V318.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V318 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

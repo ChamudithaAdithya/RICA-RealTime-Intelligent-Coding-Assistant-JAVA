@@ -22,8 +22,18 @@ Acts as a safety net so an unregistered graph rule is still surfaced to the user
 
 ## How to fix
 
-1. Add the new rule id to `CROSS_FILE_CODE_MAP` and give it a documented code.
-2. Or map the rule to an existing architectural code.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Add the new rule id to `CROSS_FILE_CODE_MAP` and give it a documented code.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+2. **Or map the rule to an existing architectural code.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V400 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 

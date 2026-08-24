@@ -22,7 +22,16 @@ Safety net for future design-pattern rules so they surface as visible violations
 
 ## How to fix
 
-1. Map the new rule type in `DP_RULE_CODES` and document it.
+Use this as the practical checklist. Each item explains both the action and the reason behind it.
+
+1. **Map the new rule type in `DP_RULE_CODES` and document it.**
+   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+
+## How to verify
+
+1. Re-run RICA on the changed file or project.
+2. Confirm RICA-V300 no longer appears at the same location.
+3. Run the project tests for the changed feature, because architecture fixes should preserve behavior.
 
 ## Mitigation hint
 
