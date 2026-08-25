@@ -6,7 +6,7 @@ import {
     cyclicDependencyRule, crossLayerViolationRule
 } from './dependencyGraph';
 import { FullASTOutput } from './astTypes';
-import { violationDocSlug } from './violationCatalog';
+import { VIOLATION_DOC_BY_CODE, violationDocSlug } from './violationCatalog';
 
 export interface CrossFileRule {
     id: string;
@@ -32,9 +32,10 @@ function toUnifiedViolation(
     ruleName: string,
     mitigationHint: string,
 ): Violation {
+    const code = CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400';
     return {
         id: gv.ruleId ? `${gv.ruleId}-${gv.filePath}-${gv.line || 0}` : `${ruleId}-${gv.filePath}-${gv.line || 0}`,
-        code: CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400',
+        code,
         ruleName,
         severity: gv.severity,
         message: gv.message,
@@ -46,8 +47,14 @@ function toUnifiedViolation(
         },
         explanation: gv.explanation || undefined,
         mitigationHint,
-        documentationUrl: violationDocSlug(CROSS_FILE_CODE_MAP[ruleId]),
+        documentationUrl: violationDocSlug(code),
         detectorSource: 'CrossFileAnalyzer',
+        analysisMetadata: {
+            confidence: gv.severity === 'error' ? 'High' : gv.severity === 'warning' ? 'Medium' : 'Low',
+            evidence: gv.targetId ? `${gv.sourceId} -> ${gv.targetId}` : gv.sourceId,
+            reason: gv.explanation || VIOLATION_DOC_BY_CODE[code]?.trigger || gv.message,
+            type: 'Architecture best-practice violation',
+        },
     };
 }
 
@@ -66,9 +73,10 @@ function toUnifiedFromEdge(
     layerContext?: string,
     explanation?: string,
 ): Violation {
+    const code = CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400';
     return {
         id: `${ruleId}-${sourceId}-${targetId}`,
-        code: CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400',
+        code,
         ruleName,
         severity,
         message,
@@ -80,8 +88,14 @@ function toUnifiedFromEdge(
         },
         explanation: explanation || 'A dependency edge violates architectural rules based on edge type and layer constraints.',
         mitigationHint,
-        documentationUrl: violationDocSlug(CROSS_FILE_CODE_MAP[ruleId]),
+        documentationUrl: violationDocSlug(code),
         detectorSource: 'CrossFileAnalyzer',
+        analysisMetadata: {
+            confidence: severity === 'error' ? 'High' : severity === 'warning' ? 'Medium' : 'Low',
+            evidence: `${sourceId} -> ${targetId}`,
+            reason: explanation || VIOLATION_DOC_BY_CODE[code]?.trigger || message,
+            type: 'Architecture best-practice violation',
+        },
     };
 }
 

@@ -15,9 +15,10 @@ const CROSS_FILE_CODE_MAP = {
     'ENTITY_EXPOSURE': 'RICA-V404',
 };
 function toUnifiedViolation(gv, ruleId, ruleName, mitigationHint) {
+    const code = CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400';
     return {
         id: gv.ruleId ? `${gv.ruleId}-${gv.filePath}-${gv.line || 0}` : `${ruleId}-${gv.filePath}-${gv.line || 0}`,
-        code: CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400',
+        code,
         ruleName,
         severity: gv.severity,
         message: gv.message,
@@ -29,14 +30,21 @@ function toUnifiedViolation(gv, ruleId, ruleName, mitigationHint) {
         },
         explanation: gv.explanation || undefined,
         mitigationHint,
-        documentationUrl: (0, violationCatalog_1.violationDocSlug)(CROSS_FILE_CODE_MAP[ruleId]),
+        documentationUrl: (0, violationCatalog_1.violationDocSlug)(code),
         detectorSource: 'CrossFileAnalyzer',
+        analysisMetadata: {
+            confidence: gv.severity === 'error' ? 'High' : gv.severity === 'warning' ? 'Medium' : 'Low',
+            evidence: gv.targetId ? `${gv.sourceId} -> ${gv.targetId}` : gv.sourceId,
+            reason: gv.explanation || violationCatalog_1.VIOLATION_DOC_BY_CODE[code]?.trigger || gv.message,
+            type: 'Architecture best-practice violation',
+        },
     };
 }
 function toUnifiedFromEdge(graph, sourceId, targetId, edgeType, ruleId, ruleName, severity, message, mitigationHint, filePath, line, layerContext, explanation) {
+    const code = CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400';
     return {
         id: `${ruleId}-${sourceId}-${targetId}`,
-        code: CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400',
+        code,
         ruleName,
         severity,
         message,
@@ -48,8 +56,14 @@ function toUnifiedFromEdge(graph, sourceId, targetId, edgeType, ruleId, ruleName
         },
         explanation: explanation || 'A dependency edge violates architectural rules based on edge type and layer constraints.',
         mitigationHint,
-        documentationUrl: (0, violationCatalog_1.violationDocSlug)(CROSS_FILE_CODE_MAP[ruleId]),
+        documentationUrl: (0, violationCatalog_1.violationDocSlug)(code),
         detectorSource: 'CrossFileAnalyzer',
+        analysisMetadata: {
+            confidence: severity === 'error' ? 'High' : severity === 'warning' ? 'Medium' : 'Low',
+            evidence: `${sourceId} -> ${targetId}`,
+            reason: explanation || violationCatalog_1.VIOLATION_DOC_BY_CODE[code]?.trigger || message,
+            type: 'Architecture best-practice violation',
+        },
     };
 }
 // Wrap the 4 existing graph AnalyzerRules as CrossFileRule instances

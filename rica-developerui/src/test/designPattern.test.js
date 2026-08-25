@@ -89,6 +89,9 @@ class OrderService {
         assert.ok(v308, 'should emit V308');
         assert.strictEqual(v308.severity, 'warning');
         assert.match(v308.message, /buildOrder/);
+        assert.strictEqual(v308.analysisMetadata.confidence, 'Medium');
+        assert.strictEqual(v308.analysisMetadata.type, 'Design-pattern best-practice violation');
+        assert.match(v308.analysisMetadata.evidence, /rule signal leaking-construction/);
     });
 
     it('should NOT flag fluent builder cascades', () => {

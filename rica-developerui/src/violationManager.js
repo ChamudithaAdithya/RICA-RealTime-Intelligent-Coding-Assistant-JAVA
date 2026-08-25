@@ -63,9 +63,40 @@ const CROSS_FILE_RULE_CODES = {
     'cyclic-dependency': 'RICA-V403',
     'entity-exposure': 'RICA-V404',
 };
+function confidenceForSeverity(severity) {
+    if (severity === 'error')
+        return 'High';
+    if (severity === 'warning')
+        return 'Medium';
+    return 'Low';
+}
+function analysisTypeFor(source, code) {
+    if (source === 'APIResourceLayer' || code.startsWith('RICA-V2'))
+        return 'API boundary best-practice violation';
+    if (source === 'DesignPatternAnalyzer' || code.startsWith('RICA-V3'))
+        return 'Design-pattern best-practice violation';
+    if (source === 'PackageBoundaryAnalyzer' || source === 'CrossFileAnalyzer' || source === 'GraphAnalyzer' || code.startsWith('RICA-V4') || code === 'RICA-V501') {
+        return 'Architecture best-practice violation';
+    }
+    return 'Layer responsibility best-practice violation';
+}
+function evidenceForLayerViolation(v, type) {
+    const evidence = [];
+    if (v.fieldName)
+        evidence.push(`field ${v.fieldName}`);
+    if (v.methodName)
+        evidence.push(`method ${v.methodName}()`);
+    if ('receiverVariable' in v && v.receiverVariable)
+        evidence.push(`receiver ${v.receiverVariable}`);
+    evidence.push(`rule signal ${type}`);
+    if (v.lineNumber)
+        evidence.push(`line ${v.lineNumber}`);
+    return evidence.join('; ');
+}
 function layerViolationToUnified(v, source) {
     const type = 'type' in v ? v.type : 'unknown';
     const code = RULE_CODE_MAP[type] || `RICA-V000`;
+    const doc = violationCatalog_1.VIOLATION_DOC_BY_CODE[code];
     return {
         id: `${source}-${v.className}-${v.methodName || ''}-${v.fieldName || ''}-${type}-${v.lineNumber || 0}`,
         code,
@@ -76,7 +107,7 @@ function layerViolationToUnified(v, source) {
         lineNumber: v.lineNumber,
         range: v.range,
         explanation: 'explanation' in v ? v.explanation : undefined,
-        mitigationHint: violationCatalog_1.VIOLATION_DOC_BY_CODE[code]?.mitigationHint || MITIGATION_HINTS[type] || 'Review the architectural guidelines for this layer',
+        mitigationHint: doc?.mitigationHint || MITIGATION_HINTS[type] || 'Review the architectural guidelines for this layer',
         documentationUrl: (0, violationCatalog_1.violationDocSlug)(code),
         legacyType: type,
         detectorSource: source,
@@ -84,6 +115,12 @@ function layerViolationToUnified(v, source) {
             methodName: v.methodName,
             fieldName: v.fieldName,
             receiverVariable: 'receiverVariable' in v ? v.receiverVariable : undefined,
+        },
+        analysisMetadata: {
+            confidence: confidenceForSeverity(v.severity),
+            evidence: evidenceForLayerViolation(v, type),
+            reason: doc?.trigger || v.message,
+            type: analysisTypeFor(source, code),
         },
     };
 }

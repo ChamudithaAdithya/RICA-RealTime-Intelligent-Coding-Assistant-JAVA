@@ -15,6 +15,8 @@ export interface LayerBoundaryViolation {
   sourceLayer: string;
   targetLayer: string;
   targetType: string;
+  allowedDeps: string[];
+  evidence: string;
 }
 
 export class PackageBoundaryAnalyzer {
@@ -81,6 +83,8 @@ export class PackageBoundaryAnalyzer {
             sourceLayer: fileLayer,
             targetLayer: targetLayer,
             targetType: imp.qualifiedName,
+            allowedDeps: [...allowed],
+            evidence: `import ${imp.qualifiedName}`,
           });
         }
       }
@@ -109,6 +113,8 @@ export class PackageBoundaryAnalyzer {
           sourceLayer: fileLayer,
           targetLayer,
           targetType: targetFqn,
+          allowedDeps: [...allowed],
+          evidence: `reference ${relationship.targetId}`,
         });
       }
     }
@@ -136,7 +142,7 @@ export class PackageBoundaryAnalyzer {
     const pkgPath = fqn.replace(/\./g, '/');
     // Prefer the MOST SPECIFIC layer match (longest matching package pattern).
     // This avoids false cross-layer violations when packages overlap, e.g. a class
-    // in `com.example.domain` importing `com.example.domain.dto` — both match the
+    // in `com.example.domain` importing `com.example.domain.dto` - both match the
     // `domain` pattern `**/domain/**` AND the `dto` pattern `**/dto/**`. The longest
     // pattern wins so `domain.dto` is classified as `dto`, not `domain`.
     let bestLayer: string | null = null;
@@ -146,7 +152,7 @@ export class PackageBoundaryAnalyzer {
       for (const pattern of boundary.packages) {
         if (this.globMatch(pkgPath, pattern) || this.globMatch('/' + pkgPath, pattern)) {
           // Use the pattern's literal length (after stripping glob chars) as a
-          // specificity proxy — longer = more specific.
+          // specificity proxy - longer = more specific.
           const specificity = pattern.replace(/\*\*/g, '').replace(/\*/g, '').length;
           if (specificity > bestPatternLen) {
             bestPatternLen = specificity;
@@ -175,7 +181,7 @@ export class PackageBoundaryAnalyzer {
   private deduplicate(violations: LayerBoundaryViolation[]): LayerBoundaryViolation[] {
     const seen = new Set<string>();
     return violations.filter(v => {
-      const key = `${v.filePath}:${v.lineNumber || 0}:${v.sourceLayer}→${v.targetLayer}:${v.targetType}`;
+      const key = `${v.filePath}:${v.lineNumber || 0}:${v.sourceLayer}->${v.targetLayer}:${v.targetType}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -212,11 +218,17 @@ export class PackageBoundaryAnalyzer {
       code: 'RICA-V501',
       range: v.range,
       mitigationHint: `Restructure the dependency: '${v.sourceLayer}' must not depend on '${v.targetLayer}'. Move the type '${v.targetType}' or invert the dependency.`,
-      explanation: `Clean Architecture: inner layers must not depend on outer layers. ${v.sourceLayer} → ${v.targetLayer} violates the Dependency Rule.`,
+      explanation: `Clean Architecture: inner layers must not depend on outer layers. ${v.sourceLayer} -> ${v.targetLayer} violates the Dependency Rule.`,
       contextMetadata: {
         sourceLayer: v.sourceLayer,
         targetLayer: v.targetLayer,
         targetComponent: v.targetType,
+      },
+      analysisMetadata: {
+        confidence: 'High',
+        evidence: v.evidence,
+        reason: `${v.sourceLayer} layer depends on ${v.targetLayer} layer, but allowed dependencies are [${v.allowedDeps.join(', ')}].`,
+        type: 'Architecture best-practice violation',
       },
       legacyType: 'package-violation',
       detectorSource: 'PackageBoundaryAnalyzer',

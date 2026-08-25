@@ -33,6 +33,15 @@ export interface ViolationContextMetadata {
     targetLayer?: string;
 }
 
+export type ViolationConfidence = 'High' | 'Medium' | 'Low';
+
+export interface ViolationAnalysisMetadata {
+    confidence: ViolationConfidence;
+    evidence: string;
+    reason: string;
+    type: string;
+}
+
 export interface Violation {
     id: string;
     ruleName: string;
@@ -52,6 +61,8 @@ export interface Violation {
     mitigationHint: string;
     explanation?: string;
     contextMetadata?: ViolationContextMetadata;
+    /** Human-facing explanation of why the detector trusts this finding. */
+    analysisMetadata?: ViolationAnalysisMetadata;
     /** Original detector type for backward compatibility (e.g. 'business-logic', 'package-violation') */
     legacyType?: string;
     /** Original detector source identifier */

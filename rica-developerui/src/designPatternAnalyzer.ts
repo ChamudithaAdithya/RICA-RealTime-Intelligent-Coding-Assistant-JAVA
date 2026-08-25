@@ -2,7 +2,7 @@ import { FullASTOutput, ClassInfo, Method, MethodCall } from './domain/astTypes'
 import { Violation, DiagnosticRange } from './domain/violations';
 import { ProjectDependencyGraph } from './dependencyGraph';
 import { AnalyzerConfig, DEFAULT_AI_CONFIG, DEFAULT_LAYER_BOUNDARIES } from './domain/analyzerConfig';
-import { violationDocSlug } from './violationCatalog';
+import { VIOLATION_DOC_BY_CODE, violationDocSlug } from './violationCatalog';
 
 const DP_RULE_CODES: Record<string, string> = {
   'missing-adapter': 'RICA-V301',
@@ -131,11 +131,20 @@ export class DesignPatternAnalyzer {
     targetType?: string,
   ): Violation {
     const code = DP_RULE_CODES[ruleType] || 'RICA-V300';
+    const doc = VIOLATION_DOC_BY_CODE[code];
+    const severity = ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning';
+    const evidence = [
+      targetType ? `target ${targetType}` : undefined,
+      fieldName ? `field ${fieldName}` : undefined,
+      methodName ? `method ${methodName}()` : undefined,
+      `rule signal ${ruleType}`,
+      lineNumber ? `line ${lineNumber}` : undefined,
+    ].filter(Boolean).join('; ');
     return {
       id: `DP-${ruleType}-${filePath}-${methodName || ''}-${fieldName || ''}-${lineNumber || 0}`,
       code,
       ruleName: `DesignPattern: ${ruleType.replace(/-/g, ' ')}`,
-      severity: ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning',
+      severity,
       message,
       filePath,
       lineNumber,
@@ -144,6 +153,12 @@ export class DesignPatternAnalyzer {
       documentationUrl: violationDocSlug(code),
       detectorSource: 'DesignPatternAnalyzer',
       contextMetadata: { methodName, fieldName, targetComponent: targetType },
+      analysisMetadata: {
+        confidence: severity === 'error' ? 'High' : 'Medium',
+        evidence,
+        reason: doc?.trigger || message,
+        type: 'Design-pattern best-practice violation',
+      },
       legacyType: ruleType,
     };
   }

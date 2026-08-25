@@ -161,6 +161,13 @@ tr.clickable{cursor:pointer}
 .badge-info{background:#75beff;color:#000}
 .badge-source{background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:10px;padding:1px 6px;border-radius:4px;margin-right:4px}
 .message-cell{max-width:400px;overflow:hidden;text-overflow:ellipsis}
+.analysis-cell{max-width:360px;font-size:11px;line-height:1.35;color:var(--vscode-editor-foreground)}
+.confidence{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;margin-bottom:3px}
+.confidence-high{background:#16825d;color:#fff}
+.confidence-medium{background:#cca700;color:#000}
+.confidence-low{background:#75beff;color:#000}
+.analysis-detail{display:block;color:var(--vscode-descriptionForeground);margin-top:2px}
+.analysis-label{opacity:.8;text-transform:uppercase;font-size:10px;margin-right:4px}
 .file-cell{max-width:250px;overflow:hidden;text-overflow:ellipsis;font-family:var(--vscode-editor-font-family);font-size:11px}
 .hint-cell{max-width:360px;font-size:11px;color:var(--vscode-descriptionForeground);line-height:1.35}
 .muted{opacity:.75;font-size:10px;text-transform:uppercase}
@@ -214,6 +221,7 @@ tr.clickable{cursor:pointer}
 <th onclick="sortBy('severity')">Severity<span class="sort" id="sort-severity"></span></th>
 <th onclick="sortBy('detectorSource')">Source<span class="sort" id="sort-detectorSource"></span></th>
 <th onclick="sortBy('message')">Message<span class="sort" id="sort-message"></span></th>
+<th onclick="sortBy('confidence')">Analysis<span class="sort" id="sort-confidence"></span></th>
 <th onclick="sortBy('filePath')">File<span class="sort" id="sort-filePath"></span></th>
 <th onclick="sortBy('lineNumber')">Line<span class="sort" id="sort-lineNumber"></span></th>
 <th>Mitigation</th>
@@ -264,6 +272,20 @@ function hideNotif() {
     document.getElementById('notificationBar').style.display = 'none';
 }
 
+function renderAnalysis(v) {
+    var meta = v.analysisMetadata || {};
+    if (!meta.confidence && !meta.evidence && !meta.reason && !meta.type) {
+        return '<span class="muted">No analysis metadata</span>';
+    }
+    var confidence = escapeAttr(meta.confidence || 'Unknown');
+    var cls = 'confidence confidence-' + String(confidence).toLowerCase();
+    var html = '<span class="' + cls + '">' + confidence + '</span>';
+    if (meta.type) html += '<span class="analysis-detail"><span class="analysis-label">Type</span>' + escapeAttr(meta.type) + '</span>';
+    if (meta.evidence) html += '<span class="analysis-detail"><span class="analysis-label">Evidence</span>' + escapeAttr(meta.evidence) + '</span>';
+    if (meta.reason) html += '<span class="analysis-detail"><span class="analysis-label">Reason</span>' + escapeAttr(meta.reason) + '</span>';
+    return html;
+}
+
 function renderTable() {
     var sourceVal = document.getElementById('sourceFilter').value;
     var severityVal = document.getElementById('severityFilter').value;
@@ -281,7 +303,9 @@ function renderTable() {
             var m = (v.message || '').toLowerCase();
             var f = (v.filePath || '').toLowerCase();
             var r = (v.ruleName || '').toLowerCase();
-            if (m.indexOf(searchVal) === -1 && f.indexOf(searchVal) === -1 && r.indexOf(searchVal) === -1) continue;
+            var meta = v.analysisMetadata || {};
+            var a = ((meta.confidence || '') + ' ' + (meta.evidence || '') + ' ' + (meta.reason || '') + ' ' + (meta.type || '')).toLowerCase();
+            if (m.indexOf(searchVal) === -1 && f.indexOf(searchVal) === -1 && r.indexOf(searchVal) === -1 && a.indexOf(searchVal) === -1) continue;
         }
         filteredRows.push(v);
     }
@@ -295,6 +319,10 @@ function renderTable() {
         } else if (sortKey === 'lineNumber') {
             va = Number(a.lineNumber) || 0;
             vb = Number(b.lineNumber) || 0;
+        } else if (sortKey === 'confidence') {
+            var confidenceOrder = { High: 0, Medium: 1, Low: 2 };
+            va = confidenceOrder[(a.analysisMetadata && a.analysisMetadata.confidence) || 'Low'];
+            vb = confidenceOrder[(b.analysisMetadata && b.analysisMetadata.confidence) || 'Low'];
         } else {
             va = (a[sortKey] || '').toString().toLowerCase();
             vb = (b[sortKey] || '').toString().toLowerCase();
@@ -356,6 +384,7 @@ function renderTable() {
         html += '<td><span class="badge-source">' + escapeAttr(src) + '</span></td>';
         var tip = v.explanation ? 'Explanation: ' + escapeAttr(v.explanation) : escapeAttr(v.message);
         html += '<td class="message-cell" title="' + tip + '">' + escapeAttr(v.message) + '</td>';
+        html += '<td class="analysis-cell">' + renderAnalysis(v) + '</td>';
         html += '<td class="file-cell"><span class="file-link" onclick="openViolationFile(' + i + ')">' + fp + '</span></td>';
         html += '<td>' + ln + '</td>';
         html += '<td class="hint-cell">' + mit + '</td>';

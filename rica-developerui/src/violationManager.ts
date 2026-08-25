@@ -69,12 +69,41 @@ const CROSS_FILE_RULE_CODES: Record<string, string> = {
     'entity-exposure': 'RICA-V404',
 };
 
+function confidenceForSeverity(severity: Violation['severity']): 'High' | 'Medium' | 'Low' {
+    if (severity === 'error') return 'High';
+    if (severity === 'warning') return 'Medium';
+    return 'Low';
+}
+
+function analysisTypeFor(source: Violation['detectorSource'], code: string): string {
+    if (source === 'APIResourceLayer' || code.startsWith('RICA-V2')) return 'API boundary best-practice violation';
+    if (source === 'DesignPatternAnalyzer' || code.startsWith('RICA-V3')) return 'Design-pattern best-practice violation';
+    if (source === 'PackageBoundaryAnalyzer' || source === 'CrossFileAnalyzer' || source === 'GraphAnalyzer' || code.startsWith('RICA-V4') || code === 'RICA-V501') {
+        return 'Architecture best-practice violation';
+    }
+    return 'Layer responsibility best-practice violation';
+}
+
+function evidenceForLayerViolation(
+    v: ServiceLayerViolation | ControllerLayerViolation | EntityLayerViolation | APIResourceLayerViolation,
+    type: string,
+): string {
+    const evidence: string[] = [];
+    if (v.fieldName) evidence.push(`field ${v.fieldName}`);
+    if (v.methodName) evidence.push(`method ${v.methodName}()`);
+    if ('receiverVariable' in v && v.receiverVariable) evidence.push(`receiver ${v.receiverVariable}`);
+    evidence.push(`rule signal ${type}`);
+    if (v.lineNumber) evidence.push(`line ${v.lineNumber}`);
+    return evidence.join('; ');
+}
+
 function layerViolationToUnified(
     v: ServiceLayerViolation | ControllerLayerViolation | EntityLayerViolation | APIResourceLayerViolation,
     source: Violation['detectorSource'],
 ): Violation {
     const type = 'type' in v ? v.type : 'unknown';
     const code = RULE_CODE_MAP[type] || `RICA-V000`;
+    const doc = VIOLATION_DOC_BY_CODE[code];
     return {
         id: `${source}-${v.className}-${v.methodName || ''}-${v.fieldName || ''}-${type}-${v.lineNumber || 0}`,
         code,
@@ -85,7 +114,7 @@ function layerViolationToUnified(
         lineNumber: v.lineNumber,
         range: v.range,
         explanation: 'explanation' in v ? v.explanation : undefined,
-        mitigationHint: VIOLATION_DOC_BY_CODE[code]?.mitigationHint || MITIGATION_HINTS[type] || 'Review the architectural guidelines for this layer',
+        mitigationHint: doc?.mitigationHint || MITIGATION_HINTS[type] || 'Review the architectural guidelines for this layer',
         documentationUrl: violationDocSlug(code),
         legacyType: type,
         detectorSource: source,
@@ -93,6 +122,12 @@ function layerViolationToUnified(
             methodName: v.methodName,
             fieldName: v.fieldName,
             receiverVariable: 'receiverVariable' in v ? v.receiverVariable : undefined,
+        },
+        analysisMetadata: {
+            confidence: confidenceForSeverity(v.severity),
+            evidence: evidenceForLayerViolation(v, type),
+            reason: doc?.trigger || v.message,
+            type: analysisTypeFor(source, code),
         },
     };
 }

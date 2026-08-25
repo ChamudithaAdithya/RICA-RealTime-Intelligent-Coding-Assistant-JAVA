@@ -175,11 +175,20 @@ class DesignPatternAnalyzer {
     }
     toViolation(ruleType, message, filePath, lineNumber, range, methodName, fieldName, targetType) {
         const code = DP_RULE_CODES[ruleType] || 'RICA-V300';
+        const doc = violationCatalog_1.VIOLATION_DOC_BY_CODE[code];
+        const severity = ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning';
+        const evidence = [
+            targetType ? `target ${targetType}` : undefined,
+            fieldName ? `field ${fieldName}` : undefined,
+            methodName ? `method ${methodName}()` : undefined,
+            `rule signal ${ruleType}`,
+            lineNumber ? `line ${lineNumber}` : undefined,
+        ].filter(Boolean).join('; ');
         return {
             id: `DP-${ruleType}-${filePath}-${methodName || ''}-${fieldName || ''}-${lineNumber || 0}`,
             code,
             ruleName: `DesignPattern: ${ruleType.replace(/-/g, ' ')}`,
-            severity: ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning',
+            severity,
             message,
             filePath,
             lineNumber,
@@ -188,6 +197,12 @@ class DesignPatternAnalyzer {
             documentationUrl: (0, violationCatalog_1.violationDocSlug)(code),
             detectorSource: 'DesignPatternAnalyzer',
             contextMetadata: { methodName, fieldName, targetComponent: targetType },
+            analysisMetadata: {
+                confidence: severity === 'error' ? 'High' : 'Medium',
+                evidence,
+                reason: doc?.trigger || message,
+                type: 'Design-pattern best-practice violation',
+            },
             legacyType: ruleType,
         };
     }
