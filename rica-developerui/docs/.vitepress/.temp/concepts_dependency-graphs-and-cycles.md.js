@@ -1,0 +1,21 @@
+import { ssrRenderAttrs } from "vue/server-renderer";
+import { useSSRContext } from "vue";
+import { _ as _export_sfc } from "./plugin-vue_export-helper.1tPrXgE0.js";
+const __pageData = JSON.parse('{"title":"Dependency Graphs And Cycles","description":"","frontmatter":{},"headers":[],"relativePath":"concepts/dependency-graphs-and-cycles.md","filePath":"concepts/dependency-graphs-and-cycles.md","lastUpdated":null}');
+const _sfc_main = { name: "concepts/dependency-graphs-and-cycles.md" };
+function _sfc_ssrRender(_ctx, _push, _parent, _attrs, $props, $setup, $data, $options) {
+  _push(`<div${ssrRenderAttrs(_attrs)}><h1 id="dependency-graphs-and-cycles" tabindex="-1">Dependency Graphs And Cycles <a class="header-anchor" href="#dependency-graphs-and-cycles" aria-label="Permalink to &quot;Dependency Graphs And Cycles&quot;">​</a></h1><p>A dependency graph shows which files, packages, or classes depend on each other.</p><p>If <code>OrderController</code> imports <code>OrderService</code>, then there is an edge:</p><div class="language-text vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">text</span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span>OrderController -&gt; OrderService</span></span></code></pre></div><h2 id="cycles" tabindex="-1">Cycles <a class="header-anchor" href="#cycles" aria-label="Permalink to &quot;Cycles&quot;">​</a></h2><p>A cycle means code eventually depends back on itself:</p><div class="language-text vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">text</span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span>OrderService -&gt; PaymentService -&gt; OrderService</span></span></code></pre></div><p>Cycles make change risky because each class can affect the other. They also make testing, extraction, and package ownership harder.</p><h2 id="fan-in-and-fan-out" tabindex="-1">Fan-In And Fan-Out <a class="header-anchor" href="#fan-in-and-fan-out" aria-label="Permalink to &quot;Fan-In And Fan-Out&quot;">​</a></h2><p>Fan-in means many classes depend on a class. High fan-in code should be stable.</p><p>Fan-out means a class depends on many classes. High fan-out code often has too many responsibilities.</p><h2 id="inverted-dependencies" tabindex="-1">Inverted Dependencies <a class="header-anchor" href="#inverted-dependencies" aria-label="Permalink to &quot;Inverted Dependencies&quot;">​</a></h2><p>An inverted dependency points against the architecture direction.</p><div class="language-text vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">text</span><pre class="shiki shiki-themes github-light github-dark vp-code" tabindex="0"><code><span class="line"><span>domain -&gt; infrastructure</span></span>
+<span class="line"><span>service -&gt; controller</span></span>
+<span class="line"><span>repository -&gt; controller</span></span></code></pre></div><p>These imports usually reveal boundary leaks.</p><h2 id="related-rica-rules" tabindex="-1">Related RICA Rules <a class="header-anchor" href="#related-rica-rules" aria-label="Permalink to &quot;Related RICA Rules&quot;">​</a></h2><ul><li><code>RICA-V401</code>: controller bypass</li><li><code>RICA-V402</code>: cross-layer violation</li><li><code>RICA-V403</code>: cyclic or inverted dependency</li><li><code>RICA-V404</code>: entity exposure</li><li><code>RICA-V501</code>: package boundary violation</li></ul><h2 id="practical-fix-rule" tabindex="-1">Practical Fix Rule <a class="header-anchor" href="#practical-fix-rule" aria-label="Permalink to &quot;Practical Fix Rule&quot;">​</a></h2><p>If a graph edge points the wrong way, do not just move imports around. Find the responsibility that crossed the boundary and move it to the owning layer.</p></div>`);
+}
+const _sfc_setup = _sfc_main.setup;
+_sfc_main.setup = (props, ctx) => {
+  const ssrContext = useSSRContext();
+  (ssrContext.modules || (ssrContext.modules = /* @__PURE__ */ new Set())).add("concepts/dependency-graphs-and-cycles.md");
+  return _sfc_setup ? _sfc_setup(props, ctx) : void 0;
+};
+const dependencyGraphsAndCycles = /* @__PURE__ */ _export_sfc(_sfc_main, [["ssrRender", _sfc_ssrRender]]);
+export {
+  __pageData,
+  dependencyGraphsAndCycles as default
+};

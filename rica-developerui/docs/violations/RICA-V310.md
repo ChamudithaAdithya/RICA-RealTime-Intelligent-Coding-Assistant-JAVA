@@ -24,12 +24,12 @@ Multi-step writes are workflow units. When they are left inline, retry, rollback
 
 These background pages explain the architecture and pattern vocabulary used by this rule:
 
+- [Transaction boundaries](../concepts/transaction-boundaries.md) - Learn where transaction ownership usually belongs and why multi-step writes need explicit boundaries.
+- [Service Layer pattern](../concepts/service-layer-pattern.md) - Learn why business use cases should be orchestrated in services rather than controllers or repositories.
+- [Testing architecture fixes](../concepts/testing-architecture-fixes.md) - Learn which tests to run after moving logic, DTOs, SQL, gateways, or design-pattern behavior.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
 - [Behavioral patterns](../concepts/behavioral-patterns.md) - Learn Strategy, State, Observer, Command, and Template Method as ways to move behavior out of conditionals.
 - [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
-- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
-- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
-- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
-- [Validation and error boundaries](../concepts/validation-and-error-boundaries.md) - Learn where validation, exception mapping, and HTTP error shape should live.
 
 ## How to fix
 

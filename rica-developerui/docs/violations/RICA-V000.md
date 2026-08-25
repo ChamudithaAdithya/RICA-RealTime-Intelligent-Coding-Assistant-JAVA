@@ -24,7 +24,9 @@ Guarantees every violation still carries a code even when the mapping is incompl
 
 These background pages explain the architecture and pattern vocabulary used by this rule:
 
+- [Static analysis basics](../concepts/static-analysis-basics.md) - Learn how RICA detects source-code patterns and why some rules are heuristic.
 - [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+- [False positives and rule tuning](../concepts/false-positives-and-rule-tuning.md) - Learn how to decide whether a finding is a real violation or a configuration issue.
 - [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
 - [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
 
