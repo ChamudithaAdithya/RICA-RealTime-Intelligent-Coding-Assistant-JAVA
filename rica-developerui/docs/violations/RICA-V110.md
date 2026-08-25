@@ -1,8 +1,8 @@
-# RICA-V110 — Direct HTTP Call
+# RICA-V110 - Direct HTTP Call
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -76,6 +76,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Controllers are the entry point of your application, not HTTP clients to third parties. Making HTTP calls directly couples the controller to external services, complicates testing (network is now required), and breaks the single responsibility: gateways should own outbound communication.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Gateways and adapters](../concepts/gateways-and-adapters.md) - Learn how gateway interfaces and adapter implementations isolate external APIs, SDKs, and protocols.
+- [Infrastructure](../concepts/infrastructure.md) - Learn what infrastructure means in RICA: databases, HTTP clients, message brokers, files, SDKs, and framework adapters.
+- [Separation of concerns](../concepts/separation-of-concerns.md) - Learn why HTTP handling, business decisions, persistence, validation, and external calls should stay separate.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+
 ## Common framework cases
 
 ### RestTemplate/WebClient/HttpClient inside a controller
@@ -95,11 +106,11 @@ Controllers are the entry point of your application, not HTTP clients to third p
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Move the HTTP client into a dedicated gateway/client service.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 2. **Inject that gateway into the controller.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 3. **Controller delegates outbound calls to the gateway.**
-   This keeps the code aligned with the controller responsibility expected by RICA-V110.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 
 ## How to verify
 

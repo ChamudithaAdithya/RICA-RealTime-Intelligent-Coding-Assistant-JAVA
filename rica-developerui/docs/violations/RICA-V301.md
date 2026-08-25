@@ -1,8 +1,8 @@
-# RICA-V301 — Adapter Missing
+# RICA-V301 - Adapter Missing
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 4 — Design Pattern Compliance (DesignPatternAnalyzer)
+> **Stage**: Stage 4 - Design Pattern Compliance (DesignPatternAnalyzer)
 
 | | |
 | --- | --- |
@@ -75,6 +75,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 External vendor code is volatile and owned by someone else. Importing it straight into the core couples your business logic to the vendor. An Adapter/Port pattern keeps the core depending on an interface that infrastructure implements, so vendors can be swapped without touching domain logic.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Ports and Adapters](../concepts/ports-and-adapters.md) - Learn inbound ports, outbound ports, and adapter placement in hexagonal architecture.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Gateways and adapters](../concepts/gateways-and-adapters.md) - Learn how gateway interfaces and adapter implementations isolate external APIs, SDKs, and protocols.
+- [Infrastructure](../concepts/infrastructure.md) - Learn what infrastructure means in RICA: databases, HTTP clients, message brokers, files, SDKs, and framework adapters.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+
 ## Common framework cases
 
 ### External SDK type leaks into application code
@@ -89,6 +100,21 @@ External vendor code is volatile and owned by someone else. Importing it straigh
 
 **Avoid:** Do not let vendor classes become method parameters or return types in business services.
 
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `domain / application`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.
+
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
@@ -96,9 +122,9 @@ Use this as the practical checklist. Each item explains both the action and the 
 1. **Define a Port interface in the application layer describing only what the core needs.**
    This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
 2. **Implement an Adapter/Client in the infrastructure layer that wraps the vendor SDK.**
-   This keeps the code aligned with the domain / application responsibility expected by RICA-V301.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 3. **Inject the port into the domain/application code.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

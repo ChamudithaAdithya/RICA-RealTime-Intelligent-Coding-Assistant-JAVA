@@ -1,8 +1,8 @@
-# RICA-V205 — Direct Service Instantiation
+# RICA-V205 - Direct Service Instantiation
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -76,6 +76,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Resources must receive services through the DI container. Manual instantiation hard-codes concrete implementations, defeats mocking, and ties the HTTP layer to a specific construction path.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+- [Service Layer pattern](../concepts/service-layer-pattern.md) - Learn why business use cases should be orchestrated in services rather than controllers or repositories.
+- [Entities, DTOs, and API contracts](../concepts/entities-dtos-api-contracts.md) - Understand why entities are internal models and DTOs are stable request/response contracts.
+
 ## Common framework cases
 
 ### Controller creates service with new
@@ -95,7 +106,7 @@ Resources must receive services through the DI container. Manual instantiation h
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Inject services via constructor or `@Autowired`.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 2. **Never `new` a service inside a resource method.**
    This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
 

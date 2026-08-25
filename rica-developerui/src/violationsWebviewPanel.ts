@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { Violation } from './types/violations';
 import { ViolationManager } from './violationManager';
-import { showFixGuidance } from './codeActionProvider';
 import { openRicaDocumentation } from './documentation';
 
 export class ViolationsWebviewPanel {
@@ -73,11 +72,6 @@ export class ViolationsWebviewPanel {
                     case 'openViolationDocs':
                         if (message.url) {
                             await openRicaDocumentation(this._extensionUri, message.url);
-                        }
-                        break;
-                    case 'showFixGuidance':
-                        if (message.violation && message.remediation) {
-                            await showFixGuidance(message.violation, message.remediation);
                         }
                         break;
                     case 'ignoreViolation':
@@ -188,8 +182,6 @@ tr.clickable{cursor:pointer}
 .action-btn.unignore:hover{background:var(--vscode-textLink-foreground);color:#fff}
 .action-btn.docs{border-color:var(--vscode-textLink-foreground);color:var(--vscode-textLink-foreground);background:transparent;margin-left:4px}
 .action-btn.docs:hover{background:var(--vscode-textLink-foreground);color:#fff}
-.action-btn.fix{border-color:var(--vscode-button-background);color:var(--vscode-button-foreground);background:var(--vscode-button-background);margin-left:4px}
-.action-btn.fix:hover{background:var(--vscode-button-hoverBackground)}
 </style>
 </head>
 <body>
@@ -346,9 +338,6 @@ function renderTable() {
             act += '<button class="action-btn docs" onclick="return openDocs(' + i + ')" title="Open documentation for this violation">\u266F Docs</button>';
         }
         var fix = v.remediationSuggestions && v.remediationSuggestions.length ? v.remediationSuggestions[0] : null;
-        if (!isIgnored && fix) {
-            act += '<button class="action-btn fix" onclick="return openFixGuidance(' + i + ')" title="Open exact remediation steps">Fix</button>';
-        }
         var mit = fix
             ? '<strong>' + escapeAttr(fix.title) + '</strong><br><span class="muted">' + escapeAttr(fix.safety) + '</span> ' + escapeAttr(fix.description || '') + firstStep(fix)
             : (v.mitigationHint ? escapeAttr(v.mitigationHint) : (v.explanation ? escapeAttr(v.explanation) : ''));
@@ -404,15 +393,6 @@ function openDocs(idx) {
 function firstStep(fix) {
     if (!fix || !fix.steps || !fix.steps.length) return '';
     return '<br><span class="muted">First step</span> ' + escapeAttr(fix.steps[0]);
-}
-
-function openFixGuidance(idx) {
-    var v = filteredRows[idx];
-    var fix = v && v.remediationSuggestions && v.remediationSuggestions.length ? v.remediationSuggestions[0] : null;
-    if (v && fix) {
-        _vscode.postMessage({ command: 'showFixGuidance', violation: v, remediation: fix });
-    }
-    return false;
 }
 
 function openDocsHome() {

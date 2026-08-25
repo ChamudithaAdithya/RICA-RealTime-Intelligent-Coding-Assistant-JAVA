@@ -1,8 +1,8 @@
-# RICA-V501 — Package Boundary Violation
+# RICA-V501 - Package Boundary Violation
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 3 — Package Boundary (PackageBoundaryAnalyzer)
+> **Stage**: Stage 3 - Package Boundary (PackageBoundaryAnalyzer)
 
 | | |
 | --- | --- |
@@ -20,7 +20,7 @@ A file residing in layer A imports a type that lives in layer B, where B is not 
 
 ```
 // application/OrderService.java
-import com.foo.presentation.UserController; // outer layer import — not allowed
+import com.foo.presentation.UserController; // outer layer import - not allowed
 
 @Service
 public class OrderService {
@@ -49,7 +49,7 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ```diff
 - // application/OrderService.java
-- import com.foo.presentation.UserController; // outer layer import — not allowed
+- import com.foo.presentation.UserController; // outer layer import - not allowed
 + // application/OrderService.java depends only inward
 + import com.foo.domain.model.Order;
 
@@ -65,6 +65,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 ## Why it matters
 
 Package boundaries encode the architecture (Clean Architecture / Dependency Rule). Allowing an inner layer to depend on an outer one makes the dependency graph spiral outward and prevents the inner layer from being reused, extracted, or tested in isolation.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Package boundaries](../concepts/package-boundaries.md) - Learn how Java packages express architectural ownership and why forbidden imports are meaningful.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Ports and Adapters](../concepts/ports-and-adapters.md) - Learn inbound ports, outbound ports, and adapter placement in hexagonal architecture.
+- [Dependency graphs and cycles](../concepts/dependency-graphs-and-cycles.md) - Learn cycles, inverted dependencies, fan-in, fan-out, and why graph rules matter.
 
 ## Common framework cases
 
@@ -103,6 +114,21 @@ Package boundaries encode the architecture (Clean Architecture / Dependency Rule
 3. Inject the inward-facing interface where the dependency is needed.
 
 **Avoid:** Do not fix this by simply adding the outer layer to `allowedDeps` unless the architecture rule itself is wrong for your project.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `package / top-level layer`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Package-boundary findings are usually real when an inner layer imports an outer layer. They may be configuration issues when framework imports are valid for the current package, such as Spring Data annotations inside a repository.
+
 
 ## How to fix
 

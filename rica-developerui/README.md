@@ -19,7 +19,7 @@ It is designed for projects that care about clean architecture, maintainable ser
 2. Run `Java AST: Analyze Full Project`.
 3. Run `Java AST: Show Architecture Violations`.
 4. Review violations by severity, detector source, file, and line.
-5. Use `Docs` or `Fix` from the violations panel to understand and resolve each issue.
+5. Use `Docs` from the violations panel to understand and resolve each issue.
 
 ## Commands
 
@@ -29,7 +29,6 @@ It is designed for projects that care about clean architecture, maintainable ser
 | `Java AST: Analyze Current File` | Re-analyzes only the active Java file. |
 | `Java AST: Show Architecture Violations` | Opens the violations dashboard. |
 | `Java AST: Open RICA Documentation` | Opens the bundled RICA documentation. |
-| `Java AST: Show AST Viewer` | Opens the AST viewer inside VS Code. |
 | `Java AST: Open Browser Viewer` | Opens the optional browser AST viewer when the backend is running. |
 | `Java AST: Show Status` | Shows RICA status and quick actions. |
 | `Java AST: Reset Backend Data` | Clears stored AST and violation state. |

@@ -10,15 +10,25 @@ hero:
       text: Rule Matrix
       link: /rule-matrix
     - theme: alt
+      text: Rule Concepts
+      link: /rule-concept-map
+    - theme: alt
+      text: Concepts
+      link: /concepts/
+    - theme: alt
       text: Guides
       link: /guides/architecture
 
 features:
   - title: Layered architecture
-    details: Controllers, services, repositories, entities — what belongs where and the violations RICA-V101–V114 catch.
+    details: Controllers, services, repositories, entities, and what belongs where.
   - title: Cross-file graph rules
-    details: Controller bypass, cross-layer leaks, cyclic and inverted dependencies (V401–V404), detected from the dependency graph.
-  - title: Design patterns & boundaries
-    details: Strategy/factory usage, threading discipline (V301–V307) and package-boundary enforcement (V501).
+    details: Controller bypass, cross-layer leaks, cyclic dependencies, and inverted dependencies.
+  - title: Design patterns and boundaries
+    details: Strategy, factory, threading discipline, package boundaries, and dependency direction.
+  - title: Concept library
+    details: Plain-language explanations of infrastructure, gateways, dependency inversion, DTOs, and design-pattern families.
+  - title: Rule to concept map
+    details: Every RICA code linked back to the concepts needed to understand and fix it.
 
 ---

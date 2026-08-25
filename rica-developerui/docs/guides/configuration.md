@@ -23,7 +23,7 @@ The analyzer is a VS Code extension; each setting lives under `javaAstAnalyzer.*
 `enableAiAdvisory` (default off) turns on the non-blocking advisory layer. Its findings annotate deterministic violations (as `RICA-V000`) and never delete them. Providers: `ollama` or `openai-compatible`.
 
 ::: tip
-The docs deep-link (`documentationBaseUrl`, default `http://localhost:5173`) controls the base URL the violations webview uses when you click **Docs** on a violation row. Point it at your deployed VitePress site.
+The extension opens bundled docs from the violations panel and command palette, so `npm run docs:dev` is not required. `documentationBaseUrl` is optional and only affects Problems-panel diagnostic links when you point it at a deployed docs site.
 :::
 
 ## Related

@@ -1,8 +1,8 @@
-# RICA-V103 — Uninjected Service Access
+# RICA-V103 - Uninjected Service Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -74,7 +74,18 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ## Why it matters
 
-Controllers are thin HTTP adapters. When they reach for services through uninjected fields or method-local references, they lose the benefits of the container — testability, lifecycle management, and the ability to swap in fakes. The wiring belongs to the container; the controller should only orchestrate HTTP concerns.
+Controllers are thin HTTP adapters. When they reach for services through uninjected fields or method-local references, they lose the benefits of the container - testability, lifecycle management, and the ability to swap in fakes. The wiring belongs to the container; the controller should only orchestrate HTTP concerns.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Service Layer pattern](../concepts/service-layer-pattern.md) - Learn why business use cases should be orchestrated in services rather than controllers or repositories.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
 
 ## Common framework cases
 
@@ -95,9 +106,9 @@ Controllers are thin HTTP adapters. When they reach for services through uninjec
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Add `@Autowired`/`@Inject` to the service or repository field, or use constructor injection.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Call services only through injected fields/parameters.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

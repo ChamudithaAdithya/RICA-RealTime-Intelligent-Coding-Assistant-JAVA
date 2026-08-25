@@ -1,8 +1,8 @@
-# RICA-V305 — Mutable Singleton
+# RICA-V305 - Mutable Singleton
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 4 — Design Pattern Compliance (DesignPatternAnalyzer)
+> **Stage**: Stage 4 - Design Pattern Compliance (DesignPatternAnalyzer)
 
 | | |
 | --- | --- |
@@ -56,6 +56,32 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 ## Why it matters
 
 Static mutable state is shared global state: one instance per JVM, unwritable to control in tests, and a magnet for concurrency bugs and memory growth. Prefer DI-scoped beans or immutable constants.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+- [Static analysis basics](../concepts/static-analysis-basics.md) - Learn how RICA detects source-code patterns and why some rules are heuristic.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `any`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.
+
 
 ## How to fix
 

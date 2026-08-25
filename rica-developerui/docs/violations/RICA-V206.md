@@ -1,8 +1,8 @@
-# RICA-V206 — Missing Validation
+# RICA-V206 - Missing Validation
 
 <Badge type="tip" text="Info" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -54,6 +54,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Unvalidated input produces cryptic failures deep in the stack instead of clean 400 responses. Validation annotations document the contract and fail fast at the boundary.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Entities, DTOs, and API contracts](../concepts/entities-dtos-api-contracts.md) - Understand why entities are internal models and DTOs are stable request/response contracts.
+- [Validation and error boundaries](../concepts/validation-and-error-boundaries.md) - Learn where validation, exception mapping, and HTTP error shape should live.
+- [API boundary design](../concepts/api-boundary-design.md) - Learn request/response contracts, versioning, sensitive data leaks, and client-facing stability.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Spring architecture guide](../concepts/spring-architecture-guide.md) - Learn Spring-specific placement for controllers, services, repositories, validation, transactions, and error handling.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+
 ## Common framework cases
 
 ### Request body has no validation
@@ -67,6 +78,19 @@ Unvalidated input produces cryptic failures deep in the stack instead of clean 4
 3. Keep primitive path/query parameters constrained only when the domain really requires it.
 
 **Avoid:** Do not only add `@Valid` if the DTO has no field constraints. That validates nothing useful.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `api`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
 
 ## How to fix
 

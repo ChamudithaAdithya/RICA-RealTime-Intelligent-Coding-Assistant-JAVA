@@ -1,8 +1,8 @@
-# RICA-V322 — Missing Proxy
+# RICA-V322 - Missing Proxy
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 4 — Design Pattern Compliance (DesignPatternAnalyzer)
+> **Stage**: Stage 4 - Design Pattern Compliance (DesignPatternAnalyzer)
 
 | | |
 | --- | --- |
@@ -71,6 +71,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Heavy resources require lifecycle, access-control, and caching concerns (lazy loading, pooling, security checks) that a Proxy centralizes. Direct creation scatters construction cost, leaks connection handling into business logic, and makes testing and resource pooling impossible. A Proxy or injected bean keeps the business layer decoupled from resource acquisition.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Concurrency and resource boundaries](../concepts/concurrency-boundaries.md) - Understand why threads, executors, sockets, connections, and heavyweight resources need ownership boundaries.
+- [Infrastructure](../concepts/infrastructure.md) - Learn what infrastructure means in RICA: databases, HTTP clients, message brokers, files, SDKs, and framework adapters.
+- [Gateways and adapters](../concepts/gateways-and-adapters.md) - Learn how gateway interfaces and adapter implementations isolate external APIs, SDKs, and protocols.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+
 ## Common framework cases
 
 ### Heavy resource created directly
@@ -85,6 +96,21 @@ Heavy resources require lifecycle, access-control, and caching concerns (lazy lo
 
 **Avoid:** Do not manually open/close heavyweight resources inside business methods.
 
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `service / application (non-infrastructure)`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.
+
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
@@ -94,7 +120,7 @@ Use this as the practical checklist. Each item explains both the action and the 
 2. **Implement it in infrastructure with pooling/lazy/access-control logic.**
    This keeps the code aligned with the service / application (non-infrastructure) responsibility expected by RICA-V322.
 3. **Inject the proxy interface into business methods instead of calling `new` or `getConnection()` directly.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

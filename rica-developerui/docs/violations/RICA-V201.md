@@ -1,8 +1,8 @@
-# RICA-V201 — Exposing Internal Entity
+# RICA-V201 - Exposing Internal Entity
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -63,6 +63,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Returning persistence entities in responses leaks your internal schema and storage model to external consumers. Any schema change becomes a breaking API change. DTOs decouple the API contract from the data model so internal refactors never break clients.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Entities, DTOs, and API contracts](../concepts/entities-dtos-api-contracts.md) - Understand why entities are internal models and DTOs are stable request/response contracts.
+- [API boundary design](../concepts/api-boundary-design.md) - Learn request/response contracts, versioning, sensitive data leaks, and client-facing stability.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Separation of concerns](../concepts/separation-of-concerns.md) - Learn why HTTP handling, business decisions, persistence, validation, and external calls should stay separate.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+- [Framework coupling](../concepts/framework-coupling.md) - Learn when Spring, JPA, servlet, HTTP-client, and SDK imports leak framework concerns into the wrong layer.
+
 ## Common framework cases
 
 ### Endpoint returns an Entity directly
@@ -82,7 +93,7 @@ Returning persistence entities in responses leaks your internal schema and stora
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Create a response DTO with just the fields the client needs.**
-   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 2. **Map the entity to the DTO in the service layer.**
    This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
 3. **Return the DTO from the endpoint.**

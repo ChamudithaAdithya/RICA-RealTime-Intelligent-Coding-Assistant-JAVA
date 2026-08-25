@@ -1,8 +1,8 @@
-# RICA-V114 — Raw SQL Access
+# RICA-V114 - Raw SQL Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -68,6 +68,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Controllers must never touch persistence directly. Database access bypasses the transactional/service layers, scatters SQL across the HTTP boundary, and makes query behavior untestable without the controller. All data access belongs in repositories.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Repository pattern](../concepts/repository-pattern.md) - Learn what belongs in repositories and why query annotations belong at the persistence boundary.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Separation of concerns](../concepts/separation-of-concerns.md) - Learn why HTTP handling, business decisions, persistence, validation, and external calls should stay separate.
+- [Infrastructure](../concepts/infrastructure.md) - Learn what infrastructure means in RICA: databases, HTTP clients, message brokers, files, SDKs, and framework adapters.
+
 ## Common framework cases
 
 ### Raw SQL or JDBC appears outside repository/infrastructure
@@ -87,11 +98,11 @@ Controllers must never touch persistence directly. Database access bypasses the 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Move the query/update into a repository method.**
-   This keeps persistence behind the correct boundary, so domain and presentation code do not depend on storage details.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Have a service call the repository.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 3. **Inject the service into the controller.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

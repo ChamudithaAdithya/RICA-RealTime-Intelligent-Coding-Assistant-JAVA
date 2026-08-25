@@ -1,8 +1,8 @@
-# RICA-V102 — Uninjected Repository Access
+# RICA-V102 - Uninjected Repository Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -74,6 +74,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 A repository field with no injection annotation is either a null pointer waiting to happen or a manual wire-up that hides the dependency. Without the container supplying the repository, the service is bound to a specific construction path and cannot be given a mock or alternative implementation in tests.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Repository pattern](../concepts/repository-pattern.md) - Learn what belongs in repositories and why query annotations belong at the persistence boundary.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+
 ## Common framework cases
 
 ### Repository field exists but has no injection path
@@ -93,11 +104,11 @@ A repository field with no injection annotation is either a null pointer waiting
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Annotate a repository field with `@Autowired`, `@Inject`, or `@Resource`.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Or inject it through the constructor.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 3. **Prefer constructor injection for immutable, explicit dependencies.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

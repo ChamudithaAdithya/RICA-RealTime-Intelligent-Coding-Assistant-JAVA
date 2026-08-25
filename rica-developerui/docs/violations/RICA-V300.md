@@ -1,15 +1,15 @@
-# RICA-V300 — Unmapped Design-Pattern Rule (fallback)
+# RICA-V300 - Unmapped Design-Pattern Rule (fallback)
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 4 — Fallback
+> **Stage**: Stage 4 - Fallback
 
 | | |
 | --- | --- |
 | Detector | `DesignPatternAnalyzer (fallback)` (DesignPatternAnalyzer) |
 | Layer | design-pattern |
 | Configuration | Not configurable (always on) |
-| Related rules | — |
+| Related rules | None |
 | Source | `src/designPatternAnalyzer.ts:70` |
 
 ## Trigger
@@ -19,6 +19,32 @@ Any design-pattern rule type that is not mapped to a specific code. Currently un
 ## Why it matters
 
 Safety net for future design-pattern rules so they surface as visible violations rather than being swallowed. New rules should be documented with a real code.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+- [Static analysis basics](../concepts/static-analysis-basics.md) - Learn how RICA detects source-code patterns and why some rules are heuristic.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `design-pattern`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.
+
 
 ## How to fix
 

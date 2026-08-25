@@ -1,8 +1,8 @@
-# RICA-V202 — Missing DTO Usage
+# RICA-V202 - Missing DTO Usage
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -53,6 +53,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 ## Why it matters
 
 Accepting domain objects directly as request payloads couples your API contract to the internal model and skips the boundary where validation/transformation should happen. Request DTOs let you validate input (see V206) and map only what is needed into the domain.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Entities, DTOs, and API contracts](../concepts/entities-dtos-api-contracts.md) - Understand why entities are internal models and DTOs are stable request/response contracts.
+- [API boundary design](../concepts/api-boundary-design.md) - Learn request/response contracts, versioning, sensitive data leaks, and client-facing stability.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Separation of concerns](../concepts/separation-of-concerns.md) - Learn why HTTP handling, business decisions, persistence, validation, and external calls should stay separate.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+- [Framework coupling](../concepts/framework-coupling.md) - Learn when Spring, JPA, servlet, HTTP-client, and SDK imports leak framework concerns into the wrong layer.
 
 ## Common framework cases
 

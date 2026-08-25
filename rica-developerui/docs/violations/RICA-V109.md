@@ -1,8 +1,8 @@
-# RICA-V109 — Improper Data Access
+# RICA-V109 - Improper Data Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -79,16 +79,27 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Entities must not manage persistence. Embedding JDBC/JPA access in an entity couples the domain object to a specific storage technology, breaks portability across data sources, and mixes persistence concerns into the domain. Data access belongs in repositories.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Repository pattern](../concepts/repository-pattern.md) - Learn what belongs in repositories and why query annotations belong at the persistence boundary.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Behavioral patterns](../concepts/behavioral-patterns.md) - Learn Strategy, State, Observer, Command, and Template Method as ways to move behavior out of conditionals.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Remove database fields and APIs from the entity.**
-   This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Create (or use) a repository that owns all data access.**
-   This keeps persistence behind the correct boundary, so domain and presentation code do not depend on storage details.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 3. **Have the service coordinate repository calls and entity changes.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 
 ## How to verify
 
@@ -98,7 +109,7 @@ Use this as the practical checklist. Each item explains both the action and the 
 
 ## Mitigation hint
 
-> Entities should not contain data access logic — move to Repository
+> Entities should not contain data access logic - move to Repository
 
 ## Tags
 

@@ -1,8 +1,8 @@
-# RICA-V302 — God Facade
+# RICA-V302 - God Facade
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 4 — Design Pattern Compliance (DesignPatternAnalyzer)
+> **Stage**: Stage 4 - Design Pattern Compliance (DesignPatternAnalyzer)
 
 | | |
 | --- | --- |
@@ -66,6 +66,32 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 God facades concentrate too much responsibility: many dependents, too much code, and huge surface area. Any change is risky and testing is slow because one class coordinates everything. Responsibilities should be split into focused services.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+- [Structural patterns](../concepts/structural-patterns.md) - Learn Adapter, Facade, Proxy, Decorator, and Composite as ways to shape dependencies between objects.
+- [Static analysis basics](../concepts/static-analysis-basics.md) - Learn how RICA detects source-code patterns and why some rules are heuristic.
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `service / facade`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.
+
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
@@ -85,7 +111,7 @@ Use this as the practical checklist. Each item explains both the action and the 
 
 ## Mitigation hint
 
-> Decompose this facade — extract domain logic into domain objects and keep only orchestration here
+> Decompose this facade - extract domain logic into domain objects and keep only orchestration here
 
 ## Tags
 

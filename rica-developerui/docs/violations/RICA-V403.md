@@ -1,10 +1,10 @@
-# RICA-V403 — Cyclic / Inverted Dependency
+# RICA-V403 - Cyclic / Inverted Dependency
 
 <Badge type="danger" text="Error" />
 
 > **Severity context**: <Badge type="danger" text="Error" /> True SCC cycle between classes (Tarjan) <Badge type="warning" text="Warning" /> Inverted dependency edge (lower layer → higher layer, ruleId INVERTED_DEP)
 
-> **Stage**: Stage 2 — Cross-File Graph Rules (CrossFileAnalyzer)
+> **Stage**: Stage 2 - Cross-File Graph Rules (CrossFileAnalyzer)
 
 | | |
 | --- | --- |
@@ -31,6 +31,30 @@ class C { A a; } // cycle!
 ## Why it matters
 
 Circular dependencies make the code impossible to test in isolation, block other components, and cause initialization and packaging headaches. Inverted edges violate the Dependency Rule and prevent lower layers from being reused by anything above them.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency graphs and cycles](../concepts/dependency-graphs-and-cycles.md) - Learn cycles, inverted dependencies, fan-in, fan-out, and why graph rules matter.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Package boundaries](../concepts/package-boundaries.md) - Learn how Java packages express architectural ownership and why forbidden imports are meaningful.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `cross-layer / graph`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
 
 ## How to fix
 

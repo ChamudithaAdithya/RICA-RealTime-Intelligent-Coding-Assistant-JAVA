@@ -1,10 +1,10 @@
-# RICA-V404 — Entity Exposure
+# RICA-V404 - Entity Exposure
 
 <Badge type="warning" text="Warning" />
 
 > **Severity context**: <Badge type="warning" text="Warning" /> Entity returned from a public method or accepted as a parameter <Badge type="tip" text="Info" /> Entity exposed via a public/protected field
 
-> **Stage**: Stage 2 — Cross-File Graph Rules (CrossFileAnalyzer)
+> **Stage**: Stage 2 - Cross-File Graph Rules (CrossFileAnalyzer)
 
 | | |
 | --- | --- |
@@ -60,7 +60,31 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ## Why it matters
 
-Entities are internal persistence/domain shapes. Leaking them across the API boundary couples clients to the data model — schema changes become breaking changes. DTOs define a stable contract at the edge.
+Entities are internal persistence/domain shapes. Leaking them across the API boundary couples clients to the data model - schema changes become breaking changes. DTOs define a stable contract at the edge.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Dependency graphs and cycles](../concepts/dependency-graphs-and-cycles.md) - Learn cycles, inverted dependencies, fan-in, fan-out, and why graph rules matter.
+- [Package boundaries](../concepts/package-boundaries.md) - Learn how Java packages express architectural ownership and why forbidden imports are meaningful.
+- [Entities, DTOs, and API contracts](../concepts/entities-dtos-api-contracts.md) - Understand why entities are internal models and DTOs are stable request/response contracts.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `controller api`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
 
 ## How to fix
 

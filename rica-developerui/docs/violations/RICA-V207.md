@@ -1,8 +1,8 @@
-# RICA-V207 — Exposing Internal Structure
+# RICA-V207 - Exposing Internal Structure
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -53,6 +53,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 ## Why it matters
 
 Returning internal domain objects (beyond entities) still leaks the internal model into the API contract. A DTO keeps the contract stable even when domain internals change and gives you a place to shape exactly what the client sees.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Entities, DTOs, and API contracts](../concepts/entities-dtos-api-contracts.md) - Understand why entities are internal models and DTOs are stable request/response contracts.
+- [API boundary design](../concepts/api-boundary-design.md) - Learn request/response contracts, versioning, sensitive data leaks, and client-facing stability.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+- [Validation and error boundaries](../concepts/validation-and-error-boundaries.md) - Learn where validation, exception mapping, and HTTP error shape should live.
 
 ## How to fix
 

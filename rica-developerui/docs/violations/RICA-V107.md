@@ -1,8 +1,8 @@
-# RICA-V107 — Direct Layer Access
+# RICA-V107 - Direct Layer Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -82,12 +82,23 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Entities are the innermost domain layer; they must not know about services, repositories, or infrastructure. Such references are not persisted, break serialization, and tangle the domain with upper layers so entities can no longer be reused across data sources or tested without bootstrapping the whole application.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Service Layer pattern](../concepts/service-layer-pattern.md) - Learn why business use cases should be orchestrated in services rather than controllers or repositories.
+- [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+- [Spring architecture guide](../concepts/spring-architecture-guide.md) - Learn Spring-specific placement for controllers, services, repositories, validation, transactions, and error handling.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Remove service/repository/infrastructure fields and calls from the entity.**
-   This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Have the service layer coordinate domain objects and perform data access.**
    This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
 3. **If the entity needs derived data, compute it in the service and pass it in.**

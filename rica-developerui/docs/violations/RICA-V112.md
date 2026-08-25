@@ -1,8 +1,8 @@
-# RICA-V112 — Background Thread
+# RICA-V112 - Background Thread
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -66,6 +66,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Bare threads in a controller are hard to manage: no lifecycle, no monitoring, no bounded pools, and they burden the servlet container. Spring's `@Async` or a TaskExecutor bean gives you pooled, monitored, cancellable execution and keeps the controller thin.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Concurrency and resource boundaries](../concepts/concurrency-boundaries.md) - Understand why threads, executors, sockets, connections, and heavyweight resources need ownership boundaries.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+- [Spring architecture guide](../concepts/spring-architecture-guide.md) - Learn Spring-specific placement for controllers, services, repositories, validation, transactions, and error handling.
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
@@ -73,7 +84,7 @@ Use this as the practical checklist. Each item explains both the action and the 
 1. **Replace raw thread/executor creation with `@Async` on a service method.**
    This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
 2. **Or inject a TaskExecutor service.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

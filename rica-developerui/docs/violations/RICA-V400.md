@@ -1,15 +1,15 @@
-# RICA-V400 — Unmapped Graph Rule (fallback)
+# RICA-V400 - Unmapped Graph Rule (fallback)
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 2 — Fallback
+> **Stage**: Stage 2 - Fallback
 
 | | |
 | --- | --- |
 | Detector | `CrossFileAnalyzer (fallback)` (CrossFileAnalyzer) |
 | Layer | cross-file |
 | Configuration | Not configurable (always on) |
-| Related rules | — |
+| Related rules | None |
 | Source | `src/crossFileAnalyzer.ts:32` |
 
 ## Trigger
@@ -19,6 +19,30 @@ Any cross-file rule whose rule id is not mapped to a specific code. Currently re
 ## Why it matters
 
 Acts as a safety net so an unregistered graph rule is still surfaced to the user rather than silently swallowed. New rules should always be documented with a real code.
+
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency graphs and cycles](../concepts/dependency-graphs-and-cycles.md) - Learn cycles, inverted dependencies, fan-in, fan-out, and why graph rules matter.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `cross-file`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
 
 ## How to fix
 

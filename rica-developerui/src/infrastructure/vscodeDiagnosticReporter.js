@@ -95,7 +95,7 @@ function toDiagnostics(vlist, advisory) {
     const diagnostics = [];
     const docBase = vscode.workspace
         .getConfiguration('javaAstAnalyzer')
-        .get('documentationBaseUrl', 'http://localhost:5173')
+        .get('documentationBaseUrl', '')
         .replace(/\/+$/, '');
     for (const v of vlist) {
         let severity;
@@ -127,7 +127,7 @@ function toDiagnostics(vlist, advisory) {
         diag.source = advisory ? 'RICA-AI' : 'Java Layer Analyzer';
         // Render the Problems-panel code as a clickable link to the matching docs page
         // when a per-violation documentationUrl is available (advisory findings have none).
-        if (!advisory && v.documentationUrl) {
+        if (!advisory && v.documentationUrl && /^https?:\/\//i.test(docBase)) {
             const target = vscode.Uri.parse(`${docBase}${v.documentationUrl}.html`);
             diag.code = { value: v.id, target };
         }

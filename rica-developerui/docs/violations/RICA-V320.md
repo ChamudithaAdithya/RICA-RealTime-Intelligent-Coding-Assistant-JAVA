@@ -1,8 +1,8 @@
-# RICA-V320 — Service Locator
+# RICA-V320 - Service Locator
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 4 — Design Pattern Compliance (DesignPatternAnalyzer)
+> **Stage**: Stage 4 - Design Pattern Compliance (DesignPatternAnalyzer)
 
 | | |
 | --- | --- |
@@ -20,6 +20,17 @@ Code outside configuration dynamically looks up dependencies through Application
 
 Service Locator hides dependencies until runtime and makes tests depend on container state. Constructor or field injection keeps dependencies explicit and replaceable.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Ports and Adapters](../concepts/ports-and-adapters.md) - Learn inbound ports, outbound ports, and adapter placement in hexagonal architecture.
+- [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
+
 ## Common framework cases
 
 ### ApplicationContext.getBean or service locator used in business code
@@ -34,12 +45,27 @@ Service Locator hides dependencies until runtime and makes tests depend on conta
 
 **Avoid:** Do not hide dependencies behind service lookup. It makes tests and architecture analysis weaker.
 
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `any (outside @Configuration)`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.
+
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Declare the dependency as a constructor parameter or injected field.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 2. **Keep dynamic bean lookup in configuration/composition code only.**
    This keeps the code aligned with the any (outside @Configuration) responsibility expected by RICA-V320.
 3. **Replace generic locator access with typed ports where possible.**

@@ -1,8 +1,8 @@
-# RICA-V401 — Controller Bypass
+# RICA-V401 - Controller Bypass
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 2 — Cross-File Graph Rules (CrossFileAnalyzer)
+> **Stage**: Stage 2 - Cross-File Graph Rules (CrossFileAnalyzer)
 
 | | |
 | --- | --- |
@@ -77,16 +77,40 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Controllers should only reach the persistence layer through services, which carry the business rules and transactional boundaries. A direct controller→repository edge lets HTTP concerns and data access bypass the domain entirely, leading to duplicated logic and inconsistent invariants.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Repository pattern](../concepts/repository-pattern.md) - Learn what belongs in repositories and why query annotations belong at the persistence boundary.
+- [Dependency graphs and cycles](../concepts/dependency-graphs-and-cycles.md) - Learn cycles, inverted dependencies, fan-in, fan-out, and why graph rules matter.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Package boundaries](../concepts/package-boundaries.md) - Learn how Java packages express architectural ownership and why forbidden imports are meaningful.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `controller → repository`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Move the repository call into a service method.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Inject the service into the controller.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 3. **Call the service from the controller and let it touch the repository.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 
 ## How to verify
 

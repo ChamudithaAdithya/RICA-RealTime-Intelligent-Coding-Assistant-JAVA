@@ -42,7 +42,6 @@ const astManager_1 = require("./astManager");
 const apiClient_1 = require("./apiClient");
 const fileWatcher_1 = require("./fileWatcher");
 const javaParser_1 = require("./infrastructure/javaParser");
-const webviewPanel_1 = require("./webviewPanel");
 const violationsWebviewPanel_1 = require("./violationsWebviewPanel");
 const violationManager_1 = require("./violationManager");
 const javaParserAdapter_1 = require("./infrastructure/javaParserAdapter");
@@ -128,8 +127,6 @@ async function activate(context) {
         else {
             vscode.window.showWarningMessage('No Java file is currently open');
         }
-    }), vscode.commands.registerCommand('javaAstAnalyzer.showAstView', () => {
-        webviewPanel_1.ASTWebviewPanel.createOrShow(context.extensionUri, apiClient);
     }), vscode.commands.registerCommand('javaAstAnalyzer.showViolationsView', () => {
         violationsWebviewPanel_1.ViolationsWebviewPanel.createOrShow(context.extensionUri, violationManager);
     }), vscode.commands.registerCommand('javaAstAnalyzer.openBrowserViewer', async () => {
@@ -392,7 +389,6 @@ async function showStatusInfo() {
         { label: '$(file-code) Quick Scan Current File', description: 'Run delta analysis on the active file' },
         { label: '$(info) Show Audit Summary', description: `${stats.total} total violations — ${stats.errors} errors, ${stats.warnings} warnings` },
         { label: '$(browser) Open Browser Viewer', description: 'View AST in browser' },
-        { label: '$(preview) Open AST Panel', description: 'View AST in VS Code panel' },
         { label: '$(warning) Open Violations Panel', description: 'View architecture violations' },
         { label: '$(trash) Reset Backend Data', description: 'Clear all stored AST data' }
     ];
@@ -413,9 +409,6 @@ async function showStatusInfo() {
             break;
         case '$(browser) Open Browser Viewer':
             vscode.commands.executeCommand('javaAstAnalyzer.openBrowserViewer');
-            break;
-        case '$(preview) Open AST Panel':
-            vscode.commands.executeCommand('javaAstAnalyzer.showAstView');
             break;
         case '$(warning) Open Violations Panel':
             vscode.commands.executeCommand('javaAstAnalyzer.showViolationsView');
