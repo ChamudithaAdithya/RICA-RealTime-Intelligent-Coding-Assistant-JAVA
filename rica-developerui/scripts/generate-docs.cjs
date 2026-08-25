@@ -337,6 +337,165 @@ function renderFrameworkCases(entry) {
   return lines;
 }
 
+const CONCEPT_REFERENCES = [
+  {
+    id: 'layered-architecture',
+    title: 'Layered architecture',
+    link: '../concepts/layered-architecture.md',
+    description: 'Understand controllers, services, repositories, entities, and why each layer has a narrow job.',
+    keywords: ['controller', 'service', 'repository', 'entity', 'layer', 'layers', 'business logic', 'presentation', 'persistence'],
+    applies: (entry) => /^RICA-V1|^RICA-V4|^RICA-V5/.test(entry.code),
+  },
+  {
+    id: 'clean-architecture',
+    title: 'Clean Architecture and dependency direction',
+    link: '../concepts/clean-architecture.md',
+    description: 'Learn why source dependencies should point inward and why framework details belong outside core code.',
+    keywords: ['clean architecture', 'dependency direction', 'inward', 'outer', 'inner', 'domain', 'application'],
+    applies: (entry) => /^RICA-V3|^RICA-V4|^RICA-V5/.test(entry.code),
+  },
+  {
+    id: 'dependency-inversion',
+    title: 'Dependency inversion',
+    link: '../concepts/dependency-inversion.md',
+    description: 'Learn why high-level policy should depend on interfaces instead of low-level implementation classes.',
+    keywords: ['interface', 'abstraction', 'port', 'implementation', 'concrete', 'impl', 'dependency inversion'],
+    applies: (entry) => /interface|abstraction|port|impl|implementation/i.test(entry.whyItMatters + ' ' + entry.trigger),
+  },
+  {
+    id: 'dependency-injection',
+    title: 'Dependency injection',
+    link: '../concepts/dependency-injection.md',
+    description: 'Understand constructor injection, field injection, containers, and why direct new calls are risky.',
+    keywords: ['inject', 'injection', '@autowired', '@inject', '@resource', 'constructor', 'new', 'container', 'bean'],
+    applies: (entry) => ['RICA-V101', 'RICA-V102', 'RICA-V103', 'RICA-V205', 'RICA-V320'].includes(entry.code),
+  },
+  {
+    id: 'controllers-services-repositories',
+    title: 'Controllers, services, and repositories',
+    link: '../concepts/controllers-services-repositories.md',
+    description: 'See the practical difference between inbound HTTP handling, business workflows, and persistence access.',
+    keywords: ['controller', 'service', 'repository', 'dao', 'http', 'business', 'workflow', 'persistence'],
+    applies: (entry) => /^RICA-V10|^RICA-V11|^RICA-V40/.test(entry.code),
+  },
+  {
+    id: 'infrastructure',
+    title: 'Infrastructure',
+    link: '../concepts/infrastructure.md',
+    description: 'Learn what infrastructure means in RICA: databases, HTTP clients, message brokers, files, SDKs, and framework adapters.',
+    keywords: ['infrastructure', 'database', 'sql', 'httpclient', 'resttemplate', 'webclient', 'sdk', 'framework', 'external', 'resource'],
+    applies: (entry) => ['RICA-V110', 'RICA-V114', 'RICA-V301', 'RICA-V322', 'RICA-V501'].includes(entry.code),
+  },
+  {
+    id: 'gateways-and-adapters',
+    title: 'Gateways and adapters',
+    link: '../concepts/gateways-and-adapters.md',
+    description: 'Learn how gateway interfaces and adapter implementations isolate external APIs, SDKs, and protocols.',
+    keywords: ['gateway', 'adapter', 'client', 'external service', 'sdk', 'resttemplate', 'webclient', 'httpclient', 'vendor'],
+    applies: (entry) => ['RICA-V110', 'RICA-V301', 'RICA-V322'].includes(entry.code),
+  },
+  {
+    id: 'entities-dtos-api-contracts',
+    title: 'Entities, DTOs, and API contracts',
+    link: '../concepts/entities-dtos-api-contracts.md',
+    description: 'Understand why entities are internal models and DTOs are stable request/response contracts.',
+    keywords: ['dto', 'entity', 'request', 'response', 'api', 'contract', 'serialization', 'json', 'validation'],
+    applies: (entry) => /^RICA-V20/.test(entry.code),
+  },
+  {
+    id: 'validation-and-error-boundaries',
+    title: 'Validation and error boundaries',
+    link: '../concepts/validation-and-error-boundaries.md',
+    description: 'Learn where validation, exception mapping, and HTTP error shape should live.',
+    keywords: ['valid', 'validation', 'constraint', 'exception', 'error', 'controlleradvice', 'http status'],
+    applies: (entry) => ['RICA-V203', 'RICA-V206', 'RICA-V207'].includes(entry.code),
+  },
+  {
+    id: 'design-patterns',
+    title: 'Design pattern basics',
+    link: '../concepts/design-patterns.md',
+    description: 'Learn what design patterns are, when they help, and when applying them creates accidental complexity.',
+    keywords: ['pattern', 'factory', 'builder', 'strategy', 'observer', 'state', 'adapter', 'singleton', 'template'],
+    applies: (entry) => /^RICA-V3/.test(entry.code),
+  },
+  {
+    id: 'creational-patterns',
+    title: 'Creational patterns',
+    link: '../concepts/creational-patterns.md',
+    description: 'Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.',
+    keywords: ['factory', 'builder', 'singleton', 'prototype', 'creation', 'constructor', 'new'],
+    applies: (entry) => /factory|builder|singleton|prototype|constructor|new/i.test(entry.name + ' ' + entry.trigger + ' ' + entry.tags.join(' ')),
+  },
+  {
+    id: 'structural-patterns',
+    title: 'Structural patterns',
+    link: '../concepts/structural-patterns.md',
+    description: 'Learn Adapter, Facade, Proxy, Decorator, and Composite as ways to shape dependencies between objects.',
+    keywords: ['adapter', 'facade', 'proxy', 'decorator', 'composite', 'wrapper', 'sdk'],
+    applies: (entry) => /adapter|facade|proxy|decorator|composite|sdk|wrapper/i.test(entry.name + ' ' + entry.trigger + ' ' + entry.tags.join(' ')),
+  },
+  {
+    id: 'behavioral-patterns',
+    title: 'Behavioral patterns',
+    link: '../concepts/behavioral-patterns.md',
+    description: 'Learn Strategy, State, Observer, Command, and Template Method as ways to move behavior out of conditionals.',
+    keywords: ['strategy', 'state', 'observer', 'command', 'template', 'conditional', 'branching', 'polymorphism'],
+    applies: (entry) => /strategy|state|observer|command|template|conditional|branch|polymorphism/i.test(entry.name + ' ' + entry.trigger + ' ' + entry.tags.join(' ')),
+  },
+  {
+    id: 'concurrency-boundaries',
+    title: 'Concurrency and resource boundaries',
+    link: '../concepts/concurrency-boundaries.md',
+    description: 'Understand why threads, executors, sockets, connections, and heavyweight resources need ownership boundaries.',
+    keywords: ['thread', 'executor', 'async', 'socket', 'connection', 'datasource', 'resource', 'lifecycle', 'pool'],
+    applies: (entry) => ['RICA-V303', 'RICA-V304', 'RICA-V305', 'RICA-V322'].includes(entry.code),
+  },
+  {
+    id: 'package-boundaries',
+    title: 'Package boundaries',
+    link: '../concepts/package-boundaries.md',
+    description: 'Learn how Java packages express architectural ownership and why forbidden imports are meaningful.',
+    keywords: ['package', 'import', 'boundary', 'forbidden', 'alloweddeps', 'dependency graph'],
+    applies: (entry) => ['RICA-V401', 'RICA-V402', 'RICA-V403', 'RICA-V404', 'RICA-V501'].includes(entry.code),
+  },
+];
+
+function renderConceptLinks(entry) {
+  const text = [
+    entry.code,
+    entry.name,
+    entry.layer,
+    entry.trigger,
+    entry.whyItMatters,
+    entry.mitigationHint,
+    ...(entry.howToFix || []),
+    ...(entry.tags || []),
+  ].join(' ').toLowerCase();
+
+  const scored = CONCEPT_REFERENCES
+    .map((concept, index) => {
+      let score = concept.applies && concept.applies(entry) ? 8 : 0;
+      for (const keyword of concept.keywords) {
+        if (text.includes(keyword.toLowerCase())) score += 1;
+      }
+      return { concept, score, index };
+    })
+    .filter(item => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .slice(0, 6);
+
+  if (!scored.length) return [];
+
+  const lines = ['## Learn the concepts behind this rule', ''];
+  lines.push('These background pages explain the architecture and pattern vocabulary used by this rule:');
+  lines.push('');
+  for (const { concept } of scored) {
+    lines.push(`- [${concept.title}](${concept.link}) - ${concept.description}`);
+  }
+  lines.push('');
+  return lines;
+}
+
 function renderViolationPage(entry) {
   const lines = [];
   lines.push(`# ${entry.code} — ${entry.name}`);
@@ -391,6 +550,8 @@ function renderViolationPage(entry) {
   lines.push('');
   lines.push(entry.whyItMatters);
   lines.push('');
+
+  lines.push(...renderConceptLinks(entry));
 
   lines.push(...renderFrameworkCases(entry));
 

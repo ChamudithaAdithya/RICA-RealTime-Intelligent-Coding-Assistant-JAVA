@@ -301,8 +301,8 @@
         },
         "javaAstAnalyzer.documentationBaseUrl": {
           "type": "string",
-          "default": "http://localhost:5173",
-          "description": "Optional external base URL for RICA docs links in diagnostics. The violations webview and command palette open bundled docs inside VS Code."
+          "default": "",
+          "description": "Optional external base URL for RICA docs links in diagnostics. Leave empty to use bundled docs from the violations panel and command palette."
         }
       }
     }

@@ -71,6 +71,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Heavy resources require lifecycle, access-control, and caching concerns (lazy loading, pooling, security checks) that a Proxy centralizes. Direct creation scatters construction cost, leaks connection handling into business logic, and makes testing and resource pooling impossible. A Proxy or injected bean keeps the business layer decoupled from resource acquisition.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Concurrency and resource boundaries](../concepts/concurrency-boundaries.md) - Understand why threads, executors, sockets, connections, and heavyweight resources need ownership boundaries.
+- [Infrastructure](../concepts/infrastructure.md) - Learn what infrastructure means in RICA: databases, HTTP clients, message brokers, files, SDKs, and framework adapters.
+- [Gateways and adapters](../concepts/gateways-and-adapters.md) - Learn how gateway interfaces and adapter implementations isolate external APIs, SDKs, and protocols.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+
 ## Common framework cases
 
 ### Heavy resource created directly

@@ -20,6 +20,14 @@ A method performs at least the configured number of null checks across multiple 
 
 Scattered null checks usually mean upstream contracts are unclear. Null Objects, Optional return types, and empty collections make absence explicit and reduce defensive boilerplate.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+- [Entities, DTOs, and API contracts](../concepts/entities-dtos-api-contracts.md) - Understand why entities are internal models and DTOs are stable request/response contracts.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.

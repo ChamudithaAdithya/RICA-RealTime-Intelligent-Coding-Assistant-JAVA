@@ -62,6 +62,17 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Directly instantiating collaborators bypasses the DI container. The class is hard-wired to a concrete implementation and a lifecycle it does not own, which couples layers together and makes unit testing (mocking the collaborator) impossible. The container should decide construction so the class stays decoupled, testable, and replaceable.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+- [Infrastructure](../concepts/infrastructure.md) - Learn what infrastructure means in RICA: databases, HTTP clients, message brokers, files, SDKs, and framework adapters.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.

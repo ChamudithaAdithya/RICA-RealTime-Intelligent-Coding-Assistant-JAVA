@@ -58,6 +58,16 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Collapsing two independent dimensions (e.g., color × shape, storage × notifier) into a single hierarchy causes combinatorial explosion: adding one value to either dimension multiplies the class count. The Bridge pattern decouples abstraction from implementation via composition, keeping hierarchies linear and extensible.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Infrastructure](../concepts/infrastructure.md) - Learn what infrastructure means in RICA: databases, HTTP clients, message brokers, files, SDKs, and framework adapters.
+- [Behavioral patterns](../concepts/behavioral-patterns.md) - Learn Strategy, State, Observer, Command, and Template Method as ways to move behavior out of conditionals.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.

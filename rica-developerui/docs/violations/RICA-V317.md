@@ -20,6 +20,14 @@ Two methods in different classes have highly similar call sequences while varyin
 
 Duplicated algorithm skeletons drift independently. Template Method keeps the invariant sequence in one place and lets subclasses or collaborators supply the varying steps.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+- [Behavioral patterns](../concepts/behavioral-patterns.md) - Learn Strategy, State, Observer, Command, and Template Method as ways to move behavior out of conditionals.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.

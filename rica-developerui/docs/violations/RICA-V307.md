@@ -50,6 +50,14 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 An abstraction with a single implementation is often premature indirection (YAGNI). Either it needs a second implementation to be justified, or the indirection should be collapsed. RICA warns so the cost of the seam is a deliberate choice, not an accident.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.

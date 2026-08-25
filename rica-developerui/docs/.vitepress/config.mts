@@ -41,9 +41,33 @@ export default defineConfig({
     nav: [
       { text: 'Rule Matrix', link: '/rule-matrix' },
       { text: 'Guides', link: '/guides/architecture' },
+      { text: 'Concepts', link: '/concepts/' },
       { text: 'Violations', link: '/violations/RICA-V101' },
     ],
     sidebar: {
+      '/concepts/': [
+        {
+          text: 'Concepts',
+          items: [
+            { text: 'Concept Index', link: '/concepts/' },
+            { text: 'Layered Architecture', link: '/concepts/layered-architecture' },
+            { text: 'Clean Architecture', link: '/concepts/clean-architecture' },
+            { text: 'Dependency Inversion', link: '/concepts/dependency-inversion' },
+            { text: 'Dependency Injection', link: '/concepts/dependency-injection' },
+            { text: 'Controllers, Services, Repositories', link: '/concepts/controllers-services-repositories' },
+            { text: 'Infrastructure', link: '/concepts/infrastructure' },
+            { text: 'Gateways and Adapters', link: '/concepts/gateways-and-adapters' },
+            { text: 'Entities, DTOs, API Contracts', link: '/concepts/entities-dtos-api-contracts' },
+            { text: 'Validation and Error Boundaries', link: '/concepts/validation-and-error-boundaries' },
+            { text: 'Design Pattern Basics', link: '/concepts/design-patterns' },
+            { text: 'Creational Patterns', link: '/concepts/creational-patterns' },
+            { text: 'Structural Patterns', link: '/concepts/structural-patterns' },
+            { text: 'Behavioral Patterns', link: '/concepts/behavioral-patterns' },
+            { text: 'Concurrency and Resources', link: '/concepts/concurrency-boundaries' },
+            { text: 'Package Boundaries', link: '/concepts/package-boundaries' },
+          ],
+        },
+      ],
       '/guides/': [
         {
           text: 'Guides',

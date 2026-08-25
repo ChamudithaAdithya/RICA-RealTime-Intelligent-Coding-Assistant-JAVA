@@ -66,6 +66,16 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 Bare threads in a controller are hard to manage: no lifecycle, no monitoring, no bounded pools, and they burden the servlet container. Spring's `@Async` or a TaskExecutor bean gives you pooled, monitored, cancellable execution and keeps the controller thin.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
+- [Controllers, services, and repositories](../concepts/controllers-services-repositories.md) - See the practical difference between inbound HTTP handling, business workflows, and persistence access.
+- [Concurrency and resource boundaries](../concepts/concurrency-boundaries.md) - Understand why threads, executors, sockets, connections, and heavyweight resources need ownership boundaries.
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.

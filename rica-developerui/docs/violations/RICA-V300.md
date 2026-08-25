@@ -20,6 +20,15 @@ Any design-pattern rule type that is not mapped to a specific code. Currently un
 
 Safety net for future design-pattern rules so they surface as visible violations rather than being swallowed. New rules should be documented with a real code.
 
+## Learn the concepts behind this rule
+
+These background pages explain the architecture and pattern vocabulary used by this rule:
+
+- [Design pattern basics](../concepts/design-patterns.md) - Learn what design patterns are, when they help, and when applying them creates accidental complexity.
+- [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+- [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+- [Creational patterns](../concepts/creational-patterns.md) - Learn Factory, Builder, Singleton, and Prototype with Java examples and common misuse cases.
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
