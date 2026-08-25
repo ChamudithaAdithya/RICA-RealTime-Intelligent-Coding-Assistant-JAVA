@@ -1,4 +1,4 @@
-# Concurrency And Resource Boundaries
+﻿# Concurrency And Resource Boundaries
 
 Concurrency and heavyweight resources need clear ownership.
 

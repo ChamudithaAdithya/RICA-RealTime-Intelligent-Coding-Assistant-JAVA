@@ -1,4 +1,4 @@
-# Separation Of Concerns
+﻿# Separation Of Concerns
 
 Separation of concerns means each part of the codebase should focus on one kind of work.
 
@@ -44,11 +44,11 @@ The service handles the workflow, the gateway handles payment infrastructure, th
 
 ## Related RICA Rules
 
-- `RICA-V106`: business logic in controllers/entities
-- `RICA-V110`: direct HTTP calls in controllers
-- `RICA-V114`: raw SQL in controllers
-- `RICA-V201`, `RICA-V202`: entity/API boundary mixing
-- `RICA-V301`, `RICA-V501`: infrastructure/package coupling
+- [`RICA-V106`](../violations/RICA-V106.md): business logic in controllers/entities
+- [`RICA-V110`](../violations/RICA-V110.md): direct HTTP calls in controllers
+- [`RICA-V114`](../violations/RICA-V114.md): raw SQL in controllers
+- [`RICA-V201`](../violations/RICA-V201.md), [`RICA-V202`](../violations/RICA-V202.md): entity/API boundary mixing
+- [`RICA-V301`](../violations/RICA-V301.md), [`RICA-V501`](../violations/RICA-V501.md): infrastructure/package coupling
 
 ## Practical Fix Rule
 

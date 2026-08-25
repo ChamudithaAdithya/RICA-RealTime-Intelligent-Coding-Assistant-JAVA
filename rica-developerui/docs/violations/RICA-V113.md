@@ -1,8 +1,8 @@
-# RICA-V113 — Static Cache
+# RICA-V113 - Static Cache
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -67,7 +67,7 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ## Why it matters
 
-Static mutable state in a controller persists across all instances and requests. It can leak memory, create concurrency bugs, and silently wed tests to production state. Caching should be a scoped, managed construct — a cache service bean or `@Cacheable` — so lifecycle and eviction are controlled.
+Static mutable state in a controller persists across all instances and requests. It can leak memory, create concurrency bugs, and silently wed tests to production state. Caching should be a scoped, managed construct - a cache service bean or `@Cacheable` - so lifecycle and eviction are controlled.
 
 ## Learn the concepts behind this rule
 

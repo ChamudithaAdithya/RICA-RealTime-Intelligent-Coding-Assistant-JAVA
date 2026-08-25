@@ -1,8 +1,8 @@
-# RICA-V108 — Anemic Entity
+# RICA-V108 - Anemic Entity
 
 <Badge type="tip" text="Info" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -71,7 +71,7 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ## Why it matters
 
-A class with no behavior captures no business contract — it is just a dumb data holder. In domain-driven designs, entities should encapsulate invariants and rules (they tell you what the domain concept *does*). RICA reports this at `info` level because anemic entities are sometimes an intentional, acceptable trade-off.
+A class with no behavior captures no business contract - it is just a dumb data holder. In domain-driven designs, entities should encapsulate invariants and rules (they tell you what the domain concept *does*). RICA reports this at `info` level because anemic entities are sometimes an intentional, acceptable trade-off.
 
 ## Learn the concepts behind this rule
 
@@ -83,6 +83,19 @@ These background pages explain the architecture and pattern vocabulary used by t
 - [Refactoring playbook](../concepts/refactoring-playbook.md) - See practical refactoring moves for common RICA fixes.
 - [Dependency inversion](../concepts/dependency-inversion.md) - Learn why high-level policy should depend on interfaces instead of low-level implementation classes.
 - [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `entity`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
 
 ## How to fix
 

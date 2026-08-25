@@ -1,4 +1,4 @@
-# Entities, DTOs, And API Contracts
+﻿# Entities, DTOs, And API Contracts
 
 An entity is an internal model. A DTO is a data shape used to cross a boundary, such as an HTTP request or response.
 

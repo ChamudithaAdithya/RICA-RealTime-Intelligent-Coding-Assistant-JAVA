@@ -1,4 +1,4 @@
-# Gateways And Adapters
+﻿# Gateways And Adapters
 
 A gateway is a local interface that represents an external capability. An adapter is the implementation that talks to the real external system.
 

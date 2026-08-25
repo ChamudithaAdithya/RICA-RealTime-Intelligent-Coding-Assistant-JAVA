@@ -1,8 +1,8 @@
-# RICA-V114 — Raw SQL Access
+# RICA-V114 - Raw SQL Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -98,11 +98,11 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Move the query/update into a repository method.**
-   This keeps persistence behind the correct boundary, so domain and presentation code do not depend on storage details.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Have a service call the repository.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 3. **Inject the service into the controller.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

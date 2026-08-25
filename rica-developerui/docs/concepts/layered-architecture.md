@@ -1,4 +1,4 @@
-# Layered Architecture
+﻿# Layered Architecture
 
 Layered architecture organizes code by responsibility. Each layer has a job, and each job should be easy to describe in one sentence.
 

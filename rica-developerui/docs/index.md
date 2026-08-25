@@ -10,6 +10,9 @@ hero:
       text: Rule Matrix
       link: /rule-matrix
     - theme: alt
+      text: Rule Concepts
+      link: /rule-concept-map
+    - theme: alt
       text: Concepts
       link: /concepts/
     - theme: alt
@@ -25,5 +28,7 @@ features:
     details: Strategy, factory, threading discipline, package boundaries, and dependency direction.
   - title: Concept library
     details: Plain-language explanations of infrastructure, gateways, dependency inversion, DTOs, and design-pattern families.
+  - title: Rule to concept map
+    details: Every RICA code linked back to the concepts needed to understand and fix it.
 
 ---

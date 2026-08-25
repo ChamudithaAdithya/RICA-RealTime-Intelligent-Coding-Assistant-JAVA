@@ -1,4 +1,4 @@
-# RICA-V000 — Unmapped Legacy Violation (fallback)
+# RICA-V000 - Unmapped Legacy Violation (fallback)
 
 <Badge type="warning" text="Warning" />
 
@@ -9,7 +9,7 @@
 | Detector | `ViolationManager.layerViolationToUnified` (ViolationManager) |
 | Layer | any |
 | Configuration | Not configurable (always on) |
-| Related rules | — |
+| Related rules | None |
 | Source | `src/violationManager.ts:77` |
 
 ## Trigger
@@ -29,6 +29,19 @@ These background pages explain the architecture and pattern vocabulary used by t
 - [False positives and rule tuning](../concepts/false-positives-and-rule-tuning.md) - Learn how to decide whether a finding is a real violation or a configuration issue.
 - [Layered architecture](../concepts/layered-architecture.md) - Understand controllers, services, repositories, entities, and why each layer has a narrow job.
 - [Dependency injection](../concepts/dependency-injection.md) - Understand constructor injection, field injection, containers, and why direct new calls are risky.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `any`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
 
 ## How to fix
 

@@ -1,8 +1,8 @@
-# RICA-V104 — Anemic Service
+# RICA-V104 - Anemic Service
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -80,7 +80,7 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ## Why it matters
 
-Services are the natural home for business rules: validation, calculations, orchestration, and state transitions. When a service is nothing but getters and delegation, that logic has leaked into controllers, entities, or helpers — making it untestable in isolation and harder to reason about. RICA flags it so behavior can be pulled back into the layer that owns it.
+Services are the natural home for business rules: validation, calculations, orchestration, and state transitions. When a service is nothing but getters and delegation, that logic has leaked into controllers, entities, or helpers - making it untestable in isolation and harder to reason about. RICA flags it so behavior can be pulled back into the layer that owns it.
 
 ## Learn the concepts behind this rule
 

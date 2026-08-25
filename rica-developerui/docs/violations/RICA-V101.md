@@ -1,8 +1,8 @@
-# RICA-V101 — Self-Instantiation
+# RICA-V101 - Self-Instantiation
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -30,7 +30,7 @@ public String lookup(long id) {
 ### Fixed version
 
 ```
-// In a Service — inject instead
+// In a Service - inject instead
 @Autowired
 private UserRepository userRepository;
 
@@ -46,7 +46,7 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ```diff
 - // In a Service
-+ // In a Service — inject instead
++ // In a Service - inject instead
 + @Autowired
 + private UserRepository userRepository;
 +
@@ -78,11 +78,11 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Remove the `new` statement.**
-   This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.
+   This replaces branching with named behaviors, making each variation easier to test and change independently.
 2. **Add a field of the collaborator type to the class.**
    This keeps the code aligned with the service / controller responsibility expected by RICA-V101.
 3. **Annotate it with `@Autowired`, `@Inject`, or `@Resource`, or pass it through the constructor.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 4. **Keep the container responsible for wiring.**
    This keeps the code aligned with the service / controller responsibility expected by RICA-V101.
 

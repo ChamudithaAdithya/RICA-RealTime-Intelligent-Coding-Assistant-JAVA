@@ -1,8 +1,8 @@
-# RICA-V401 — Controller Bypass
+# RICA-V401 - Controller Bypass
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 2 — Cross-File Graph Rules (CrossFileAnalyzer)
+> **Stage**: Stage 2 - Cross-File Graph Rules (CrossFileAnalyzer)
 
 | | |
 | --- | --- |
@@ -88,16 +88,29 @@ These background pages explain the architecture and pattern vocabulary used by t
 - [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
 - [Package boundaries](../concepts/package-boundaries.md) - Learn how Java packages express architectural ownership and why forbidden imports are meaningful.
 
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `controller → repository`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Move the repository call into a service method.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Inject the service into the controller.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 3. **Call the service from the controller and let it touch the repository.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 
 ## How to verify
 

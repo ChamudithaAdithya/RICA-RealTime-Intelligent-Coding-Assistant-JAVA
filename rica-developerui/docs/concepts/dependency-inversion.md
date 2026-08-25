@@ -1,4 +1,4 @@
-# Dependency Inversion
+﻿# Dependency Inversion
 
 Dependency inversion means high-level business code should depend on stable abstractions, not low-level implementation details.
 

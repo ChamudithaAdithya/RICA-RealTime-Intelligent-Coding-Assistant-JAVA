@@ -1,4 +1,4 @@
-# Dependency Injection
+﻿# Dependency Injection
 
 Dependency injection means a class receives the collaborators it needs instead of constructing them itself.
 

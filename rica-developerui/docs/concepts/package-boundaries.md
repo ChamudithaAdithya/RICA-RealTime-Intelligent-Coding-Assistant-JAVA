@@ -1,4 +1,4 @@
-# Package Boundaries
+﻿# Package Boundaries
 
 Java imports reveal architecture. If a file imports a class from the wrong package, the code probably depends on the wrong layer.
 

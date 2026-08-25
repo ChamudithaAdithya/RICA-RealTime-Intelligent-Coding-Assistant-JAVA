@@ -1,4 +1,4 @@
-# Clean Architecture
+﻿# Clean Architecture
 
 Clean Architecture separates business policy from technical mechanisms. The most important idea is dependency direction: source-code dependencies should point inward toward stable business concepts, not outward toward frameworks and tools.
 

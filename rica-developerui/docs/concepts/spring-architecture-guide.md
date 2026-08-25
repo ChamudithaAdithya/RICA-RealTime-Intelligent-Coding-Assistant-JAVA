@@ -1,4 +1,4 @@
-# Spring Architecture Guide
+﻿# Spring Architecture Guide
 
 This page explains where common Spring annotations and types usually belong in a RICA-friendly Java project.
 
@@ -62,9 +62,9 @@ Use `@RestControllerAdvice` or exception handlers for HTTP error shape.
 
 ## Related RICA Rules
 
-- `RICA-V101` to `RICA-V114`: layer-specific Spring placement
-- `RICA-V201` to `RICA-V207`: API boundary rules
-- `RICA-V501`: framework/package import boundaries
+- [`RICA-V101`](../violations/RICA-V101.md) to [`RICA-V114`](../violations/RICA-V114.md): layer-specific Spring placement
+- [`RICA-V201`](../violations/RICA-V201.md) to [`RICA-V207`](../violations/RICA-V207.md): API boundary rules
+- [`RICA-V501`](../violations/RICA-V501.md): framework/package import boundaries
 
 ## Practical Fix Rule
 

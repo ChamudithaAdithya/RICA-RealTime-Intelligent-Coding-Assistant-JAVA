@@ -1,4 +1,4 @@
-# Framework Coupling
+﻿# Framework Coupling
 
 Framework coupling happens when code depends directly on framework types that do not belong in that layer.
 
@@ -35,10 +35,10 @@ Wrong-layer framework imports make code harder to reuse and test. A service that
 
 ## Related RICA Rules
 
-- `RICA-V110`: outbound HTTP framework/client use in controllers
-- `RICA-V114`: database framework use outside repository/infrastructure
-- `RICA-V301`: vendor SDK leakage
-- `RICA-V501`: package and framework boundary violations
+- [`RICA-V110`](../violations/RICA-V110.md): outbound HTTP framework/client use in controllers
+- [`RICA-V114`](../violations/RICA-V114.md): database framework use outside repository/infrastructure
+- [`RICA-V301`](../violations/RICA-V301.md): vendor SDK leakage
+- [`RICA-V501`](../violations/RICA-V501.md): package and framework boundary violations
 
 ## Practical Fix Rule
 

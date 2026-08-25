@@ -1,4 +1,4 @@
-# Validation And Error Boundaries
+﻿# Validation And Error Boundaries
 
 Validation and error mapping protect the boundary between external input and internal business logic.
 

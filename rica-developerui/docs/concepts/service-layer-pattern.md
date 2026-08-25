@@ -1,4 +1,4 @@
-# Service Layer Pattern
+﻿# Service Layer Pattern
 
 The Service Layer pattern groups business use cases into application services.
 
@@ -45,10 +45,10 @@ class CheckoutService {
 
 ## Related RICA Rules
 
-- `RICA-V106`, `RICA-V204`: business logic placed outside the service/application layer
-- `RICA-V110`: controller directly performs outbound infrastructure calls
-- `RICA-V205`: direct service instantiation
-- `RICA-V310`: multi-step write workflow should become a command/use-case boundary
+- [`RICA-V106`](../violations/RICA-V106.md), [`RICA-V204`](../violations/RICA-V204.md): business logic placed outside the service/application layer
+- [`RICA-V110`](../violations/RICA-V110.md): controller directly performs outbound infrastructure calls
+- [`RICA-V205`](../violations/RICA-V205.md): direct service instantiation
+- [`RICA-V310`](../violations/RICA-V310.md): multi-step write workflow should become a command/use-case boundary
 
 ## Practical Fix Rule
 

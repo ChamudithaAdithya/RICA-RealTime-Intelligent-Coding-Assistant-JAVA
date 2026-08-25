@@ -1,8 +1,8 @@
-# RICA-V307 — Missing Abstraction
+# RICA-V307 - Missing Abstraction
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 4 — Design Pattern Compliance (DesignPatternAnalyzer)
+> **Stage**: Stage 4 - Design Pattern Compliance (DesignPatternAnalyzer)
 
 | | |
 | --- | --- |
@@ -61,12 +61,27 @@ These background pages explain the architecture and pattern vocabulary used by t
 - [SOLID principles](../concepts/solid-principles.md) - Learn the object-oriented principles behind responsibility, extension, interface, and dependency violations.
 - [Static analysis basics](../concepts/static-analysis-basics.md) - Learn how RICA detects source-code patterns and why some rules are heuristic.
 
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `any`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.
+
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Either remove the interface and use the concrete class directly.**
-   This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.
+   This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
 2. **Or extract a second implementation to justify the abstraction.**
    This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.
 3. **Document why the seam exists if it is intentional (e.g. future provider).**
@@ -80,7 +95,7 @@ Use this as the practical checklist. Each item explains both the action and the 
 
 ## Mitigation hint
 
-> Either this abstraction is unnecessary (YAGNI — consider inlining), or add more implementations to justify the indirection
+> Either this abstraction is unnecessary (YAGNI - consider inlining), or add more implementations to justify the indirection
 
 ## Tags
 

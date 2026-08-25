@@ -1,4 +1,4 @@
-# Transaction Boundaries
+﻿# Transaction Boundaries
 
 A transaction boundary defines which operations succeed or fail together.
 
@@ -41,9 +41,9 @@ Multi-step write workflows become risky when the transaction boundary is unclear
 
 ## Related RICA Rules
 
-- `RICA-V310`: missing command/use-case boundary for multi-step writes
-- `RICA-V106`, `RICA-V204`: business workflow in the wrong layer
-- `RICA-V114`: persistence details outside repositories
+- [`RICA-V310`](../violations/RICA-V310.md): missing command/use-case boundary for multi-step writes
+- [`RICA-V106`](../violations/RICA-V106.md), [`RICA-V204`](../violations/RICA-V204.md): business workflow in the wrong layer
+- [`RICA-V114`](../violations/RICA-V114.md): persistence details outside repositories
 
 ## Practical Fix Rule
 

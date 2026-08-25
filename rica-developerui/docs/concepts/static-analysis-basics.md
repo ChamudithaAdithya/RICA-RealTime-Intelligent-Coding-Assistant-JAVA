@@ -1,4 +1,4 @@
-# Static Analysis Basics
+﻿# Static Analysis Basics
 
 Static analysis inspects source code without running the program.
 

@@ -1,8 +1,8 @@
-# RICA-V103 — Uninjected Service Access
+# RICA-V103 - Uninjected Service Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -74,7 +74,7 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ## Why it matters
 
-Controllers are thin HTTP adapters. When they reach for services through uninjected fields or method-local references, they lose the benefits of the container — testability, lifecycle management, and the ability to swap in fakes. The wiring belongs to the container; the controller should only orchestrate HTTP concerns.
+Controllers are thin HTTP adapters. When they reach for services through uninjected fields or method-local references, they lose the benefits of the container - testability, lifecycle management, and the ability to swap in fakes. The wiring belongs to the container; the controller should only orchestrate HTTP concerns.
 
 ## Learn the concepts behind this rule
 
@@ -106,9 +106,9 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Add `@Autowired`/`@Inject` to the service or repository field, or use constructor injection.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Call services only through injected fields/parameters.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

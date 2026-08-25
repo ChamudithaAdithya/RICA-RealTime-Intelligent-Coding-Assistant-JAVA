@@ -1,4 +1,4 @@
-# False Positives And Rule Tuning
+﻿# False Positives And Rule Tuning
 
 A false positive is a reported violation that is not actually a design problem in the current project.
 
@@ -41,9 +41,9 @@ If this is reported as a boundary violation, the repository package or allowed f
 
 ## Related RICA Rules
 
-- `RICA-V501`: package boundary configuration
-- `RICA-V106`, `RICA-V204`: threshold-based business logic detection
-- `RICA-V303` to `RICA-V323`: design-pattern heuristics
+- [`RICA-V501`](../violations/RICA-V501.md): package boundary configuration
+- [`RICA-V106`](../violations/RICA-V106.md), [`RICA-V204`](../violations/RICA-V204.md): threshold-based business logic detection
+- [`RICA-V303`](../violations/RICA-V303.md) to [`RICA-V323`](../violations/RICA-V323.md): design-pattern heuristics
 
 ## Practical Fix Rule
 

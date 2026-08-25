@@ -1,8 +1,8 @@
-# RICA-V102 — Uninjected Repository Access
+# RICA-V102 - Uninjected Repository Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -104,11 +104,11 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Annotate a repository field with `@Autowired`, `@Inject`, or `@Resource`.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Or inject it through the constructor.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 3. **Prefer constructor injection for immutable, explicit dependencies.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

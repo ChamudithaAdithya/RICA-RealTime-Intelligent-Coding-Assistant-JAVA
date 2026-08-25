@@ -1,4 +1,4 @@
-# RICA Concept Library
+﻿# RICA Concept Library
 
 This section explains the architecture, static-analysis, and design-pattern vocabulary used in RICA rule pages.
 
@@ -29,11 +29,13 @@ Use it when a violation mentions a concept that is technically correct but not y
 
 ## Static Analysis Concepts
 
+- [Rule To Concept Map](../rule-concept-map.md) links every RICA rule code to the concepts needed to understand it.
 - [Static Analysis Basics](./static-analysis-basics.md) explains how RICA detects violations and why some rules are heuristic.
 - [False Positives and Rule Tuning](./false-positives-and-rule-tuning.md) explains how to decide whether a finding is real or a configuration issue.
 - [Refactoring Playbook](./refactoring-playbook.md) gives practical moves for common RICA fixes.
 - [Spring Architecture Guide](./spring-architecture-guide.md) gives Spring-specific placement guidance for controllers, services, repositories, transactions, validation, and errors.
 - [Testing Architecture Fixes](./testing-architecture-fixes.md) explains what tests to run after each kind of architecture refactor.
+- [Glossary](./glossary.md) gives quick definitions for the main architecture and pattern terms used by RICA.
 
 ## Design Pattern Concepts
 
@@ -50,4 +52,3 @@ Use it when a violation mentions a concept that is technically correct but not y
 3. Compare the violating example, fixed version, and diff.
 4. Follow the checklist in "How to fix".
 5. Re-run RICA and run the affected project tests.
-

@@ -1,8 +1,8 @@
-# RICA-V110 — Direct HTTP Call
+# RICA-V110 - Direct HTTP Call
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -106,11 +106,11 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Move the HTTP client into a dedicated gateway/client service.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 2. **Inject that gateway into the controller.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 3. **Controller delegates outbound calls to the gateway.**
-   This keeps the code aligned with the controller responsibility expected by RICA-V110.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 
 ## How to verify
 

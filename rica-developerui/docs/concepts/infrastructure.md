@@ -1,4 +1,4 @@
-# Infrastructure
+﻿# Infrastructure
 
 Infrastructure is code that talks to external systems or technical mechanisms.
 

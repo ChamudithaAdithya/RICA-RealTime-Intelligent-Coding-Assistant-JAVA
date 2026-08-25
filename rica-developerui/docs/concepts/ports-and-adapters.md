@@ -1,4 +1,4 @@
-# Ports And Adapters
+﻿# Ports And Adapters
 
 Ports and Adapters, also called Hexagonal Architecture, keeps application logic in the center and technical details at the edge.
 
@@ -52,11 +52,11 @@ Many violations happen when adapters leak inward. Examples include services impo
 
 ## Related RICA Rules
 
-- `RICA-V301`: missing adapter for vendor SDKs
-- `RICA-V307`: missing abstraction across a boundary
-- `RICA-V320`: service locator instead of explicit ports
-- `RICA-V322`: missing proxy/wrapper for heavy resources
-- `RICA-V501`: package boundary violation
+- [`RICA-V301`](../violations/RICA-V301.md): missing adapter for vendor SDKs
+- [`RICA-V307`](../violations/RICA-V307.md): missing abstraction across a boundary
+- [`RICA-V320`](../violations/RICA-V320.md): service locator instead of explicit ports
+- [`RICA-V322`](../violations/RICA-V322.md): missing proxy/wrapper for heavy resources
+- [`RICA-V501`](../violations/RICA-V501.md): package boundary violation
 
 ## Practical Fix Rule
 

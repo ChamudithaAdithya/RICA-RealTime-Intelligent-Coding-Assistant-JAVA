@@ -1,8 +1,8 @@
-# RICA-V310 — Missing Command
+# RICA-V310 - Missing Command
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 4 — Design Pattern Compliance (DesignPatternAnalyzer)
+> **Stage**: Stage 4 - Design Pattern Compliance (DesignPatternAnalyzer)
 
 | | |
 | --- | --- |
@@ -31,16 +31,31 @@ These background pages explain the architecture and pattern vocabulary used by t
 - [Behavioral patterns](../concepts/behavioral-patterns.md) - Learn Strategy, State, Observer, Command, and Template Method as ways to move behavior out of conditionals.
 - [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
 
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `service`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
+Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.
+
+
 ## How to fix
 
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Wrap the write sequence in an explicit Command object or use-case class.**
-   This keeps the code aligned with the service responsibility expected by RICA-V310.
+   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
 2. **Add a transactional boundary where the unit of work must commit atomically.**
-   This keeps the code aligned with the service responsibility expected by RICA-V310.
+   This makes the workflow and transaction boundary explicit, so retry, rollback, and auditing can be handled deliberately.
 3. **Keep validation and write orchestration visible at one boundary.**
-   This keeps the code aligned with the service responsibility expected by RICA-V310.
+   This makes the workflow and transaction boundary explicit, so retry, rollback, and auditing can be handled deliberately.
 
 ## How to verify
 

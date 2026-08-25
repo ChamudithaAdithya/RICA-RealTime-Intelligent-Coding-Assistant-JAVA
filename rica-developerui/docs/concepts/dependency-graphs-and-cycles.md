@@ -1,4 +1,4 @@
-# Dependency Graphs And Cycles
+﻿# Dependency Graphs And Cycles
 
 A dependency graph shows which files, packages, or classes depend on each other.
 
@@ -38,11 +38,11 @@ These imports usually reveal boundary leaks.
 
 ## Related RICA Rules
 
-- `RICA-V401`: controller bypass
-- `RICA-V402`: cross-layer violation
-- `RICA-V403`: cyclic or inverted dependency
-- `RICA-V404`: entity exposure
-- `RICA-V501`: package boundary violation
+- [`RICA-V401`](../violations/RICA-V401.md): controller bypass
+- [`RICA-V402`](../violations/RICA-V402.md): cross-layer violation
+- [`RICA-V403`](../violations/RICA-V403.md): cyclic or inverted dependency
+- [`RICA-V404`](../violations/RICA-V404.md): entity exposure
+- [`RICA-V501`](../violations/RICA-V501.md): package boundary violation
 
 ## Practical Fix Rule
 

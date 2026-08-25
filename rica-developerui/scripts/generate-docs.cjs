@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Generates the VitePress documentation site for RICA violation codes from the
  * shared catalog (src/violationCatalog.ts) so docs can never drift from the analyzers.
  *
@@ -20,6 +20,7 @@ const ROOT = path.resolve(__dirname, '..');
 const CATALOG_PATH = path.join(ROOT, 'src', 'violationCatalog.ts');
 const VIOLATIONS_DIR = path.join(ROOT, 'docs', 'violations');
 const RULE_MATRIX_PATH = path.join(ROOT, 'docs', 'rule-matrix.md');
+const RULE_CONCEPT_MAP_PATH = path.join(ROOT, 'docs', 'rule-concept-map.md');
 
 const STAGE_ORDER = ['stage1', 'stage2', 'stage3', 'stage4', 'fallback'];
 const SEVERITY_LABEL = { error: 'Error', warning: 'Warning', info: 'Info' };
@@ -56,11 +57,26 @@ function severityBadge(severity) {
   return map[severity] || severity;
 }
 
+function cleanDocText(value) {
+  return String(value ?? '')
+    .replace(/\u00e2\u20ac\u201d/g, '-')
+    .replace(/\u00e2\u20ac\u201c/g, '-')
+    .replace(/\u00e2\u2030\u00a5/g, '>=')
+    .replace(/\u00c3\u2014/g, 'x')
+    .replace(/\u00c2\u00b7/g, '-')
+    .replace(/\u2014/g, '-')
+    .replace(/\u2013/g, '-')
+    .replace(/\u2265/g, '>=')
+    .replace(/\u00d7/g, 'x')
+    .replace(/\u00b7/g, '-');
+}
+
 /** Renders a contiguous fenced code block safely (no nested fence collisions). */
 function fence(code) {
   if (!code) return '';
-  const ticks = code.includes('```') ? '````' : '```';
-  return `${ticks}\n${code.trim()}\n${ticks}\n`;
+  const cleaned = cleanDocText(code).trim();
+  const ticks = cleaned.includes('```') ? '````' : '```';
+  return `${ticks}\n${cleaned}\n${ticks}\n`;
 }
 
 function normalizeCodeLines(code) {
@@ -101,25 +117,25 @@ function renderDiff(beforeCode, afterCode) {
   while (i < before.length) diff.push(diffLine('-', before[i++]));
   while (j < after.length) diff.push(diffLine('+', after[j++]));
 
-  return `\`\`\`diff\n${diff.join('\n')}\n\`\`\`\n`;
+  return `\`\`\`diff\n${cleanDocText(diff.join('\n'))}\n\`\`\`\n`;
 }
 
 function explainStep(step, entry) {
   const lower = step.toLowerCase();
-  if (lower.includes('remove') || lower.includes('stop') || lower.includes('avoid')) {
-    return 'This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.';
+  if (lower.includes('repository') || lower.includes('persistence') || lower.includes('database') || lower.includes('sql') || lower.includes('@query') || lower.includes('jpa') || lower.includes('jdbc')) {
+    return 'This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.';
   }
-  if (lower.includes('inject') || lower.includes('@autowired') || lower.includes('@inject') || lower.includes('constructor')) {
-    return 'This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.';
+  if (lower.includes('gateway') || lower.includes('adapter') || lower.includes('client') || lower.includes('sdk') || lower.includes('external') || lower.includes('http')) {
+    return 'This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.';
   }
   if (lower.includes('dto') || lower.includes('map')) {
     return 'This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.';
   }
-  if (lower.includes('service')) {
-    return 'This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.';
+  if (lower.includes('inject') || lower.includes('@autowired') || lower.includes('@inject') || lower.includes('constructor')) {
+    return 'This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.';
   }
-  if (lower.includes('repository') || lower.includes('persistence') || lower.includes('database') || lower.includes('sql')) {
-    return 'This keeps persistence behind the correct boundary, so domain and presentation code do not depend on storage details.';
+  if (lower.includes('service') || lower.includes('use-case') || lower.includes('use case')) {
+    return 'This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.';
   }
   if (lower.includes('interface') || lower.includes('abstraction') || lower.includes('port')) {
     return 'This points callers at a stable contract instead of a concrete implementation, reducing ripple effects when the implementation changes.';
@@ -135,6 +151,12 @@ function explainStep(step, entry) {
   }
   if (lower.includes('validate') || lower.includes('@valid') || lower.includes('constraint')) {
     return 'This rejects bad input at the boundary before it reaches business logic or persistence code.';
+  }
+  if (lower.includes('transaction') || lower.includes('write') || lower.includes('command')) {
+    return 'This makes the workflow and transaction boundary explicit, so retry, rollback, and auditing can be handled deliberately.';
+  }
+  if (lower.includes('remove') || lower.includes('stop') || lower.includes('avoid')) {
+    return 'This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.';
   }
   return `This keeps the code aligned with the ${entry.layer} responsibility expected by ${entry.code}.`;
 }
@@ -488,7 +510,7 @@ const CONCEPT_REFERENCES = [
     link: '../concepts/dependency-graphs-and-cycles.md',
     description: 'Learn cycles, inverted dependencies, fan-in, fan-out, and why graph rules matter.',
     keywords: ['graph', 'cycle', 'cyclic', 'inverted', 'fan-in', 'fan-out', 'dependency'],
-    applies: (entry) => /^RICA-V40|RICA-V501/.test(entry.code),
+    applies: (entry) => /^(RICA-V40|RICA-V501)/.test(entry.code),
   },
   {
     id: 'static-analysis-basics',
@@ -512,7 +534,7 @@ const CONCEPT_REFERENCES = [
     link: '../concepts/refactoring-playbook.md',
     description: 'See practical refactoring moves for common RICA fixes.',
     keywords: ['refactor', 'extract', 'move', 'dto', 'gateway', 'repository', 'service', 'fix'],
-    applies: (entry) => /^RICA-V1|^RICA-V2|^RICA-V3|^RICA-V5/.test(entry.code),
+    applies: (entry) => /^(RICA-V1|RICA-V2|RICA-V3|RICA-V5)/.test(entry.code),
   },
   {
     id: 'spring-architecture-guide',
@@ -520,7 +542,7 @@ const CONCEPT_REFERENCES = [
     link: '../concepts/spring-architecture-guide.md',
     description: 'Learn Spring-specific placement for controllers, services, repositories, validation, transactions, and error handling.',
     keywords: ['spring', '@service', '@repository', '@restcontroller', '@transactional', '@valid', '@query', 'controlleradvice'],
-    applies: (entry) => /^RICA-V1|^RICA-V2|RICA-V501/.test(entry.code),
+    applies: (entry) => /^(RICA-V1|RICA-V2|RICA-V501)/.test(entry.code),
   },
   {
     id: 'testing-architecture-fixes',
@@ -568,7 +590,7 @@ const CONCEPT_REFERENCES = [
     link: '../concepts/concurrency-boundaries.md',
     description: 'Understand why threads, executors, sockets, connections, and heavyweight resources need ownership boundaries.',
     keywords: ['thread', 'executor', 'async', 'socket', 'connection', 'datasource', 'resource', 'lifecycle', 'pool'],
-    applies: (entry) => ['RICA-V303', 'RICA-V304', 'RICA-V305', 'RICA-V322'].includes(entry.code),
+    applies: (entry) => ['RICA-V112', 'RICA-V306', 'RICA-V315', 'RICA-V322'].includes(entry.code),
   },
   {
     id: 'package-boundaries',
@@ -580,7 +602,78 @@ const CONCEPT_REFERENCES = [
   },
 ];
 
+const PRIMARY_RULE_CONCEPT_IDS = {
+  'RICA-V000': ['static-analysis-basics', 'false-positives-and-rule-tuning'],
+  'RICA-V101': ['dependency-injection', 'dependency-inversion', 'layered-architecture'],
+  'RICA-V102': ['dependency-injection', 'repository-pattern', 'controllers-services-repositories'],
+  'RICA-V103': ['dependency-injection', 'service-layer-pattern', 'controllers-services-repositories'],
+  'RICA-V104': ['service-layer-pattern', 'domain-model-vs-anemic-model', 'layered-architecture'],
+  'RICA-V106': ['separation-of-concerns', 'service-layer-pattern', 'domain-model-vs-anemic-model'],
+  'RICA-V107': ['layered-architecture', 'controllers-services-repositories', 'dependency-inversion'],
+  'RICA-V108': ['domain-model-vs-anemic-model', 'solid-principles', 'layered-architecture'],
+  'RICA-V109': ['repository-pattern', 'layered-architecture', 'separation-of-concerns'],
+  'RICA-V110': ['gateways-and-adapters', 'infrastructure', 'framework-coupling'],
+  'RICA-V111': ['infrastructure', 'layered-architecture', 'refactoring-playbook'],
+  'RICA-V112': ['concurrency-boundaries', 'infrastructure', 'layered-architecture'],
+  'RICA-V113': ['concurrency-boundaries', 'infrastructure', 'layered-architecture'],
+  'RICA-V114': ['repository-pattern', 'framework-coupling', 'transaction-boundaries'],
+  'RICA-V201': ['entities-dtos-api-contracts', 'api-boundary-design', 'framework-coupling'],
+  'RICA-V202': ['entities-dtos-api-contracts', 'api-boundary-design', 'refactoring-playbook'],
+  'RICA-V203': ['validation-and-error-boundaries', 'api-boundary-design', 'spring-architecture-guide'],
+  'RICA-V204': ['separation-of-concerns', 'service-layer-pattern', 'api-boundary-design'],
+  'RICA-V205': ['dependency-injection', 'service-layer-pattern', 'dependency-inversion'],
+  'RICA-V206': ['validation-and-error-boundaries', 'api-boundary-design', 'spring-architecture-guide'],
+  'RICA-V207': ['entities-dtos-api-contracts', 'api-boundary-design', 'separation-of-concerns'],
+  'RICA-V300': ['design-patterns', 'static-analysis-basics', 'false-positives-and-rule-tuning'],
+  'RICA-V301': ['structural-patterns', 'gateways-and-adapters', 'ports-and-adapters'],
+  'RICA-V302': ['structural-patterns', 'solid-principles', 'refactoring-playbook'],
+  'RICA-V303': ['behavioral-patterns', 'design-patterns', 'refactoring-playbook'],
+  'RICA-V304': ['creational-patterns', 'design-patterns', 'dependency-inversion'],
+  'RICA-V305': ['creational-patterns', 'concurrency-boundaries', 'design-patterns'],
+  'RICA-V306': ['concurrency-boundaries', 'design-patterns', 'refactoring-playbook'],
+  'RICA-V307': ['dependency-inversion', 'ports-and-adapters', 'structural-patterns'],
+  'RICA-V308': ['creational-patterns', 'refactoring-playbook', 'design-patterns'],
+  'RICA-V309': ['solid-principles', 'dependency-inversion', 'design-patterns'],
+  'RICA-V310': ['behavioral-patterns', 'transaction-boundaries', 'service-layer-pattern'],
+  'RICA-V311': ['creational-patterns', 'design-patterns', 'dependency-inversion'],
+  'RICA-V312': ['creational-patterns', 'design-patterns', 'dependency-inversion'],
+  'RICA-V313': ['structural-patterns', 'design-patterns', 'refactoring-playbook'],
+  'RICA-V314': ['structural-patterns', 'design-patterns', 'dependency-inversion'],
+  'RICA-V315': ['structural-patterns', 'concurrency-boundaries', 'design-patterns'],
+  'RICA-V316': ['behavioral-patterns', 'domain-model-vs-anemic-model', 'design-patterns'],
+  'RICA-V317': ['behavioral-patterns', 'design-patterns', 'refactoring-playbook'],
+  'RICA-V318': ['behavioral-patterns', 'design-patterns', 'clean-architecture'],
+  'RICA-V319': ['behavioral-patterns', 'design-patterns', 'refactoring-playbook'],
+  'RICA-V320': ['dependency-injection', 'creational-patterns', 'design-patterns'],
+  'RICA-V321': ['behavioral-patterns', 'design-patterns', 'static-analysis-basics'],
+  'RICA-V322': ['structural-patterns', 'infrastructure', 'concurrency-boundaries'],
+  'RICA-V323': ['structural-patterns', 'dependency-inversion', 'design-patterns'],
+  'RICA-V400': ['dependency-graphs-and-cycles', 'static-analysis-basics', 'package-boundaries'],
+  'RICA-V401': ['package-boundaries', 'layered-architecture', 'controllers-services-repositories'],
+  'RICA-V402': ['package-boundaries', 'layered-architecture', 'dependency-graphs-and-cycles'],
+  'RICA-V403': ['dependency-graphs-and-cycles', 'dependency-inversion', 'package-boundaries'],
+  'RICA-V404': ['package-boundaries', 'entities-dtos-api-contracts', 'layered-architecture'],
+  'RICA-V501': ['package-boundaries', 'dependency-graphs-and-cycles', 'framework-coupling', 'false-positives-and-rule-tuning'],
+};
+
+const CONCEPT_BY_ID = new Map(CONCEPT_REFERENCES.map(concept => [concept.id, concept]));
+
 function renderConceptLinks(entry) {
+  const scored = getConceptMatches(entry);
+
+  if (!scored.length) return [];
+
+  const lines = ['## Learn the concepts behind this rule', ''];
+  lines.push('These background pages explain the architecture and pattern vocabulary used by this rule:');
+  lines.push('');
+  for (const { concept } of scored) {
+    lines.push(`- [${concept.title}](${concept.link}) - ${concept.description}`);
+  }
+  lines.push('');
+  return lines;
+}
+
+function getConceptMatches(entry, limit = 6, minScore = 1) {
   const text = [
     entry.code,
     entry.name,
@@ -600,17 +693,55 @@ function renderConceptLinks(entry) {
       }
       return { concept, score, index };
     })
-    .filter(item => item.score > 0)
+    .filter(item => item.score >= minScore)
     .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, 6);
+    .slice(0, limit);
 
-  if (!scored.length) return [];
+  return scored;
+}
 
-  const lines = ['## Learn the concepts behind this rule', ''];
-  lines.push('These background pages explain the architecture and pattern vocabulary used by this rule:');
+function getPrimaryConcepts(entry) {
+  const conceptIds = PRIMARY_RULE_CONCEPT_IDS[entry.code] || [];
+  const primary = conceptIds
+    .map(id => CONCEPT_BY_ID.get(id))
+    .filter(Boolean);
+
+  if (primary.length) return primary;
+
+  return getConceptMatches(entry, 4, 8).map(({ concept }) => concept);
+}
+
+function needsFalsePositiveGuidance(entry) {
+  return (
+    entry.stage === 'stage4' ||
+    entry.stage === 'stage2' ||
+    entry.stage === 'fallback' ||
+    ['RICA-V106', 'RICA-V108', 'RICA-V204', 'RICA-V206', 'RICA-V501'].includes(entry.code)
+  );
+}
+
+function renderFalsePositiveGuidance(entry) {
+  if (!needsFalsePositiveGuidance(entry)) return [];
+  const lines = ['## Is this a real violation?', ''];
+  lines.push('Use this quick check before refactoring:');
   lines.push('');
-  for (const { concept } of scored) {
-    lines.push(`- [${concept.title}](${concept.link}) - ${concept.description}`);
+  lines.push('| Check | What to look for |');
+  lines.push('| --- | --- |');
+  lines.push(`| Code context | Confirm the file really belongs to the detected layer: \`${entry.layer}\`. |`);
+  lines.push('| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |');
+  lines.push('| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |');
+  lines.push('| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |');
+  lines.push('| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |');
+  lines.push('');
+  if (entry.stage === 'stage4') {
+    lines.push('Design-pattern rules are heuristic. They detect strong design smells, not absolute proof. Prefer a small refactor only when the pattern removes real duplication, coupling, or lifecycle risk.');
+    lines.push('');
+  } else if (entry.code === 'RICA-V501') {
+    lines.push('Package-boundary findings are usually real when an inner layer imports an outer layer. They may be configuration issues when framework imports are valid for the current package, such as Spring Data annotations inside a repository.');
+    lines.push('');
+  } else if (entry.code === 'RICA-V106' || entry.code === 'RICA-V204') {
+    lines.push('Business-logic findings use thresholds. Small validation or trivial branching may be acceptable; repeated calculations, workflows, and policy decisions should move to services or domain code.');
+    lines.push('');
   }
   lines.push('');
   return lines;
@@ -618,7 +749,7 @@ function renderConceptLinks(entry) {
 
 function renderViolationPage(entry) {
   const lines = [];
-  lines.push(`# ${entry.code} — ${entry.name}`);
+  lines.push(`# ${entry.code} - ${entry.name}`);
   lines.push('');
   lines.push(severityBadge(entry.severity));
   if (entry.severityContexts && entry.severityContexts.length) {
@@ -635,7 +766,7 @@ function renderViolationPage(entry) {
   lines.push(`| Detector | \`${entry.detector}\` (${entry.detectorSource}) |`);
   lines.push(`| Layer | ${entry.layer} |`);
   lines.push(`| Configuration | ${entry.configKey ? '`' + entry.configKey + '`' : 'Not configurable (always on)'} |`);
-  lines.push(`| Related rules | ${entry.relatedRules.length ? entry.relatedRules.map(r => `[\`${r}\`](./${r}.md)`).join(', ') : '—'} |`);
+  lines.push(`| Related rules | ${entry.relatedRules.length ? entry.relatedRules.map(r => `[\`${r}\`](./${r}.md)`).join(', ') : 'None'} |`);
   lines.push(`| Source | ${'`' + entry.sourceRef + '`'} |`);
   lines.push('');
 
@@ -675,6 +806,8 @@ function renderViolationPage(entry) {
 
   lines.push(...renderFrameworkCases(entry));
 
+  lines.push(...renderFalsePositiveGuidance(entry));
+
   lines.push('## How to fix');
   lines.push('');
   lines.push('Use this as the practical checklist. Each item explains both the action and the reason behind it.');
@@ -708,7 +841,7 @@ function renderViolationPage(entry) {
   lines.push('');
   lines.push(`_This page is generated from \`src/violationCatalog.ts\` by \`scripts/generate-docs.cjs\`. Do not edit by hand._`);
   lines.push('');
-  return lines.join('\n');
+  return cleanDocText(lines.join('\n'));
 }
 
 function renderRuleMatrix(entries) {
@@ -752,7 +885,32 @@ function renderRuleMatrix(entries) {
     'This page is generated from `src/violationCatalog.ts` by `scripts/generate-docs.cjs`. Run `npm run generate:docs` to regenerate.',
   );
   lines.push('');
-  return lines.join('\n');
+  return cleanDocText(lines.join('\n'));
+}
+
+function renderRuleConceptMap(entries) {
+  const lines = [];
+  lines.push('# Rule To Concept Map');
+  lines.push('');
+  lines.push('Use this page when you know the RICA violation code and want to learn the architecture concepts behind it.');
+  lines.push('');
+  lines.push('| Rule | Violation | Main concepts |');
+  lines.push('| --- | --- | --- |');
+  for (const entry of entries) {
+    const concepts = getPrimaryConcepts(entry)
+      .map(concept => `[${concept.title}](${concept.link.replace('../', './')})`)
+      .join(', ');
+    lines.push(`| [${entry.code}](./violations/${entry.code}.md) | ${entry.name} | ${concepts || 'General static analysis'} |`);
+  }
+  lines.push('');
+  lines.push('## How To Use This Map');
+  lines.push('');
+  lines.push('1. Find the RICA code shown in the editor or violations panel.');
+  lines.push('2. Open the linked rule page for the exact trigger, example, and fix steps.');
+  lines.push('3. Use the concept links to understand the architecture vocabulary behind the recommendation.');
+  lines.push('4. Return to the rule page and apply the smallest refactor that fixes the responsibility or dependency problem.');
+  lines.push('');
+  return cleanDocText(lines.join('\n'));
 }
 
 function sortedEntries(catalog) {
@@ -767,6 +925,7 @@ function renderAll(catalog) {
     pages.set(path.join(VIOLATIONS_DIR, `${entry.code}.md`), renderViolationPage(entry));
   }
   pages.set(RULE_MATRIX_PATH, renderRuleMatrix(sortedEntries(catalog)));
+  pages.set(RULE_CONCEPT_MAP_PATH, renderRuleConceptMap(sortedEntries(catalog)));
   return pages;
 }
 

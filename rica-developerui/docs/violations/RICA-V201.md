@@ -1,8 +1,8 @@
-# RICA-V201 — Exposing Internal Entity
+# RICA-V201 - Exposing Internal Entity
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -93,7 +93,7 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Create a response DTO with just the fields the client needs.**
-   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 2. **Map the entity to the DTO in the service layer.**
    This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
 3. **Return the DTO from the endpoint.**

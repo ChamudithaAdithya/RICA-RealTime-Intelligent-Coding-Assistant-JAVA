@@ -1,8 +1,8 @@
-# RICA-V202 — Missing DTO Usage
+# RICA-V202 - Missing DTO Usage
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |

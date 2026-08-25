@@ -1,8 +1,8 @@
-# RICA-V207 — Exposing Internal Structure
+# RICA-V207 - Exposing Internal Structure
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |

@@ -1,4 +1,4 @@
-# SOLID Principles
+﻿# SOLID Principles
 
 SOLID is a set of object-oriented design principles. RICA uses these ideas indirectly when it detects misplaced responsibilities, concrete coupling, bloated interfaces, and code that is hard to change safely.
 
@@ -55,10 +55,10 @@ class CheckoutService {
 
 ## Related RICA Rules
 
-- `RICA-V101`, `RICA-V102`, `RICA-V103`: dependency construction and injection problems
-- `RICA-V106`, `RICA-V204`: responsibility in the wrong layer
-- `RICA-V301`, `RICA-V307`, `RICA-V320`, `RICA-V501`: dependency direction and coupling problems
-- `RICA-V309`: interface segregation problems
+- [`RICA-V101`](../violations/RICA-V101.md), [`RICA-V102`](../violations/RICA-V102.md), [`RICA-V103`](../violations/RICA-V103.md): dependency construction and injection problems
+- [`RICA-V106`](../violations/RICA-V106.md), [`RICA-V204`](../violations/RICA-V204.md): responsibility in the wrong layer
+- [`RICA-V301`](../violations/RICA-V301.md), [`RICA-V307`](../violations/RICA-V307.md), [`RICA-V320`](../violations/RICA-V320.md), [`RICA-V501`](../violations/RICA-V501.md): dependency direction and coupling problems
+- [`RICA-V309`](../violations/RICA-V309.md): interface segregation problems
 
 ## Practical Fix Rule
 

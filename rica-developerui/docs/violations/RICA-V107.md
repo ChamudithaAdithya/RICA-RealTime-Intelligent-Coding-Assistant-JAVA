@@ -1,8 +1,8 @@
-# RICA-V107 — Direct Layer Access
+# RICA-V107 - Direct Layer Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -98,7 +98,7 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Remove service/repository/infrastructure fields and calls from the entity.**
-   This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Have the service layer coordinate domain objects and perform data access.**
    This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
 3. **If the entity needs derived data, compute it in the service and pass it in.**

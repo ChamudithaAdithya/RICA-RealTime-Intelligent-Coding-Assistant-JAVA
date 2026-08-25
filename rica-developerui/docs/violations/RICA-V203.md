@@ -1,8 +1,8 @@
-# RICA-V203 — Improper Error Handling
+# RICA-V203 - Improper Error Handling
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -77,7 +77,7 @@ The highlighted diff below shows the real refactor: lines marked with `-` are re
 
 ## Why it matters
 
-A bare `Exception` surfacing from an endpoint becomes an opaque 500 to the client — no status code, no actionable message — and stack traces (`printStackTrace`) leak implementation details. Errors should be translated at the API boundary into meaningful HTTP responses.
+A bare `Exception` surfacing from an endpoint becomes an opaque 500 to the client - no status code, no actionable message - and stack traces (`printStackTrace`) leak implementation details. Errors should be translated at the API boundary into meaningful HTTP responses.
 
 ## Learn the concepts behind this rule
 
@@ -109,7 +109,7 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Catch domain exceptions at the boundary and map them to HTTP status codes via `@ExceptionHandler` or `ResponseStatusException`.**
-   This protects the API contract from internal domain or persistence classes and gives you a stable shape for external responses.
+   This encapsulates protocol or vendor details in an infrastructure adapter, keeping application code focused on business intent.
 2. **Define typed exceptions (NotFound, Conflict, etc.) in the service layer.**
    This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
 3. **Remove `printStackTrace()` calls.**

@@ -1,4 +1,4 @@
-# API Boundary Design
+﻿# API Boundary Design
 
 An API boundary is the contract between your application and its clients.
 
@@ -40,11 +40,11 @@ Entities often contain:
 
 ## Related RICA Rules
 
-- `RICA-V201`: endpoint exposes internal entity
-- `RICA-V202`: endpoint accepts entity instead of DTO
-- `RICA-V203`: improper error handling
-- `RICA-V206`: missing validation
-- `RICA-V207`: exposing internal structure
+- [`RICA-V201`](../violations/RICA-V201.md): endpoint exposes internal entity
+- [`RICA-V202`](../violations/RICA-V202.md): endpoint accepts entity instead of DTO
+- [`RICA-V203`](../violations/RICA-V203.md): improper error handling
+- [`RICA-V206`](../violations/RICA-V206.md): missing validation
+- [`RICA-V207`](../violations/RICA-V207.md): exposing internal structure
 
 ## Practical Fix Rule
 

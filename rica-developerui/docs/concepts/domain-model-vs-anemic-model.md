@@ -1,4 +1,4 @@
-# Domain Model Vs Anemic Model
+﻿# Domain Model Vs Anemic Model
 
 A domain model represents business concepts. The question is how much behavior should live inside those domain objects.
 
@@ -39,10 +39,10 @@ Entities should usually protect their own invariants. Services should orchestrat
 
 ## Related RICA Rules
 
-- `RICA-V106`: entities/controllers with too much unrelated business logic
-- `RICA-V108`: anemic entity
-- `RICA-V204`: business logic in resource/API classes
-- `RICA-V316`: scattered state machine logic
+- [`RICA-V106`](../violations/RICA-V106.md): entities/controllers with too much unrelated business logic
+- [`RICA-V108`](../violations/RICA-V108.md): anemic entity
+- [`RICA-V204`](../violations/RICA-V204.md): business logic in resource/API classes
+- [`RICA-V316`](../violations/RICA-V316.md): scattered state machine logic
 
 ## Practical Fix Rule
 

@@ -1,4 +1,4 @@
-# Repository Pattern
+﻿# Repository Pattern
 
 The Repository pattern hides persistence details behind collection-like methods that describe business intent.
 
@@ -48,10 +48,10 @@ class OrderService {
 
 ## Related RICA Rules
 
-- `RICA-V102`: repository used without injection
-- `RICA-V114`: raw SQL outside the repository boundary
-- `RICA-V401`, `RICA-V402`: graph-level repository access problems
-- `RICA-V501`: wrong package/framework import direction
+- [`RICA-V102`](../violations/RICA-V102.md): repository used without injection
+- [`RICA-V114`](../violations/RICA-V114.md): raw SQL outside the repository boundary
+- [`RICA-V401`](../violations/RICA-V401.md), [`RICA-V402`](../violations/RICA-V402.md): graph-level repository access problems
+- [`RICA-V501`](../violations/RICA-V501.md): wrong package/framework import direction
 
 ## Practical Fix Rule
 

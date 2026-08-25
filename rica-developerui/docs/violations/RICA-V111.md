@@ -1,8 +1,8 @@
-# RICA-V111 — File I/O in Controller
+# RICA-V111 - File I/O in Controller
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -97,7 +97,7 @@ Use this as the practical checklist. Each item explains both the action and the 
 1. **Extract file operations into a service class.**
    This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
 2. **Inject the file-service into the controller.**
-   This makes the dependency visible and lets the framework supply it, which improves testability and keeps object lifecycle out of business code.
+   This makes the dependency explicit and lets the container supply it, which improves testability and keeps object lifecycle out of business code.
 
 ## How to verify
 

@@ -2,7 +2,7 @@
 
 Every code the analyzers can emit, generated from the single source of truth `src/violationCatalog.ts`. Click a code for the full page (trigger, rationale, fix steps, examples).
 
-## Stage 1 — Layer-Specific Detectors
+## Stage 1 - Layer-Specific Detectors
 
 | Code | Name | Severity | Layer | Config |
 | --- | --- | --- | --- | --- |
@@ -27,7 +27,7 @@ Every code the analyzers can emit, generated from the single source of truth `sr
 | [RICA-V206](./violations/RICA-V206.md) | Missing Validation | info | api | always on |
 | [RICA-V207](./violations/RICA-V207.md) | Exposing Internal Structure | warning | api | always on |
 
-## Stage 2 — Fallback
+## Stage 2 - Fallback
 
 | Code | Name | Severity | Layer | Config |
 | --- | --- | --- | --- | --- |
@@ -37,13 +37,13 @@ Every code the analyzers can emit, generated from the single source of truth `sr
 | [RICA-V403](./violations/RICA-V403.md) | Cyclic / Inverted Dependency | error/warning | cross-layer / graph | `enableArchitecturalChecks` |
 | [RICA-V404](./violations/RICA-V404.md) | Entity Exposure | warning/info | controller api | `enableArchitecturalChecks` |
 
-## Stage 3 — Package Boundary (PackageBoundaryAnalyzer)
+## Stage 3 - Package Boundary (PackageBoundaryAnalyzer)
 
 | Code | Name | Severity | Layer | Config |
 | --- | --- | --- | --- | --- |
 | [RICA-V501](./violations/RICA-V501.md) | Package Boundary Violation | error | package / top-level layer | `enableArchitecturalChecks` |
 
-## Stage 4 — Fallback
+## Stage 4 - Fallback
 
 | Code | Name | Severity | Layer | Config |
 | --- | --- | --- | --- | --- |

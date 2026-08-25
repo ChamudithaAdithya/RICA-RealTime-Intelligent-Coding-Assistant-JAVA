@@ -1,8 +1,8 @@
-# RICA-V402 — Cross-Layer Violation
+# RICA-V402 - Cross-Layer Violation
 
 <Badge type="warning" text="Warning" />
 
-> **Stage**: Stage 2 — Cross-File Graph Rules (CrossFileAnalyzer)
+> **Stage**: Stage 2 - Cross-File Graph Rules (CrossFileAnalyzer)
 
 | | |
 | --- | --- |
@@ -82,6 +82,19 @@ These background pages explain the architecture and pattern vocabulary used by t
 - [Dependency graphs and cycles](../concepts/dependency-graphs-and-cycles.md) - Learn cycles, inverted dependencies, fan-in, fan-out, and why graph rules matter.
 - [Package boundaries](../concepts/package-boundaries.md) - Learn how Java packages express architectural ownership and why forbidden imports are meaningful.
 - [Clean Architecture and dependency direction](../concepts/clean-architecture.md) - Learn why source dependencies should point inward and why framework details belong outside core code.
+
+## Is this a real violation?
+
+Use this quick check before refactoring:
+
+| Check | What to look for |
+| --- | --- |
+| Code context | Confirm the file really belongs to the detected layer: `cross-layer`. |
+| Ownership | Ask whether the highlighted dependency, framework type, or responsibility is owned by this layer. |
+| Test/support code | If this is a test fixture, sample, migration, or generated class, decide whether RICA should exclude that path. |
+| Better design outcome | If the suggested move improves testability, replacement, or API stability, treat it as a real violation. |
+| Rule tuning | If the structure is valid but RICA classified it too broadly, tune configuration instead of moving correct code. |
+
 
 ## How to fix
 

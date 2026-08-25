@@ -9,10 +9,11 @@ for (const entry of Object.values(VIOLATION_DOC_BY_CODE)) {
     byStage.set(entry.stage, { label: entry.stageLabel, items: [] })
   }
   byStage.get(entry.stage)!.items.push({
-    text: `${entry.code} · ${entry.name}`,
+    text: `${entry.code} - ${entry.name}`,
     link: `/violations/${entry.code}`,
   })
 }
+
 const stageOrder = ['stage1', 'stage2', 'stage3', 'stage4', 'fallback']
 const violationSidebar = {
   '/violations/': [
@@ -20,6 +21,7 @@ const violationSidebar = {
       text: 'Rules',
       items: [
         { text: 'Code Reference (Rule Matrix)', link: '/rule-matrix' },
+        { text: 'Rule To Concept Map', link: '/rule-concept-map' },
       ],
     },
     ...stageOrder
@@ -40,6 +42,7 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: 'Rule Matrix', link: '/rule-matrix' },
+      { text: 'Rule Concepts', link: '/rule-concept-map' },
       { text: 'Guides', link: '/guides/architecture' },
       { text: 'Concepts', link: '/concepts/' },
       { text: 'Violations', link: '/violations/RICA-V101' },
@@ -74,6 +77,7 @@ export default defineConfig({
             { text: 'Refactoring Playbook', link: '/concepts/refactoring-playbook' },
             { text: 'Spring Architecture Guide', link: '/concepts/spring-architecture-guide' },
             { text: 'Testing Architecture Fixes', link: '/concepts/testing-architecture-fixes' },
+            { text: 'Glossary', link: '/concepts/glossary' },
             { text: 'Design Pattern Basics', link: '/concepts/design-patterns' },
             { text: 'Creational Patterns', link: '/concepts/creational-patterns' },
             { text: 'Structural Patterns', link: '/concepts/structural-patterns' },

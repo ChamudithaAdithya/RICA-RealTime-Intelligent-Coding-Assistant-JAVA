@@ -1,8 +1,8 @@
-# RICA-V109 — Improper Data Access
+# RICA-V109 - Improper Data Access
 
 <Badge type="danger" text="Error" />
 
-> **Stage**: Stage 1 — Layer-Specific Detectors
+> **Stage**: Stage 1 - Layer-Specific Detectors
 
 | | |
 | --- | --- |
@@ -95,11 +95,11 @@ These background pages explain the architecture and pattern vocabulary used by t
 Use this as the practical checklist. Each item explains both the action and the reason behind it.
 
 1. **Remove database fields and APIs from the entity.**
-   This removes the exact pattern that triggered the rule, so the analyzer no longer sees the unsafe dependency or responsibility in this location.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 2. **Create (or use) a repository that owns all data access.**
-   This keeps persistence behind the correct boundary, so domain and presentation code do not depend on storage details.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 3. **Have the service coordinate repository calls and entity changes.**
-   This moves orchestration or business decisions into the application layer, leaving controllers/resources focused on input and output.
+   This moves storage-specific work to the persistence boundary, so controllers, services, and domain code no longer depend on database details.
 
 ## How to verify
 
@@ -109,7 +109,7 @@ Use this as the practical checklist. Each item explains both the action and the 
 
 ## Mitigation hint
 
-> Entities should not contain data access logic — move to Repository
+> Entities should not contain data access logic - move to Repository
 
 ## Tags
 
