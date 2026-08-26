@@ -18,11 +18,13 @@
     "onLanguage:java",
     "onCommand:javaAstAnalyzer.analyzeProject",
     "onCommand:javaAstAnalyzer.analyzeCurrentFile",
+    "onCommand:javaAstAnalyzer.showAstView",
     "onCommand:javaAstAnalyzer.openBrowserViewer",
     "onCommand:javaAstAnalyzer.showStatus",
     "onCommand:javaAstAnalyzer.resetBackend",
     "onCommand:javaAstAnalyzer.showViolationsView",
     "onCommand:javaAstAnalyzer.openDocumentation",
+    "onCommand:javaAstAnalyzer.showFixGuidance",
     "onCommand:rica.analyzeProject",
     "onCommand:rica.quickScanFile",
     "onCommand:rica.aiReview",
@@ -38,6 +40,10 @@
       {
         "command": "javaAstAnalyzer.analyzeCurrentFile",
         "title": "Java AST: Analyze Current File"
+      },
+      {
+        "command": "javaAstAnalyzer.showAstView",
+        "title": "Java AST: Show AST Viewer"
       },
       {
         "command": "javaAstAnalyzer.openBrowserViewer",
@@ -300,8 +306,8 @@
         },
         "javaAstAnalyzer.documentationBaseUrl": {
           "type": "string",
-          "default": "",
-          "description": "Optional external base URL for RICA docs links in diagnostics. Leave empty to use bundled docs from the violations panel and command palette."
+          "default": "http://localhost:5173",
+          "description": "Optional external base URL for RICA docs links in diagnostics. The violations webview and command palette open bundled docs inside VS Code."
         }
       }
     }
