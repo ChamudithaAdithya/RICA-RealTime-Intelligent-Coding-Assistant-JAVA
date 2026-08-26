@@ -5,7 +5,7 @@ import { APIResourceLayerAnalyzer, APIResourceLayerViolation } from './apiResour
 import { CrossFileAnalyzer } from './crossFileAnalyzer';
 import { buildGraphFromFiles, patchGraphForFile, ProjectDependencyGraph } from './dependencyGraph';
 import { PackageBoundaryAnalyzer } from './packageBoundaryDetector';
-import { DesignPatternAnalyzer } from './designPatternAnalyzer';
+import { DESIGN_PATTERN_RULE_TYPES, DesignPatternAnalyzer, DesignPatternRuleType } from './designPatternAnalyzer';
 import { Violation, ViolationSummary } from './domain/violations';
 import { AnalyzerConfig, DEFAULT_AI_CONFIG } from './domain/analyzerConfig';
 import { FullASTOutput } from './domain/astTypes';
@@ -68,6 +68,26 @@ const CROSS_FILE_RULE_CODES: Record<string, string> = {
     'cyclic-dependency': 'RICA-V403',
     'entity-exposure': 'RICA-V404',
 };
+
+const LOCAL_DETECTOR_SOURCES: ReadonlySet<Violation['detectorSource']> = new Set([
+    'ServiceLayer',
+    'ControllerLayer',
+    'EntityLayer',
+    'APIResourceLayer',
+]);
+
+const PROJECT_SCOPED_DESIGN_PATTERN_RULES: ReadonlySet<string> = new Set([
+    'missing-abstraction',
+    'missing-adapter',
+    'missing-factory',
+    'god-facade',
+    'fat-interface',
+    'fragmented-factories',
+    'scattered-state-machine',
+    'duplicate-algorithm',
+    'missing-proxy',
+    'missing-bridge',
+]);
 
 function confidenceForSeverity(severity: Violation['severity']): 'High' | 'Medium' | 'Low' {
     if (severity === 'error') return 'High';
@@ -279,60 +299,105 @@ export class ViolationManager {
             // the cache so its previous violations do NOT linger as stale findings.
             // The file re-enters analysis automatically once it parses again.
             delete this.filesMap[filePath];
-            this.update();
+            this.markFileDirty(filePath);
             return;
         }
 
-        // 2. Detect public signature change (short-circuit for internal-only changes)
-        const sigChanged = ImpactAnalyzer.signatureChanged(oldAst, newAst);
+        const impact = ImpactAnalyzer.diffAstFacts(oldAst, newAst);
 
-        // 3. Update the AST cache
         this.filesMap[filePath] = newAst;
 
-        // A method-body edit can change calls, relationships, or design-pattern
-        // evidence without changing the public signature. Rebuild all derived
-        // state so cross-file findings never remain stale.
-        this.update();
-        return;
-
-        // 4. Run Stage 1 (local) detectors on the changed file only
-        const fileAsts = [newAst];
-        const newLocalViolations: Violation[] = [
-            ...this.serviceAnalyzer.analyze(fileAsts).map(v => layerViolationToUnified(v, 'ServiceLayer')),
-            ...this.controllerAnalyzer.analyze(fileAsts).map(v => layerViolationToUnified(v, 'ControllerLayer')),
-            ...this.entityAnalyzer.analyze(fileAsts).map(v => layerViolationToUnified(v, 'EntityLayer')),
-            ...this.apiResourceAnalyzer.analyze(fileAsts).map(v => layerViolationToUnified(v, 'APIResourceLayer')),
-        ];
-
-        // 5. Compute blast radius and update cross-file analysis
-        let crossFileViolations: Violation[] = [];
-        let packageBoundaryViolations: Violation[] = [];
-        const affectedFiles = new Set<string>();
-
-        if (sigChanged) {
-            // Public signature changes can affect any dependent file. Rebuild all
-            // derived analysis state so local and cross-file findings stay aligned.
+        if (!oldAst) {
             this.update();
             return;
-        } else {
-            affectedFiles.add(filePath);
         }
-        // Package boundary analysis always runs — it only needs the single-file AST (filePath + imports),
-        // not the dependency graph. This ensures V501 violations re-appear after undo.
-        packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(
-            this.packageBoundaryAnalyzer.analyze(fileAsts, undefined, this.buildClassAnnotationsMap())
-        );
 
-        // Design pattern analysis — runs on every change
+        if (!impact.anySemanticChange) {
+            return;
+        }
+
+        const graphInputsChanged = ImpactAnalyzer.graphInputsChanged(impact);
+        const packageInputsChanged = ImpactAnalyzer.packageBoundaryInputsChanged(impact) || impact.suppressionsChanged;
+        const localInputsChanged = ImpactAnalyzer.localRuleInputsChanged(impact) || impact.suppressionsChanged;
+
+        if (graphInputsChanged) {
+            patchGraphForFile(this.graph, filePath, oldAst, newAst, this.filesMap);
+            ImpactAnalyzer.updateMapsForFile(filePath, oldAst, newAst, this.filesMap, this.graphMaps);
+        }
+
+        const affectedFiles = new Set<string>([filePath]);
+        if (graphInputsChanged || impact.publicSignatureChanged || impact.annotationsChanged) {
+            for (const dependent of ImpactAnalyzer.computeBlastRadius(filePath, this.graphMaps)) {
+                affectedFiles.add(dependent);
+            }
+        }
+
+        const changedFileAsts = [newAst];
+
+        // 4. Run Stage 1 (local) detectors only for the changed file.
+        const newLocalViolations: Violation[] = localInputsChanged ? [
+            ...this.serviceAnalyzer.analyze(changedFileAsts).map(v => layerViolationToUnified(v, 'ServiceLayer')),
+            ...this.controllerAnalyzer.analyze(changedFileAsts).map(v => layerViolationToUnified(v, 'ControllerLayer')),
+            ...this.entityAnalyzer.analyze(changedFileAsts).map(v => layerViolationToUnified(v, 'EntityLayer')),
+            ...this.apiResourceAnalyzer.analyze(changedFileAsts).map(v => layerViolationToUnified(v, 'APIResourceLayer')),
+        ] : [];
+
+        // 5. Re-run project-scoped analysis only when its inputs changed.
+        let crossFileViolations: Violation[] = graphInputsChanged || impact.suppressionsChanged
+            ? this.crossFileAnalyzer.analyze(this.graph, this.filesMap)
+            : [];
+        let packageBoundaryViolations: Violation[] = [];
+        // Package boundary analysis uses current imports, package names, and class annotations.
+        if (packageInputsChanged) {
+            packageBoundaryViolations = this.packageBoundaryAnalyzer.toUnifiedViolations(
+                this.packageBoundaryAnalyzer.analyze(
+                    Object.values(this.filesMap),
+                    this.graph,
+                    this.buildClassAnnotationsMap(),
+                )
+            ).filter(v => affectedFiles.has(v.filePath));
+        }
+
+        // Design-pattern checks are selected by the AST facts that actually changed.
+        const designPatternRuleTypes = impact.suppressionsChanged
+            ? [...DESIGN_PATTERN_RULE_TYPES]
+            : ImpactAnalyzer.designPatternRulesForChange(impact);
+        const localDesignPatternRules = designPatternRuleTypes
+            .filter(rule => !PROJECT_SCOPED_DESIGN_PATTERN_RULES.has(rule)) as DesignPatternRuleType[];
+        const projectDesignPatternRules = designPatternRuleTypes
+            .filter(rule => PROJECT_SCOPED_DESIGN_PATTERN_RULES.has(rule)) as DesignPatternRuleType[];
         let dpViolations: Violation[] = [];
-        if (this.config.enableDesignPatternChecks) {
-            dpViolations = this.designPatternAnalyzer.analyze(fileAsts, this.graph, this.filesMap);
+        if (this.config.enableDesignPatternChecks && localDesignPatternRules.length > 0) {
+            dpViolations.push(...this.designPatternAnalyzer.analyzeRuleTypes(
+                localDesignPatternRules,
+                changedFileAsts,
+                this.graph,
+                this.filesMap,
+            ));
+        }
+        if (this.config.enableDesignPatternChecks && projectDesignPatternRules.length > 0) {
+            dpViolations.push(...this.designPatternAnalyzer.analyzeRuleTypes(
+                projectDesignPatternRules,
+                Object.values(this.filesMap),
+                this.graph,
+                this.filesMap,
+            ));
         }
 
         // 6. Merge violations
-        const affectedSet = new Set(affectedFiles);
+        const selectedDesignPatternRules = new Set(designPatternRuleTypes);
         const merged: Violation[] = [
-            ...this.activeViolations.filter(v => !affectedSet.has(v.filePath)),
+            ...this.activeViolations.filter(v => {
+                if (localInputsChanged && v.filePath === filePath && LOCAL_DETECTOR_SOURCES.has(v.detectorSource)) return false;
+                if (packageInputsChanged && affectedFiles.has(v.filePath) && v.detectorSource === 'PackageBoundaryAnalyzer') return false;
+                if ((graphInputsChanged || impact.suppressionsChanged) && v.detectorSource === 'CrossFileAnalyzer') return false;
+                if (selectedDesignPatternRules.has(v.legacyType || '') && v.detectorSource === 'DesignPatternAnalyzer') {
+                    return PROJECT_SCOPED_DESIGN_PATTERN_RULES.has(v.legacyType || '')
+                        ? false
+                        : v.filePath !== filePath;
+                }
+                return true;
+            }),
             ...newLocalViolations,
             ...crossFileViolations,
             ...packageBoundaryViolations,

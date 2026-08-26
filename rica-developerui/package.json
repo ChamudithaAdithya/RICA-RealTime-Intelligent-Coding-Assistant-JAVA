@@ -23,7 +23,6 @@
     "onCommand:javaAstAnalyzer.resetBackend",
     "onCommand:javaAstAnalyzer.showViolationsView",
     "onCommand:javaAstAnalyzer.openDocumentation",
-    "onCommand:javaAstAnalyzer.showFixGuidance",
     "onCommand:rica.analyzeProject",
     "onCommand:rica.quickScanFile",
     "onCommand:rica.aiReview",
