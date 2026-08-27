@@ -3,6 +3,8 @@
 Current artifact:
 
 - `docs/final-report/final-report.md`
+- `docs/final-report/RICA_Final_Year_Individual_Report_Final_Reviewed.docx`
+- `docs/final-report/RICA_Final_Year_Individual_Report_Final_Reviewed.pdf`
 - `docs/final-report/RICA_Final_Year_Individual_Report_Final.docx`
 - `docs/final-report/RICA_Final_Year_Individual_Report_Final.pdf`
 - `docs/final-report/RICA_Final_Year_Individual_Report.docx`
@@ -33,7 +35,7 @@ Current counts:
 
 - Markdown total word count: approximately 11,336 words.
 - Main chapter word count, excluding front matter/references/appendices: approximately 9,893 words.
-- Final Word export statistics: 69 pages, 11,091 words, 10 tables, 12 images.
+- Reviewed final Word export statistics: 70 pages, 11,117 words, 10 tables, 12 images.
 
 Recommended final submission checks:
 

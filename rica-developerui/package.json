@@ -2,7 +2,7 @@
   "name": "rica-realtime-code-violations-analyzer",
   "displayName": "RICA - Code Analyzer",
   "description": "violations detection and guidance to solve",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "Geeth-Chamuditha-Adithya-Herath",
   "license": "MIT",
   "icon": "resources/icon.png",

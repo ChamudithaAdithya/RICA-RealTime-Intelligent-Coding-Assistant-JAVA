@@ -574,7 +574,7 @@ This design keeps diagnostics responsive after normal edits while preserving cor
 
 RICA's AI-related implementation is designed as an optional advisory layer. The extension configuration includes AI provider settings and an AI review command. The deterministic pipeline remains the primary source of violations. AI can be used to reason about selected candidates, annotate findings, or help produce explanations. In addition, because RICA diagnostics include structured evidence and documentation links, external AI assistants such as GitHub Copilot or Codex can use those diagnostics to generate more relevant explanations or refactoring suggestions.
 
-The final report should defend this as "AI-assisted remediation support" rather than "guaranteed automatic fixing". This distinction is important for academic integrity and technical accuracy.
+This implementation is best understood as AI-assisted remediation support rather than guaranteed automatic fixing. This distinction is important for academic integrity and technical accuracy.
 
 The AI advisory subsystem contains configuration for provider selection, endpoint, model name, token limit, timeout, candidate limit, trigger mode, and audit logging. The intended workflow is that RICA first detects and structures the violation, then an optional AI provider or external assistant can use the diagnostic context to explain or suggest a refactor. The deterministic result remains visible and auditable.
 
@@ -727,7 +727,7 @@ These limitations are acceptable for the current project scope, provided they ar
 
 The evaluation has several threats to validity. First, the test projects are controlled fixtures, so they may not represent the full complexity of industrial Java systems. Second, the analyzer depends on parser extraction quality; unsupported language constructs can affect detection accuracy. Third, design-pattern rules are heuristic, so some findings require developer judgement. Fourth, the project has not yet been evaluated through a formal user study, so usability claims are based on implemented UI features and documentation rather than measured developer outcomes.
 
-These threats do not remove the value of the project, but they define the boundary of the claims. The final report should present RICA as a working and evaluated prototype, not as a universally complete architecture oracle. This is a stronger academic position because it shows awareness of research limitations and future evaluation needs.
+These threats do not remove the value of the project, but they define the boundary of the claims. RICA is therefore presented as a working and evaluated prototype, not as a universally complete architecture oracle. This is a stronger academic position because it shows awareness of research limitations and future evaluation needs.
 
 # Chapter 6 - Conclusion and Future Work
 
@@ -792,7 +792,7 @@ The most important lesson from this project is that "intelligence" in developer 
 
 # References
 
-> These references were aligned with the proposal/interim reference set. Before final submission, verify formatting against the exact university IEEE style sheet.
+The references below are formatted in an IEEE-style structure and aligned with the proposal/interim reference set.
 
 [1] T. Reps, S. Horwitz, and M. Sagiv, "Precise interprocedural dataflow analysis via graph reachability," in *Conference Record of the Annual ACM Symposium on Principles of Programming Languages*, ACM, 1995, pp. 49-61, doi: 10.1145/199448.199462.  
 [2] S. Arzt *et al*., "FlowDroid: Precise context, flow, field, object-sensitive and lifecycle-aware taint analysis for Android apps," *ACM SIGPLAN Notices*, vol. 49, no. 6, pp. 259-269, 2014, doi: 10.1145/2666356.2594299.  
@@ -847,6 +847,11 @@ npx vsce package
 
 The final report uses the following figure assets:
 
+- `fig-1-1-architecture-erosion.png`: Architecture erosion in a layered Java project.
+- `fig-2-1-dependency-direction.png`: Dependency direction in layered and Clean Architecture.
+- `fig-3-1-proposed-architecture.png`: Proposed RICA system architecture.
+- `fig-3-2-analysis-workflow.png`: RICA analysis workflow.
+- `fig-3-3-incremental-revalidation.png`: Incremental revalidation workflow.
 - `fig-4-1-command-palette.png`: RICA commands in VS Code command palette.
 - `fig-4-2-inline-diagnostic.png`: Inline warning/error underline in Java editor.
 - `fig-4-3-violations-panel.png`: Architecture Violations panel with severity, evidence, and docs button.
