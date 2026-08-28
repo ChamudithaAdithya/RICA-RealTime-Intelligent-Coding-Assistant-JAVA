@@ -6,7 +6,7 @@ import java.math.BigDecimal;
 
 public class OrderRequest {
     @NotNull @Positive private Long orderId;
-    @NotNull @Positive private BigDecimal discount;
+    @NotNull private BigDecimal discount;
     public Long getOrderId(){ return orderId; }
     public BigDecimal getDiscount(){ return discount; }
 }

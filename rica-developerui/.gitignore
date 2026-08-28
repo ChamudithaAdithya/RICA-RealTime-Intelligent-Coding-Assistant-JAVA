@@ -6,3 +6,10 @@ node_modules
 docs/.vitepress/.temp/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+docs/final-report/Translated/
+.rica/
+~$*
+~WRL*.tmp
+*.tmp
+*.zip
+target/

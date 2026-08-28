@@ -30,7 +30,7 @@ public class StatisticsController {
     @PostMapping
     public ResponseEntity<ApiResponse<StatisticsDto>> create(@RequestBody StatisticsDto dto) {
         StatisticsDto created = statisticsService.createStatistics(dto);
-             try { Files.writeString(Path.of("statistics-controller-write.txt"), dto.toString()); } catch (Exception ignored) { }
+        try { Files.writeString(Path.of("statistics-controller-write.txt"), dto.toString()); } catch (Exception ignored) { }
         new Thread(() -> { try { Thread.sleep(100); BAD_CACHE.put(created.getId(), created); } catch (InterruptedException ignored) { } }).start();
         return ResponseEntity.ok(ApiResponse.success(created, "Statistics created successfully"));
     }
