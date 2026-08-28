@@ -441,6 +441,47 @@ class ViolationManager {
     getProjectGraph() {
         return this.graph;
     }
+    /** Returns a JSON-safe snapshot of all analysis structures RICA currently holds in memory. */
+    getAnalysisSnapshot() {
+        const activeViolations = this.getActiveViolations();
+        const graph = {
+            nodes: Array.from(this.graph.nodes.values()),
+            edges: this.graph.edges,
+        };
+        const asts = Object.fromEntries(Object.entries(this.filesMap).sort(([a], [b]) => a.localeCompare(b)));
+        const layerBreakdown = {};
+        for (const node of graph.nodes) {
+            const layer = node.metadata.layer || 'unclassified';
+            layerBreakdown[layer] = (layerBreakdown[layer] || 0) + 1;
+        }
+        return {
+            generatedAt: new Date().toISOString(),
+            stats: {
+                files: Object.keys(this.filesMap).length,
+                graphNodes: graph.nodes.length,
+                graphEdges: graph.edges.length,
+                deterministicViolations: this.activeViolations.length,
+                advisoryViolations: this.advisoryViolations.length,
+                activeViolations: activeViolations.length,
+                ignoredViolations: this.ignoredViolationIds.size,
+                layers: layerBreakdown,
+            },
+            asts,
+            dependencyGraph: graph,
+            violations: {
+                active: activeViolations,
+                deterministic: this.getDeterministicViolations(),
+                advisory: this.getAdvisoryViolations(),
+                ignoredIds: this.getIgnoredIds(),
+                summary: this.getActiveViolationsSummary(),
+            },
+            incremental: {
+                dependencies: this.serializeSetMap(this.graphMaps.dependencies),
+                dependents: this.serializeSetMap(this.graphMaps.dependents),
+            },
+            config: this.config,
+        };
+    }
     /** Returns a summary count breakdown of active violations. */
     getActiveViolationsSummary() {
         let errors = 0;
@@ -568,6 +609,11 @@ class ViolationManager {
             }
         }
         return map;
+    }
+    serializeSetMap(map) {
+        return Object.fromEntries(Array.from(map.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, value]) => [key, Array.from(value).sort()]));
     }
 }
 exports.ViolationManager = ViolationManager;

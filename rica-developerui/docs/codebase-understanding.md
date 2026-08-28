@@ -676,6 +676,12 @@ Important responsibilities:
 
 This is related to the AST viewer/browser-viewer feature, not the main violation detector.
 
+Current practical note:
+
+- `Java AST: Export Analysis Snapshot` writes the local analysis structures to `.rica/analysis-snapshot/`.
+- `Java AST: Show AST Viewer` currently opens that snapshot export workflow, so ASTs can be inspected as JSON without depending on the optional backend.
+- The optional browser visualizer still shows the backend dependency graph at `http://localhost:8082/view` when `engine/server.js` is running.
+
 ## 11. CLI / Project Analyzer Files
 
 ### `src/projectAnalyzer.ts`

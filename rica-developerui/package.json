@@ -23,6 +23,7 @@
     "onCommand:javaAstAnalyzer.showStatus",
     "onCommand:javaAstAnalyzer.resetBackend",
     "onCommand:javaAstAnalyzer.showViolationsView",
+    "onCommand:javaAstAnalyzer.exportAnalysisSnapshot",
     "onCommand:javaAstAnalyzer.openDocumentation",
     "onCommand:javaAstAnalyzer.showFixGuidance",
     "onCommand:rica.analyzeProject",
@@ -44,6 +45,10 @@
       {
         "command": "javaAstAnalyzer.showAstView",
         "title": "Java AST: Show AST Viewer"
+      },
+      {
+        "command": "javaAstAnalyzer.exportAnalysisSnapshot",
+        "title": "Java AST: Export Analysis Snapshot"
       },
       {
         "command": "javaAstAnalyzer.openBrowserViewer",
