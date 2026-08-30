@@ -6,6 +6,7 @@ node_modules
 docs/.vitepress/.temp/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
+docs/
 docs/final-report/Translated/
 .rica/
 ~$*
@@ -13,3 +14,9 @@ docs/final-report/Translated/
 *.tmp
 *.zip
 target/
+*.md
+*.txt
+!README.md
+!CHANGELOG.md
+!LICENSE.md
+!LICENSE.txt
