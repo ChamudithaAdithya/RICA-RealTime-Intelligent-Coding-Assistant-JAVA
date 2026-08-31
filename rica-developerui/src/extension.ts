@@ -137,6 +137,14 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         }),
 
+        vscode.commands.registerCommand('javaAstAnalyzer.showAstView', async () => {
+            await exportAnalysisSnapshot();
+        }),
+
+        vscode.commands.registerCommand('javaAstAnalyzer.exportAnalysisSnapshot', async () => {
+            await exportAnalysisSnapshot();
+        }),
+
         vscode.commands.registerCommand('javaAstAnalyzer.showViolationsView', () => {
             ViolationsWebviewPanel.createOrShow(context.extensionUri, violationManager);
         }),
@@ -450,6 +458,7 @@ async function showStatusInfo() {
         { label: '$(search) Analyze Full Project', description: 'Re-scan and parse all Java files' },
         { label: '$(file-code) Quick Scan Current File', description: 'Run delta analysis on the active file' },
         { label: '$(info) Show Audit Summary', description: `${stats.total} total violations — ${stats.errors} errors, ${stats.warnings} warnings` },
+        { label: '$(json) Export Analysis Snapshot', description: 'Write ASTs, graph, violations, incremental maps, stats, and config as JSON' },
         { label: '$(browser) Open Browser Viewer', description: 'View AST in browser' },
         { label: '$(warning) Open Violations Panel', description: 'View architecture violations' },
         { label: '$(trash) Reset Backend Data', description: 'Clear all stored AST data' }
@@ -471,6 +480,9 @@ async function showStatusInfo() {
         case '$(info) Show Audit Summary':
             vscode.commands.executeCommand('rica.showStatusSummary');
             break;
+        case '$(json) Export Analysis Snapshot':
+            vscode.commands.executeCommand('javaAstAnalyzer.exportAnalysisSnapshot');
+            break;
         case '$(browser) Open Browser Viewer':
             vscode.commands.executeCommand('javaAstAnalyzer.openBrowserViewer');
             break;
@@ -481,6 +493,102 @@ async function showStatusInfo() {
             vscode.commands.executeCommand('javaAstAnalyzer.resetBackend');
             break;
     }
+}
+
+async function exportAnalysisSnapshot(): Promise<void> {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showWarningMessage('Open a Java workspace before exporting the RICA analysis snapshot.');
+        return;
+    }
+
+    if (Object.keys(violationManager.getFilesMap()).length === 0) {
+        const answer = await vscode.window.showInformationMessage(
+            'RICA has no AST cache yet. Analyze the full project first?',
+            'Analyze Now',
+            'Export Empty Snapshot',
+            'Cancel',
+        );
+        if (answer === 'Analyze Now') {
+            await analyzeFullProject();
+        } else if (answer !== 'Export Empty Snapshot') {
+            return;
+        }
+    }
+
+    const root = workspaceFolders[0].uri.fsPath;
+    const snapshotRoot = vscode.Uri.file(path.join(root, '.rica', 'analysis-snapshot'));
+    const astDir = vscode.Uri.joinPath(snapshotRoot, 'asts');
+    await vscode.workspace.fs.createDirectory(astDir);
+
+    const snapshot = violationManager.getAnalysisSnapshot() as {
+        generatedAt?: string;
+        asts?: Record<string, unknown>;
+        dependencyGraph?: unknown;
+        violations?: unknown;
+        incremental?: unknown;
+        stats?: unknown;
+        config?: unknown;
+    };
+
+    await writeJson(snapshotRoot, 'all-asts.json', snapshot.asts || {});
+    await writeJson(snapshotRoot, 'dependency-graph.json', snapshot.dependencyGraph || {});
+    await writeJson(snapshotRoot, 'violations.json', snapshot.violations || {});
+    await writeJson(snapshotRoot, 'incremental-maps.json', snapshot.incremental || {});
+    await writeJson(snapshotRoot, 'stats.json', snapshot.stats || {});
+    await writeJson(snapshotRoot, 'config.json', snapshot.config || {});
+    await writeJson(snapshotRoot, 'full-snapshot.json', snapshot);
+
+    for (const [filePath, ast] of Object.entries(snapshot.asts || {})) {
+        await writeJson(astDir, `${safeSnapshotFileName(filePath)}.ast.json`, ast);
+    }
+
+    const readme = [
+        '# RICA Analysis Snapshot',
+        '',
+        `Generated: ${snapshot.generatedAt || new Date().toISOString()}`,
+        `Workspace: ${root}`,
+        '',
+        '## Files',
+        '',
+        '- `full-snapshot.json`: everything in one JSON document.',
+        '- `all-asts.json`: AST facts for every parsed Java file.',
+        '- `asts/*.ast.json`: one AST JSON file per Java source file.',
+        '- `dependency-graph.json`: graph nodes and edges used by cross-file rules.',
+        '- `violations.json`: active, deterministic, advisory, ignored, and summary violation data.',
+        '- `incremental-maps.json`: dependencies and dependents used for incremental blast-radius revalidation.',
+        '- `stats.json`: file, graph, violation, ignored, advisory, and layer counts.',
+        '- `config.json`: analyzer settings used by the current run.',
+        '',
+        '## Suggested Defence Wording',
+        '',
+        'RICA keeps AST facts, dependency graph data, violation results, and incremental invalidation maps in memory. This snapshot command exports those internal structures so they can be inspected directly.',
+        '',
+    ].join('\n');
+    await vscode.workspace.fs.writeFile(
+        vscode.Uri.joinPath(snapshotRoot, 'README.md'),
+        Buffer.from(readme, 'utf8'),
+    );
+
+    const indexUri = vscode.Uri.joinPath(snapshotRoot, 'README.md');
+    const doc = await vscode.workspace.openTextDocument(indexUri);
+    await vscode.window.showTextDocument(doc, { preview: false });
+
+    vscode.window.showInformationMessage(`RICA analysis snapshot exported to ${path.join(root, '.rica', 'analysis-snapshot')}`);
+}
+
+async function writeJson(directory: vscode.Uri, fileName: string, value: unknown): Promise<void> {
+    const json = `${JSON.stringify(value, null, 2)}\n`;
+    await vscode.workspace.fs.writeFile(vscode.Uri.joinPath(directory, fileName), Buffer.from(json, 'utf8'));
+}
+
+function safeSnapshotFileName(filePath: string): string {
+    return filePath
+        .replace(/^[A-Za-z]:/, '')
+        .replace(/[\\/]+/g, '__')
+        .replace(/[^A-Za-z0-9._-]+/g, '_')
+        .replace(/^_+/, '')
+        .slice(0, 180) || 'unknown-file';
 }
 
 export function deactivate() {

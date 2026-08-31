@@ -126,6 +126,7 @@ function probeIndex(d, ranked) {
     return ranked.length;
 }
 function advisoryViolation(source, d, finding) {
+    const confidence = d.confidence >= 0.75 ? 'High' : d.confidence >= 0.45 ? 'Medium' : 'Low';
     return {
         id: `ADV-${source.filePath}-${source.lineNumber ?? 0}-${hash(finding.message)}`,
         ruleName: 'advisory: authorization check',
@@ -136,6 +137,12 @@ function advisoryViolation(source, d, finding) {
         code: finding.code || 'RICA-V000',
         mitigationHint: 'Review security controls for this endpoint. RICA advisory findings never block the deterministic audit.',
         detectorSource: 'AiAdvisory',
+        analysisMetadata: {
+            confidence,
+            evidence: source.evidence || finding.message,
+            reason: d.reasoning,
+            type: 'AI advisory best-practice finding',
+        },
         quickFix: finding.quickFix,
         aiInsights: {
             requestId: 'advisory-pass',

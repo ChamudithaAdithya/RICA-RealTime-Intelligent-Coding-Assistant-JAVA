@@ -2,9 +2,37 @@ import { FullASTOutput, ClassInfo, Method, MethodCall } from './domain/astTypes'
 import { Violation, DiagnosticRange } from './domain/violations';
 import { ProjectDependencyGraph } from './dependencyGraph';
 import { AnalyzerConfig, DEFAULT_AI_CONFIG, DEFAULT_LAYER_BOUNDARIES } from './domain/analyzerConfig';
-import { violationDocSlug } from './violationCatalog';
+import { VIOLATION_DOC_BY_CODE, violationDocSlug } from './violationCatalog';
 
-const DP_RULE_CODES: Record<string, string> = {
+export const DESIGN_PATTERN_RULE_TYPES = [
+  'missing-adapter',
+  'god-facade',
+  'missing-strategy',
+  'missing-factory',
+  'mutable-singleton',
+  'raw-thread',
+  'missing-abstraction',
+  'leaking-construction',
+  'fat-interface',
+  'missing-command',
+  'missing-prototype',
+  'fragmented-factories',
+  'missing-decorator',
+  'missing-composite',
+  'redundant-memory',
+  'scattered-state-machine',
+  'duplicate-algorithm',
+  'hardcoded-notifier',
+  'monolithic-pipeline',
+  'service-locator',
+  'excessive-null-checks',
+  'missing-proxy',
+  'missing-bridge',
+] as const;
+
+export type DesignPatternRuleType = typeof DESIGN_PATTERN_RULE_TYPES[number];
+
+const DP_RULE_CODES: Record<DesignPatternRuleType, string> = {
   'missing-adapter': 'RICA-V301',
   'god-facade': 'RICA-V302',
   'missing-strategy': 'RICA-V303',
@@ -30,7 +58,7 @@ const DP_RULE_CODES: Record<string, string> = {
   'missing-bridge': 'RICA-V323',
 };
 
-const DP_MITIGATIONS: Record<string, string> = {
+const DP_MITIGATIONS: Record<DesignPatternRuleType, string> = {
   'missing-adapter': 'Wrap the external dependency behind a Port interface in application/port/out/ and create an Adapter implementation in infrastructure/adapter/',
   'god-facade': 'Decompose this facade — extract domain logic into domain objects and keep only orchestration here',
   'missing-strategy': 'Replace the conditional chain with a Strategy pattern — each branch should be a separate class implementing a common interface',
@@ -88,34 +116,47 @@ export class DesignPatternAnalyzer {
   }
 
   analyze(asts: FullASTOutput[], graph?: ProjectDependencyGraph, classLookup?: Record<string, FullASTOutput>): Violation[] {
+    return this.analyzeRuleTypes(DESIGN_PATTERN_RULE_TYPES, asts, graph, classLookup);
+  }
+
+  analyzeRuleTypes(
+    ruleTypes: Iterable<string>,
+    asts: FullASTOutput[],
+    graph?: ProjectDependencyGraph,
+    classLookup?: Record<string, FullASTOutput>,
+  ): Violation[] {
     if (!this.config.enableDesignPatternChecks) return [];
 
     const violations: Violation[] = [];
     const allAsts = classLookup ? Object.values(classLookup) : asts;
+    const requested = new Set(ruleTypes);
+    const run = (ruleType: DesignPatternRuleType, collect: () => Violation[]) => {
+      if (requested.has(ruleType)) violations.push(...collect());
+    };
 
-    violations.push(...this.checkRawThread(asts));
-    violations.push(...this.checkMutableSingleton(asts));
-    violations.push(...this.checkMissingAbstraction(asts, graph));
-    violations.push(...this.checkMissingAdapter(asts, allAsts));
-    violations.push(...this.checkMissingFactory(asts, allAsts));
-    violations.push(...this.checkGodFacade(asts, graph));
-    violations.push(...this.checkMissingStrategy(asts));
-    violations.push(...this.checkLeakingConstruction(asts));
-    violations.push(...this.checkFatInterface(asts, allAsts));
-    violations.push(...this.checkMissingCommand(asts));
-    violations.push(...this.checkMissingPrototype(asts));
-    violations.push(...this.checkFragmentedFactories(asts, allAsts));
-    violations.push(...this.checkMissingDecorator(asts));
-    violations.push(...this.checkMissingComposite(asts));
-    violations.push(...this.checkRedundantMemory(asts));
-    violations.push(...this.checkScatteredStateMachine(asts, allAsts));
-    violations.push(...this.checkDuplicateAlgorithm(asts, allAsts));
-    violations.push(...this.checkHardcodedNotifier(asts));
-    violations.push(...this.checkMonolithicPipeline(asts));
-    violations.push(...this.checkServiceLocator(asts));
-    violations.push(...this.checkExcessiveNullChecks(asts));
-    violations.push(...this.checkMissingProxy(asts, allAsts));
-    violations.push(...this.checkMissingBridge(asts, allAsts));
+    run('raw-thread', () => this.checkRawThread(asts));
+    run('mutable-singleton', () => this.checkMutableSingleton(asts));
+    run('missing-abstraction', () => this.checkMissingAbstraction(asts, graph));
+    run('missing-adapter', () => this.checkMissingAdapter(asts, allAsts));
+    run('missing-factory', () => this.checkMissingFactory(asts, allAsts));
+    run('god-facade', () => this.checkGodFacade(asts, graph));
+    run('missing-strategy', () => this.checkMissingStrategy(asts));
+    run('leaking-construction', () => this.checkLeakingConstruction(asts));
+    run('fat-interface', () => this.checkFatInterface(asts, allAsts));
+    run('missing-command', () => this.checkMissingCommand(asts));
+    run('missing-prototype', () => this.checkMissingPrototype(asts));
+    run('fragmented-factories', () => this.checkFragmentedFactories(asts, allAsts));
+    run('missing-decorator', () => this.checkMissingDecorator(asts));
+    run('missing-composite', () => this.checkMissingComposite(asts));
+    run('redundant-memory', () => this.checkRedundantMemory(asts));
+    run('scattered-state-machine', () => this.checkScatteredStateMachine(asts, allAsts));
+    run('duplicate-algorithm', () => this.checkDuplicateAlgorithm(asts, allAsts));
+    run('hardcoded-notifier', () => this.checkHardcodedNotifier(asts));
+    run('monolithic-pipeline', () => this.checkMonolithicPipeline(asts));
+    run('service-locator', () => this.checkServiceLocator(asts));
+    run('excessive-null-checks', () => this.checkExcessiveNullChecks(asts));
+    run('missing-proxy', () => this.checkMissingProxy(asts, allAsts));
+    run('missing-bridge', () => this.checkMissingBridge(asts, allAsts));
 
     return violations;
   }
@@ -130,20 +171,35 @@ export class DesignPatternAnalyzer {
     fieldName?: string,
     targetType?: string,
   ): Violation {
-    const code = DP_RULE_CODES[ruleType] || 'RICA-V300';
+    const code = DP_RULE_CODES[ruleType as DesignPatternRuleType] || 'RICA-V300';
+    const doc = VIOLATION_DOC_BY_CODE[code];
+    const severity = ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning';
+    const evidence = [
+      targetType ? `target ${targetType}` : undefined,
+      fieldName ? `field ${fieldName}` : undefined,
+      methodName ? `method ${methodName}()` : undefined,
+      `rule signal ${ruleType}`,
+      lineNumber ? `line ${lineNumber}` : undefined,
+    ].filter(Boolean).join('; ');
     return {
       id: `DP-${ruleType}-${filePath}-${methodName || ''}-${fieldName || ''}-${lineNumber || 0}`,
       code,
       ruleName: `DesignPattern: ${ruleType.replace(/-/g, ' ')}`,
-      severity: ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning',
+      severity,
       message,
       filePath,
       lineNumber,
       range,
-      mitigationHint: DP_MITIGATIONS[ruleType] || 'Review the design pattern guidelines for this violation',
+      mitigationHint: DP_MITIGATIONS[ruleType as DesignPatternRuleType] || 'Review the design pattern guidelines for this violation',
       documentationUrl: violationDocSlug(code),
       detectorSource: 'DesignPatternAnalyzer',
       contextMetadata: { methodName, fieldName, targetComponent: targetType },
+      analysisMetadata: {
+        confidence: severity === 'error' ? 'High' : 'Medium',
+        evidence,
+        reason: doc?.trigger || message,
+        type: 'Design-pattern best-practice violation',
+      },
       legacyType: ruleType,
     };
   }

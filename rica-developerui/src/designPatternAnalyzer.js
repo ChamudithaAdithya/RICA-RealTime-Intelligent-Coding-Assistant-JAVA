@@ -1,8 +1,33 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DesignPatternAnalyzer = void 0;
+exports.DesignPatternAnalyzer = exports.DESIGN_PATTERN_RULE_TYPES = void 0;
 const analyzerConfig_1 = require("./domain/analyzerConfig");
 const violationCatalog_1 = require("./violationCatalog");
+exports.DESIGN_PATTERN_RULE_TYPES = [
+    'missing-adapter',
+    'god-facade',
+    'missing-strategy',
+    'missing-factory',
+    'mutable-singleton',
+    'raw-thread',
+    'missing-abstraction',
+    'leaking-construction',
+    'fat-interface',
+    'missing-command',
+    'missing-prototype',
+    'fragmented-factories',
+    'missing-decorator',
+    'missing-composite',
+    'redundant-memory',
+    'scattered-state-machine',
+    'duplicate-algorithm',
+    'hardcoded-notifier',
+    'monolithic-pipeline',
+    'service-locator',
+    'excessive-null-checks',
+    'missing-proxy',
+    'missing-bridge',
+];
 const DP_RULE_CODES = {
     'missing-adapter': 'RICA-V301',
     'god-facade': 'RICA-V302',
@@ -144,42 +169,59 @@ class DesignPatternAnalyzer {
         this.config = { ...this.config, ...config };
     }
     analyze(asts, graph, classLookup) {
+        return this.analyzeRuleTypes(exports.DESIGN_PATTERN_RULE_TYPES, asts, graph, classLookup);
+    }
+    analyzeRuleTypes(ruleTypes, asts, graph, classLookup) {
         if (!this.config.enableDesignPatternChecks)
             return [];
         const violations = [];
         const allAsts = classLookup ? Object.values(classLookup) : asts;
-        violations.push(...this.checkRawThread(asts));
-        violations.push(...this.checkMutableSingleton(asts));
-        violations.push(...this.checkMissingAbstraction(asts, graph));
-        violations.push(...this.checkMissingAdapter(asts, allAsts));
-        violations.push(...this.checkMissingFactory(asts, allAsts));
-        violations.push(...this.checkGodFacade(asts, graph));
-        violations.push(...this.checkMissingStrategy(asts));
-        violations.push(...this.checkLeakingConstruction(asts));
-        violations.push(...this.checkFatInterface(asts, allAsts));
-        violations.push(...this.checkMissingCommand(asts));
-        violations.push(...this.checkMissingPrototype(asts));
-        violations.push(...this.checkFragmentedFactories(asts, allAsts));
-        violations.push(...this.checkMissingDecorator(asts));
-        violations.push(...this.checkMissingComposite(asts));
-        violations.push(...this.checkRedundantMemory(asts));
-        violations.push(...this.checkScatteredStateMachine(asts, allAsts));
-        violations.push(...this.checkDuplicateAlgorithm(asts, allAsts));
-        violations.push(...this.checkHardcodedNotifier(asts));
-        violations.push(...this.checkMonolithicPipeline(asts));
-        violations.push(...this.checkServiceLocator(asts));
-        violations.push(...this.checkExcessiveNullChecks(asts));
-        violations.push(...this.checkMissingProxy(asts, allAsts));
-        violations.push(...this.checkMissingBridge(asts, allAsts));
+        const requested = new Set(ruleTypes);
+        const run = (ruleType, collect) => {
+            if (requested.has(ruleType))
+                violations.push(...collect());
+        };
+        run('raw-thread', () => this.checkRawThread(asts));
+        run('mutable-singleton', () => this.checkMutableSingleton(asts));
+        run('missing-abstraction', () => this.checkMissingAbstraction(asts, graph));
+        run('missing-adapter', () => this.checkMissingAdapter(asts, allAsts));
+        run('missing-factory', () => this.checkMissingFactory(asts, allAsts));
+        run('god-facade', () => this.checkGodFacade(asts, graph));
+        run('missing-strategy', () => this.checkMissingStrategy(asts));
+        run('leaking-construction', () => this.checkLeakingConstruction(asts));
+        run('fat-interface', () => this.checkFatInterface(asts, allAsts));
+        run('missing-command', () => this.checkMissingCommand(asts));
+        run('missing-prototype', () => this.checkMissingPrototype(asts));
+        run('fragmented-factories', () => this.checkFragmentedFactories(asts, allAsts));
+        run('missing-decorator', () => this.checkMissingDecorator(asts));
+        run('missing-composite', () => this.checkMissingComposite(asts));
+        run('redundant-memory', () => this.checkRedundantMemory(asts));
+        run('scattered-state-machine', () => this.checkScatteredStateMachine(asts, allAsts));
+        run('duplicate-algorithm', () => this.checkDuplicateAlgorithm(asts, allAsts));
+        run('hardcoded-notifier', () => this.checkHardcodedNotifier(asts));
+        run('monolithic-pipeline', () => this.checkMonolithicPipeline(asts));
+        run('service-locator', () => this.checkServiceLocator(asts));
+        run('excessive-null-checks', () => this.checkExcessiveNullChecks(asts));
+        run('missing-proxy', () => this.checkMissingProxy(asts, allAsts));
+        run('missing-bridge', () => this.checkMissingBridge(asts, allAsts));
         return violations;
     }
     toViolation(ruleType, message, filePath, lineNumber, range, methodName, fieldName, targetType) {
         const code = DP_RULE_CODES[ruleType] || 'RICA-V300';
+        const doc = violationCatalog_1.VIOLATION_DOC_BY_CODE[code];
+        const severity = ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning';
+        const evidence = [
+            targetType ? `target ${targetType}` : undefined,
+            fieldName ? `field ${fieldName}` : undefined,
+            methodName ? `method ${methodName}()` : undefined,
+            `rule signal ${ruleType}`,
+            lineNumber ? `line ${lineNumber}` : undefined,
+        ].filter(Boolean).join('; ');
         return {
             id: `DP-${ruleType}-${filePath}-${methodName || ''}-${fieldName || ''}-${lineNumber || 0}`,
             code,
             ruleName: `DesignPattern: ${ruleType.replace(/-/g, ' ')}`,
-            severity: ruleType === 'raw-thread' || ruleType === 'missing-adapter' || ruleType === 'missing-factory' ? 'error' : 'warning',
+            severity,
             message,
             filePath,
             lineNumber,
@@ -188,6 +230,12 @@ class DesignPatternAnalyzer {
             documentationUrl: (0, violationCatalog_1.violationDocSlug)(code),
             detectorSource: 'DesignPatternAnalyzer',
             contextMetadata: { methodName, fieldName, targetComponent: targetType },
+            analysisMetadata: {
+                confidence: severity === 'error' ? 'High' : 'Medium',
+                evidence,
+                reason: doc?.trigger || message,
+                type: 'Design-pattern best-practice violation',
+            },
             legacyType: ruleType,
         };
     }

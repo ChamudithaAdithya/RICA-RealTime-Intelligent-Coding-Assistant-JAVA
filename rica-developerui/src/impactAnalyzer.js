@@ -2,6 +2,83 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ImpactAnalyzer = void 0;
 class ImpactAnalyzer {
+    static diffAstFacts(oldAst, newAst) {
+        if (!oldAst) {
+            return {
+                publicSignatureChanged: true,
+                classStructureChanged: true,
+                importsChanged: true,
+                relationshipsChanged: true,
+                methodCallsChanged: true,
+                objectCreationsChanged: true,
+                fieldsChanged: true,
+                annotationsChanged: true,
+                methodComplexityChanged: true,
+                suppressionsChanged: true,
+                anySemanticChange: true,
+            };
+        }
+        const impact = {
+            publicSignatureChanged: ImpactAnalyzer.signatureChanged(oldAst, newAst),
+            classStructureChanged: ImpactAnalyzer.hashClassStructure(oldAst) !== ImpactAnalyzer.hashClassStructure(newAst),
+            importsChanged: ImpactAnalyzer.hashImports(oldAst) !== ImpactAnalyzer.hashImports(newAst),
+            relationshipsChanged: ImpactAnalyzer.hashRelationships(oldAst) !== ImpactAnalyzer.hashRelationships(newAst),
+            methodCallsChanged: ImpactAnalyzer.hashMethodCalls(oldAst) !== ImpactAnalyzer.hashMethodCalls(newAst),
+            objectCreationsChanged: ImpactAnalyzer.hashObjectCreations(oldAst) !== ImpactAnalyzer.hashObjectCreations(newAst),
+            fieldsChanged: ImpactAnalyzer.hashFields(oldAst) !== ImpactAnalyzer.hashFields(newAst),
+            annotationsChanged: ImpactAnalyzer.hashAnnotations(oldAst) !== ImpactAnalyzer.hashAnnotations(newAst),
+            methodComplexityChanged: ImpactAnalyzer.hashMethodComplexity(oldAst) !== ImpactAnalyzer.hashMethodComplexity(newAst),
+            suppressionsChanged: ImpactAnalyzer.stableStringify(oldAst.suppressedLines || {}) !== ImpactAnalyzer.stableStringify(newAst.suppressedLines || {}),
+            anySemanticChange: false,
+        };
+        impact.anySemanticChange = Object.entries(impact)
+            .some(([key, value]) => key !== 'anySemanticChange' && value === true);
+        return impact;
+    }
+    static graphInputsChanged(impact) {
+        return impact.classStructureChanged
+            || impact.importsChanged
+            || impact.relationshipsChanged
+            || impact.methodCallsChanged;
+    }
+    static packageBoundaryInputsChanged(impact) {
+        return impact.classStructureChanged
+            || impact.importsChanged
+            || impact.relationshipsChanged
+            || impact.annotationsChanged;
+    }
+    static localRuleInputsChanged(impact) {
+        return impact.fieldsChanged
+            || impact.annotationsChanged
+            || impact.methodCallsChanged
+            || impact.objectCreationsChanged
+            || impact.methodComplexityChanged
+            || impact.suppressionsChanged
+            || impact.publicSignatureChanged;
+    }
+    static designPatternRulesForChange(impact) {
+        const rules = new Set();
+        const add = (...items) => items.forEach(item => rules.add(item));
+        if (impact.importsChanged) {
+            add('missing-adapter');
+        }
+        if (impact.fieldsChanged || impact.annotationsChanged) {
+            add('mutable-singleton', 'service-locator', 'missing-proxy');
+        }
+        if (impact.classStructureChanged || impact.publicSignatureChanged) {
+            add('missing-abstraction', 'missing-adapter', 'missing-factory', 'fat-interface', 'fragmented-factories', 'missing-proxy', 'missing-bridge');
+        }
+        if (impact.methodCallsChanged) {
+            add('god-facade', 'fat-interface', 'missing-prototype', 'missing-decorator', 'duplicate-algorithm', 'hardcoded-notifier', 'service-locator', 'missing-proxy');
+        }
+        if (impact.objectCreationsChanged) {
+            add('raw-thread', 'missing-factory', 'leaking-construction', 'missing-command', 'redundant-memory', 'missing-proxy');
+        }
+        if (impact.methodComplexityChanged) {
+            add('missing-strategy', 'missing-command', 'missing-composite', 'scattered-state-machine', 'monolithic-pipeline', 'excessive-null-checks');
+        }
+        return Array.from(rules);
+    }
     /**
      * Computes the full transitive blast radius of a file change.
      * Returns the set of all files (excluding `changedFilePath` itself)
@@ -246,6 +323,130 @@ class ImpactAnalyzer {
             }
         }
         return undefined;
+    }
+    static hashImports(ast) {
+        return ImpactAnalyzer.stableStringify((ast.imports || []).map(imp => ({
+            q: imp.qualifiedName,
+            static: imp.isStatic,
+            wildcard: imp.isWildcard,
+        })).sort((a, b) => a.q.localeCompare(b.q)));
+    }
+    static hashRelationships(ast) {
+        return ImpactAnalyzer.stableStringify((ast.relationships || []).map(rel => ({
+            source: rel.sourceId,
+            target: rel.targetId,
+            type: rel.type,
+            line: rel.metadata?.line || 0,
+        })).sort((a, b) => `${a.source}|${a.target}|${a.type}`.localeCompare(`${b.source}|${b.target}|${b.type}`)));
+    }
+    static hashClassStructure(ast) {
+        return ImpactAnalyzer.stableStringify((ast.classes || []).map(cls => ({
+            name: cls.className,
+            fqn: cls.fullyQualifiedName,
+            type: cls.classType,
+            layer: cls.detectedLayer,
+            access: cls.accessModifier,
+            abstract: cls.isAbstract,
+            final: cls.isFinal,
+            super: cls.superClass,
+            interfaces: [...(cls.interfaces || [])].sort(),
+            methods: (cls.methods || []).map(method => ({
+                name: method.name,
+                access: method.accessModifier,
+                type: method.methodType,
+                returnType: method.returnType,
+                params: (method.parameters || []).map(param => param.dataType),
+            })).sort((a, b) => `${a.name}|${a.returnType}|${a.params.join(',')}`.localeCompare(`${b.name}|${b.returnType}|${b.params.join(',')}`)),
+        })).sort((a, b) => a.fqn.localeCompare(b.fqn)));
+    }
+    static hashFields(ast) {
+        return ImpactAnalyzer.stableStringify((ast.classes || []).flatMap(cls => (cls.attributes || []).map(field => ({
+            owner: cls.fullyQualifiedName,
+            name: field.name,
+            type: field.dataType,
+            access: field.accessModifier,
+            static: field.isStatic,
+            final: field.isFinal,
+            injected: field.isInjected,
+            injectionType: field.injectionType,
+        }))).sort((a, b) => `${a.owner}|${a.name}`.localeCompare(`${b.owner}|${b.name}`)));
+    }
+    static hashAnnotations(ast) {
+        const annotations = [];
+        for (const cls of ast.classes || []) {
+            annotations.push({ target: cls.fullyQualifiedName, values: ImpactAnalyzer.annotationNames(cls.annotations) });
+            for (const field of cls.attributes || []) {
+                annotations.push({ target: `${cls.fullyQualifiedName}.${field.name}`, values: ImpactAnalyzer.annotationNames(field.annotations) });
+            }
+            for (const method of cls.methods || []) {
+                annotations.push({ target: `${cls.fullyQualifiedName}.${method.name}()`, values: ImpactAnalyzer.annotationNames(method.annotations) });
+                for (const param of method.parameters || []) {
+                    annotations.push({ target: `${cls.fullyQualifiedName}.${method.name}(${param.position})`, values: ImpactAnalyzer.annotationNames(param.annotations) });
+                }
+            }
+        }
+        return ImpactAnalyzer.stableStringify(annotations.sort((a, b) => a.target.localeCompare(b.target)));
+    }
+    static hashMethodCalls(ast) {
+        return ImpactAnalyzer.stableStringify((ast.classes || []).flatMap(cls => (cls.methods || []).flatMap(method => (method.calledMethods || []).map(call => ({
+            owner: cls.fullyQualifiedName,
+            method: method.name,
+            called: call.calledMethodName,
+            targetClass: call.targetClass,
+            targetMethod: call.targetMethod,
+            receiver: call.receiverVariableName,
+            receiverType: call.receiverType,
+            library: call.isLibraryCall,
+            args: call.arguments || [],
+        })))).sort((a, b) => `${a.owner}|${a.method}|${a.called}|${a.targetClass || ''}`.localeCompare(`${b.owner}|${b.method}|${b.called}|${b.targetClass || ''}`)));
+    }
+    static hashObjectCreations(ast) {
+        return ImpactAnalyzer.stableStringify((ast.classes || []).flatMap(cls => (cls.methods || []).flatMap(method => (method.createdObjects || []).map(creation => ({
+            owner: cls.fullyQualifiedName,
+            method: method.name,
+            type: creation.className,
+            args: creation.constructorArgs || [],
+            loop: creation.insideLoop,
+            branching: creation.hasBranching,
+        })))).sort((a, b) => `${a.owner}|${a.method}|${a.type}`.localeCompare(`${b.owner}|${b.method}|${b.type}`)));
+    }
+    static hashMethodComplexity(ast) {
+        return ImpactAnalyzer.stableStringify((ast.classes || []).flatMap(cls => (cls.methods || []).map(method => ({
+            owner: cls.fullyQualifiedName,
+            method: method.name,
+            complexity: method.complexityMetrics?.cyclomaticComplexity,
+            nesting: method.complexityMetrics?.maxNestingDepth,
+            decisions: (method.complexityMetrics?.decisionPoints || []).map(point => ({
+                type: point.type,
+                condition: point.condition,
+                depth: point.nestingDepth,
+            })),
+            bodyScore: method.body?.businessLogicScore,
+            writes: method.body?.persistenceWrites || [],
+            writtenVariables: method.body?.writtenVariables || [],
+        }))).sort((a, b) => `${a.owner}|${a.method}`.localeCompare(`${b.owner}|${b.method}`)));
+    }
+    static annotationNames(annotations) {
+        return (annotations || [])
+            .map(annotation => `${annotation.fullyQualifiedName || annotation.name}:${ImpactAnalyzer.stableStringify(annotation.elements || {})}`)
+            .sort();
+    }
+    static stableStringify(value) {
+        return JSON.stringify(ImpactAnalyzer.sortObjectKeys(value));
+    }
+    static sortObjectKeys(value) {
+        if (Array.isArray(value)) {
+            return value.map(item => ImpactAnalyzer.sortObjectKeys(item));
+        }
+        if (!value || typeof value !== 'object') {
+            return value;
+        }
+        return Object.keys(value)
+            .sort()
+            .reduce((sorted, key) => {
+            sorted[key] = ImpactAnalyzer.sortObjectKeys(value[key]);
+            return sorted;
+        }, {});
     }
 }
 exports.ImpactAnalyzer = ImpactAnalyzer;

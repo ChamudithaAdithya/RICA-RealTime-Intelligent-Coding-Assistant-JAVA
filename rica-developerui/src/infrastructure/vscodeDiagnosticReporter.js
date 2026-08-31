@@ -66,11 +66,13 @@ class VscodeDiagnosticReporter {
             map.set(v.filePath, arr);
         }
         for (const [relativePath, vlist] of ruleMap) {
-            this.collection.set(workspaceUri(workspaceFolder, relativePath), toDiagnostics(vlist, false));
+            const uri = workspaceUri(workspaceFolder, relativePath);
+            this.collection.set(uri, toDiagnostics(vlist, false, uri));
         }
         for (const [relativePath, vlist] of advisoryMap) {
             if (this.advisoryCollection) {
-                this.advisoryCollection.set(workspaceUri(workspaceFolder, relativePath), toDiagnostics(vlist, true));
+                const uri = workspaceUri(workspaceFolder, relativePath);
+                this.advisoryCollection.set(uri, toDiagnostics(vlist, true, uri));
             }
         }
     }
@@ -91,7 +93,7 @@ exports.VscodeDiagnosticReporter = VscodeDiagnosticReporter;
 function workspaceUri(workspaceFolder, relativePath) {
     return vscode.Uri.joinPath(workspaceFolder.uri, relativePath);
 }
-function toDiagnostics(vlist, advisory) {
+function toDiagnostics(vlist, advisory, uri) {
     const diagnostics = [];
     const docBase = vscode.workspace
         .getConfiguration('javaAstAnalyzer')
@@ -125,6 +127,14 @@ function toDiagnostics(vlist, advisory) {
         const tag = advisory ? '[RICA-AI] ' : '';
         const diag = new vscode.Diagnostic(range, `${tag}${codePrefix}${severityLabel} ${v.message}`, severity);
         diag.source = advisory ? 'RICA-AI' : 'Java Layer Analyzer';
+        if (v.analysisMetadata) {
+            diag.relatedInformation = [
+                new vscode.DiagnosticRelatedInformation(new vscode.Location(uri, range), `Confidence: ${v.analysisMetadata.confidence}`),
+                new vscode.DiagnosticRelatedInformation(new vscode.Location(uri, range), `Evidence: ${v.analysisMetadata.evidence}`),
+                new vscode.DiagnosticRelatedInformation(new vscode.Location(uri, range), `Reason: ${v.analysisMetadata.reason}`),
+                new vscode.DiagnosticRelatedInformation(new vscode.Location(uri, range), `Type: ${v.analysisMetadata.type}`),
+            ];
+        }
         // Render the Problems-panel code as a clickable link to the matching docs page
         // when a per-violation documentationUrl is available (advisory findings have none).
         if (!advisory && v.documentationUrl && /^https?:\/\//i.test(docBase)) {
