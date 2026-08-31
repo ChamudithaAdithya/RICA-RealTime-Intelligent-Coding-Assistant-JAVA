@@ -147,29 +147,37 @@ body{font-family:var(--vscode-font-family);background:var(--vscode-editor-backgr
 .toolbar button{padding:4px 12px;background:var(--vscode-button-background);color:var(--vscode-button-foreground);border:none;border-radius:4px;cursor:pointer;font-size:12px}
 .toolbar button:hover{background:var(--vscode-button-hoverBackground)}
 .toolbar button.secondary{background:var(--vscode-button-secondaryBackground);color:var(--vscode-button-secondaryForeground)}
-table{width:100%;border-collapse:collapse;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
 thead{position:sticky;top:0;z-index:1}
-th{padding:8px 12px;text-align:left;border-bottom:2px solid var(--vscode-panel-border);background:var(--vscode-sideBar-background);font-weight:600;white-space:nowrap;cursor:pointer;user-select:none}
+th{padding:7px 6px;text-align:left;border-bottom:2px solid var(--vscode-panel-border);background:var(--vscode-sideBar-background);font-weight:600;white-space:nowrap;cursor:pointer;user-select:none;overflow:hidden;text-overflow:ellipsis}
 th:hover{background:var(--vscode-list-hoverBackground)}
 th .sort{font-size:10px;margin-left:4px;opacity:.5}
-td{padding:6px 12px;border-bottom:1px solid var(--vscode-panel-border);vertical-align:top}
+td{padding:5px 6px;border-bottom:1px solid var(--vscode-panel-border);vertical-align:top;overflow:hidden}
+th:nth-child(1),td:nth-child(1){width:76px}
+th:nth-child(2),td:nth-child(2){width:112px}
+th:nth-child(3),td:nth-child(3){width:22%}
+th:nth-child(4),td:nth-child(4){width:18%}
+th:nth-child(5),td:nth-child(5){width:18%}
+th:nth-child(6),td:nth-child(6){width:48px}
+th:nth-child(7),td:nth-child(7){width:24%}
+th:nth-child(8),td:nth-child(8){width:112px}
 tr:hover{background:var(--vscode-list-hoverBackground)}
 tr.clickable{cursor:pointer}
-.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase}
+.badge{display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;text-transform:uppercase}
 .badge-error{background:#f48771;color:#fff}
 .badge-warning{background:#cca700;color:#000}
 .badge-info{background:#75beff;color:#000}
 .badge-source{background:var(--vscode-badge-background);color:var(--vscode-badge-foreground);font-size:10px;padding:1px 6px;border-radius:4px;margin-right:4px}
-.message-cell{max-width:400px;overflow:hidden;text-overflow:ellipsis}
-.analysis-cell{max-width:360px;font-size:11px;line-height:1.35;color:var(--vscode-editor-foreground)}
+.message-cell{overflow:hidden;text-overflow:ellipsis}
+.analysis-cell{font-size:11px;line-height:1.35;color:var(--vscode-editor-foreground);overflow-wrap:anywhere}
 .confidence{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;margin-bottom:3px}
 .confidence-high{background:#16825d;color:#fff}
 .confidence-medium{background:#cca700;color:#000}
 .confidence-low{background:#75beff;color:#000}
 .analysis-detail{display:block;color:var(--vscode-descriptionForeground);margin-top:2px}
 .analysis-label{opacity:.8;text-transform:uppercase;font-size:10px;margin-right:4px}
-.file-cell{max-width:250px;overflow:hidden;text-overflow:ellipsis;font-family:var(--vscode-editor-font-family);font-size:11px}
-.hint-cell{max-width:360px;font-size:11px;color:var(--vscode-descriptionForeground);line-height:1.35}
+.file-cell{overflow:hidden;text-overflow:ellipsis;font-family:var(--vscode-editor-font-family);font-size:11px}
+.hint-cell{font-size:11px;color:var(--vscode-descriptionForeground);line-height:1.35;overflow-wrap:anywhere}
 .muted{opacity:.75;font-size:10px;text-transform:uppercase}
 #notificationBar{display:none;padding:8px 16px;font-size:12px;border-bottom:1px solid var(--vscode-panel-border);align-items:center;gap:8px}
 #notificationBar.info{background:var(--vscode-editorInfo-background,#062);color:var(--vscode-editorInfo-foreground)}
@@ -192,7 +200,7 @@ tr.clickable{cursor:pointer}
 .ignored-dot.error{background:#f48771;color:#fff}
 .ignored-dot.warning{background:#cca700;color:#000}
 .ignored-dot.info{background:#75beff;color:#000}
-.action-btn{padding:2px 10px;border-radius:4px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.action-btn{padding:2px 6px;border-radius:4px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid transparent;white-space:nowrap}
 .action-btn.ignore{border-color:var(--vscode-errorForeground);color:var(--vscode-errorForeground);background:transparent}
 .action-btn.ignore:hover{background:var(--vscode-errorForeground);color:#fff}
 .action-btn.unignore{border-color:var(--vscode-textLink-foreground);color:var(--vscode-textLink-foreground);background:transparent}
