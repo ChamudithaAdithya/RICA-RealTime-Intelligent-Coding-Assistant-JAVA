@@ -1,0 +1,16 @@
+target/
+*.class
+*.jar
+*.war
+node_modules/
+dist/
+out/
+coverage/
+.vscode-test/
+.rica/
+outputs/
+*.vsix
+*.zip
+~$*
+~WRL*.tmp
+*.tmp

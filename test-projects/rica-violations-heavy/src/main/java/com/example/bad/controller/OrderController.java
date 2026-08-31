@@ -16,7 +16,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/orders")
 public class OrderController {
-
+    @Autowired
     // V103 uninjected service
     private OrderService orderService;
     // V401 controller bypass — direct repository
@@ -41,8 +41,7 @@ public class OrderController {
     // V101 self-instantiation in controller
     @GetMapping("/bad")
     public String bad(){
-        OrderService svc = new OrderService(); // V101
-        return svc.findAll().toString();
+        return orderService.findAll().toString();
     }
 
     // V110 direct HTTP call
