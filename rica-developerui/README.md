@@ -28,7 +28,6 @@ It is designed for projects that care about clean architecture, maintainable ser
 | `Java AST: Analyze Full Project` | Scans the full Java workspace. |
 | `Java AST: Analyze Current File` | Re-analyzes only the active Java file. |
 | `Java AST: Show Architecture Violations` | Opens the violations dashboard. |
-| `Java AST: Show AST Viewer` | Exports and opens the local RICA analysis snapshot index. |
 | `Java AST: Export Analysis Snapshot` | Writes ASTs, dependency graph, violations, incremental maps, stats, and config as JSON. |
 | `Java AST: Open RICA Documentation` | Opens the bundled RICA documentation. |
 | `Java AST: Open Browser Viewer` | Opens the optional browser AST viewer when the backend is running. |

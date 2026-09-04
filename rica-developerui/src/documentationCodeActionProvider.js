@@ -47,11 +47,18 @@ function diagnosticDocTarget(diag) {
  * a realtime violation alert straight to the rule's docs page.
  */
 class DocumentationCodeActionProvider {
+    constructor(getViolations = () => []) {
+        this.getViolations = getViolations;
+    }
     provideCodeActions(document, _range, context) {
         const actions = [];
         const targets = new Set();
         for (const diag of context.diagnostics) {
-            const target = diagnosticDocTarget(diag);
+            const violationId = typeof diag.code === 'object' ? diag.code.value : diag.code;
+            const violation = this.getViolations().find(item => item.id === violationId);
+            const target = violation?.documentationUrl
+                ? vscode.Uri.parse(`${violation.documentationUrl}.html`)
+                : diagnosticDocTarget(diag);
             if (!target || targets.has(target.toString()))
                 continue;
             targets.add(target.toString());

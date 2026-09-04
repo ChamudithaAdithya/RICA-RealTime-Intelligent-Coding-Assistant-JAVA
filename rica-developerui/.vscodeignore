@@ -9,7 +9,6 @@ node_modules/**
 !node_modules/lodash-es/**
 !node_modules/@chevrotain/**
 docs/.vitepress/cache/**
-docs/.vitepress/dist/**
 docs/.vitepress/.temp/**
 src/test/**
 .gitignore

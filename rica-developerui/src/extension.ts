@@ -85,7 +85,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.languages.registerCodeActionsProvider(
             'java',
-            new DocumentationCodeActionProvider(),
+            new DocumentationCodeActionProvider(() => violationManager.getActiveViolations()),
             { providedCodeActionKinds: DocumentationCodeActionProvider.providedCodeActionKinds },
         ),
     );
@@ -94,6 +94,12 @@ export async function activate(context: vscode.ExtensionContext) {
             return openRicaDocumentation(context.extensionUri, url);
         }),
         vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', showFixGuidance),
+        vscode.window.registerUriHandler({
+            handleUri: (uri: vscode.Uri) => {
+                const target = uri.path.replace(/^\/+/, '') || '/index.html';
+                return openRicaDocumentation(context.extensionUri, target);
+            },
+        }),
     );
 
     fileWatcher = new FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
@@ -137,10 +143,6 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         }),
 
-        vscode.commands.registerCommand('javaAstAnalyzer.showAstView', async () => {
-            await exportAnalysisSnapshot();
-        }),
-
         vscode.commands.registerCommand('javaAstAnalyzer.exportAnalysisSnapshot', async () => {
             await exportAnalysisSnapshot();
         }),
@@ -170,10 +172,16 @@ export async function activate(context: vscode.ExtensionContext) {
                 'Yes', 'No'
             );
             if (answer === 'Yes') {
-                await apiClient.resetBackend();
                 violationManager.clear();
-                vscode.window.showInformationMessage('Backend data and local violations cleared');
-                updateStatusBar('reset');
+                try {
+                    await apiClient.resetBackend();
+                    vscode.window.showInformationMessage('Backend data and local violations cleared');
+                    updateStatusBar('reset');
+                } catch (error: any) {
+                    outputChannel.appendLine(`Backend reset failed: ${error.message}`);
+                    vscode.window.showWarningMessage('Backend is unavailable. Local violations were cleared, but backend data could not be reset.');
+                    updateStatusBar('disconnected');
+                }
             }
         }),
     );

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { Violation } from './domain/violations';
 
 function diagnosticDocTarget(diag: vscode.Diagnostic): vscode.Uri | undefined {
   if (typeof diag.code === 'object' && diag.code.target) {
@@ -15,6 +16,8 @@ function diagnosticDocTarget(diag: vscode.Diagnostic): vscode.Uri | undefined {
 export class DocumentationCodeActionProvider implements vscode.CodeActionProvider {
   public static readonly providedCodeActionKinds = [vscode.CodeActionKind.QuickFix];
 
+  constructor(private readonly getViolations: () => Violation[] = () => []) {}
+
   provideCodeActions(
     document: vscode.TextDocument,
     _range: vscode.Range,
@@ -23,7 +26,11 @@ export class DocumentationCodeActionProvider implements vscode.CodeActionProvide
     const actions: vscode.CodeAction[] = [];
     const targets = new Set<string>();
     for (const diag of context.diagnostics) {
-      const target = diagnosticDocTarget(diag);
+      const violationId = typeof diag.code === 'object' ? diag.code.value : diag.code;
+      const violation = this.getViolations().find(item => item.id === violationId);
+      const target = violation?.documentationUrl
+        ? vscode.Uri.parse(`${violation.documentationUrl}.html`)
+        : diagnosticDocTarget(diag);
       if (!target || targets.has(target.toString())) continue;
       targets.add(target.toString());
       const action = new vscode.CodeAction(

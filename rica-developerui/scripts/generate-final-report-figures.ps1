@@ -83,7 +83,7 @@ New-Canvas (Join-Path $figureDir "fig-3-3-incremental-revalidation.png") `
 New-Canvas (Join-Path $figureDir "fig-4-1-command-palette.png") `
   "RICA Commands in VS Code" `
   "Representative command palette view based on package.json command contributions." @(
-    Block 165 145 1070 575 "Command Palette" "Java AST: Analyze Full Project`nJava AST: Analyze Current File`nJava AST: Show Architecture Violations`nJava AST: Show AST Viewer`nJava AST: Open Browser Viewer`nJava AST: Show Status`nJava AST: Open RICA Documentation`nJava AST: Reset Backend Data" "#1E1E1E" "#4D4D4D" "#FFFFFF" $true
+    Block 165 145 1070 575 "Command Palette" "Java AST: Analyze Full Project`nJava AST: Analyze Current File`nJava AST: Show Architecture Violations`nJava AST: Export Analysis Snapshot`nJava AST: Open Browser Viewer`nJava AST: Show Status`nJava AST: Open RICA Documentation`nJava AST: Reset Backend Data" "#1E1E1E" "#4D4D4D" "#FFFFFF" $true
   )
 
 New-Canvas (Join-Path $figureDir "fig-4-2-inline-diagnostic.png") `

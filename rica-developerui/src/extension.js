@@ -93,10 +93,15 @@ async function activate(context) {
     // AI Quick-Fix lightbulb actions (M6): reads violation.quickFix edits
     context.subscriptions.push(vscode.languages.registerCodeActionsProvider('java', new codeActionProvider_1.AiQuickFixCodeActionProvider(() => violationManager.getActiveViolations()), { providedCodeActionKinds: codeActionProvider_1.AiQuickFixCodeActionProvider.providedCodeActionKinds }));
     // Docs lightbulb: "Open RICA documentation" on every deterministic violation
-    context.subscriptions.push(vscode.languages.registerCodeActionsProvider('java', new documentationCodeActionProvider_1.DocumentationCodeActionProvider(), { providedCodeActionKinds: documentationCodeActionProvider_1.DocumentationCodeActionProvider.providedCodeActionKinds }));
+    context.subscriptions.push(vscode.languages.registerCodeActionsProvider('java', new documentationCodeActionProvider_1.DocumentationCodeActionProvider(() => violationManager.getActiveViolations()), { providedCodeActionKinds: documentationCodeActionProvider_1.DocumentationCodeActionProvider.providedCodeActionKinds }));
     context.subscriptions.push(vscode.commands.registerCommand('javaAstAnalyzer.openDocumentation', (url) => {
         return (0, documentation_1.openRicaDocumentation)(context.extensionUri, url);
-    }), vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', codeActionProvider_1.showFixGuidance));
+    }), vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', codeActionProvider_1.showFixGuidance), vscode.window.registerUriHandler({
+        handleUri: (uri) => {
+            const target = uri.path.replace(/^\/+/, '') || '/index.html';
+            return (0, documentation_1.openRicaDocumentation)(context.extensionUri, target);
+        },
+    }));
     fileWatcher = new fileWatcher_1.FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
     // Re-run analysis when relevant settings change
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
@@ -127,8 +132,6 @@ async function activate(context) {
         else {
             vscode.window.showWarningMessage('No Java file is currently open');
         }
-    }), vscode.commands.registerCommand('javaAstAnalyzer.showAstView', async () => {
-        await exportAnalysisSnapshot();
     }), vscode.commands.registerCommand('javaAstAnalyzer.exportAnalysisSnapshot', async () => {
         await exportAnalysisSnapshot();
     }), vscode.commands.registerCommand('javaAstAnalyzer.showViolationsView', () => {
@@ -147,10 +150,17 @@ async function activate(context) {
     }), vscode.commands.registerCommand('javaAstAnalyzer.resetBackend', async () => {
         const answer = await vscode.window.showWarningMessage('Reset all backend AST data?', 'Yes', 'No');
         if (answer === 'Yes') {
-            await apiClient.resetBackend();
             violationManager.clear();
-            vscode.window.showInformationMessage('Backend data and local violations cleared');
-            updateStatusBar('reset');
+            try {
+                await apiClient.resetBackend();
+                vscode.window.showInformationMessage('Backend data and local violations cleared');
+                updateStatusBar('reset');
+            }
+            catch (error) {
+                outputChannel.appendLine(`Backend reset failed: ${error.message}`);
+                vscode.window.showWarningMessage('Backend is unavailable. Local violations were cleared, but backend data could not be reset.');
+                updateStatusBar('disconnected');
+            }
         }
     }));
     // Phase 6: RICA workspace commands
