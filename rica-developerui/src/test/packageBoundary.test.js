@@ -1,6 +1,6 @@
 const assert = require('assert');
-const { JavaParser } = require('../javaParser');
-const { PackageBoundaryAnalyzer } = require('../packageBoundaryDetector');
+const { JavaParser } = require('../../dist/javaParser');
+const { PackageBoundaryAnalyzer } = require('../../dist/analyzers/packageBoundaryDetector');
 
 const outputChannel = { appendLine: () => {} };
 const parser = new JavaParser(outputChannel);

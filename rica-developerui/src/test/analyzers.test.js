@@ -1,9 +1,9 @@
 const assert = require('assert');
-const { JavaParser } = require('../javaParser');
-const { ServiceLayerAnalyzer } = require('../serviceLayerDetector');
-const { ControllerLayerAnalyzer } = require('../controllerLayerDetector');
-const { EntityLayerAnalyzer } = require('../entityLayerDetector');
-const { APIResourceLayerAnalyzer } = require('../apiResourceLayerDetector');
+const { JavaParser } = require('../../dist/javaParser');
+const { ServiceLayerAnalyzer } = require('../../dist/analyzers/serviceLayerDetector');
+const { ControllerLayerAnalyzer } = require('../../dist/analyzers/controllerLayerDetector');
+const { EntityLayerAnalyzer } = require('../../dist/analyzers/entityLayerDetector');
+const { APIResourceLayerAnalyzer } = require('../../dist/analyzers/apiResourceLayerDetector');
 
 const outputChannel = { appendLine: () => {} };
 const parser = new JavaParser(outputChannel);

@@ -1,7 +1,7 @@
 const assert = require('assert');
-const { JavaParser } = require('../javaParser');
-const { buildGraphFromFiles } = require('../dependencyGraph');
-const { CrossFileAnalyzer, buildCrossFileAnalyzer } = require('../crossFileAnalyzer');
+const { JavaParser } = require('../../dist/javaParser');
+const { buildGraphFromFiles } = require('../../dist/core/dependencyGraph');
+const { CrossFileAnalyzer, buildCrossFileAnalyzer } = require('../../dist/analyzers/crossFileAnalyzer');
 
 const outputChannel = { appendLine: () => {} };
 const parser = new JavaParser(outputChannel);

@@ -5,16 +5,16 @@
 const fs = require('fs');
 const path = require('path');
 
-const { JavaParser } = require('../src/infrastructure/javaParser');
-const { DesignPatternAnalyzer } = require('../src/designPatternAnalyzer');
-const { buildGraphFromFiles } = require('../src/dependencyGraph');
-const { CrossFileAnalyzer } = require('../src/crossFileAnalyzer');
-const { PackageBoundaryAnalyzer } = require('../src/packageBoundaryDetector');
-const { ServiceLayerAnalyzer } = require('../src/serviceLayerDetector');
-const { ControllerLayerAnalyzer } = require('../src/controllerLayerDetector');
-const { EntityLayerAnalyzer } = require('../src/entityLayerDetector');
-const { APIResourceLayerAnalyzer } = require('../src/apiResourceLayerDetector');
-const { VIOLATION_DOC_BY_CODE } = require('../src/violationCatalog');
+const { JavaParser } = require('../dist/infrastructure/javaParser');
+const { DesignPatternAnalyzer } = require('../dist/analyzers/designPatternAnalyzer');
+const { buildGraphFromFiles } = require('../dist/core/dependencyGraph');
+const { CrossFileAnalyzer } = require('../dist/analyzers/crossFileAnalyzer');
+const { PackageBoundaryAnalyzer } = require('../dist/analyzers/packageBoundaryDetector');
+const { ServiceLayerAnalyzer } = require('../dist/analyzers/serviceLayerDetector');
+const { ControllerLayerAnalyzer } = require('../dist/analyzers/controllerLayerDetector');
+const { EntityLayerAnalyzer } = require('../dist/analyzers/entityLayerDetector');
+const { APIResourceLayerAnalyzer } = require('../dist/analyzers/apiResourceLayerDetector');
+const { VIOLATION_DOC_BY_CODE } = require('../dist/core/violationCatalog');
 
 const parser = new JavaParser({ appendLine: () => {} });
 

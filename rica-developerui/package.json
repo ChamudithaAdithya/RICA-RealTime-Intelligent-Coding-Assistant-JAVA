@@ -5,6 +5,10 @@
   "version": "0.0.7",
   "publisher": "Geeth-Chamuditha-Adithya-Herath",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChamudithaAdithya/RICA-RealTime-Intelligent-Coding-Assistant-JAVA.git"
+  },
   "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.110.0"
@@ -30,7 +34,7 @@
     "onCommand:rica.aiReview",
     "onCommand:rica.showStatusSummary"
   ],
-  "main": "./src/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -309,31 +313,37 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run docs:build && npm run compile",
-    "compile": "tsc -p ./",
+    "clean": "node scripts/clean.cjs",
+    "compile": "npm run clean && tsc -p ./",
+    "typecheck": "tsc -p ./ --noEmit",
+    "prewatch": "npm run clean",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src --ext ts",
-    "test": "mocha",
-    "test:parser": "mocha --grep 'JavaParser' src/test/parser.test.js",
-    "test:analyzers": "mocha --grep 'LayerAnalyzer|Multi-layer' src/test/analyzers.test.js",
-    "test:crossfile": "mocha --grep 'CrossFile' src/test/crossFile.test.js",
-    "test:projects": "node scripts/verify-test-projects.js",
-    "rica:check": "node src/ricaLayerCheck.js",
-    "rica:check:self": "node src/ricaLayerCheck.js && node test-lms-analyzer.js",
-    "ai:smoke": "node scripts/aiSmokeTest.js",
+    "test": "npm run compile && mocha",
+    "test:parser": "npm run compile && mocha --grep 'JavaParser' src/test/parser.test.js",
+    "test:analyzers": "npm run compile && mocha --grep 'LayerAnalyzer|Multi-layer' src/test/analyzers.test.js",
+    "test:crossfile": "npm run compile && mocha --grep 'CrossFile' src/test/crossFile.test.js",
+    "test:projects": "npm run compile && node scripts/verify-test-projects.js",
+    "rica:check": "npm run compile && node dist/tooling/ricaLayerCheck.js",
+    "rica:check:self": "npm run compile && node dist/tooling/ricaLayerCheck.js && node scripts/manual/test-lms-analyzer.js",
+    "ai:smoke": "npm run compile && node scripts/aiSmokeTest.js",
     "generate:docs": "node scripts/generate-docs.cjs",
     "docs:verify": "node scripts/generate-docs.cjs --verify",
     "predocs:dev": "npm run generate:docs",
     "docs:dev": "vitepress dev docs --port 5173",
     "predocs:build": "npm run generate:docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs --port 5173"
+    "docs:preview": "vitepress preview docs --port 5173",
+    "verify": "npm run compile && npm run typecheck && npm run lint && mocha && npm run docs:verify && node scripts/verify-test-projects.js"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.110.0",
+    "eslint": "^10.9.1",
     "mocha": "^11.7.5",
     "typescript": "^5.2.0",
+    "typescript-eslint": "^8.69.0",
     "vitepress": "^1.6.4"
   },
   "dependencies": {

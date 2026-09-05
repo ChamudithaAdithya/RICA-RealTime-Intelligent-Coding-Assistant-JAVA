@@ -2,6 +2,8 @@
 
 RICA helps Java developers find architecture, layer, API boundary, and design-pattern violations directly inside VS Code.
 
+For a code-level map of extension activation, parsing, detection, diagnostics, incremental revalidation, and bundled documentation, see [Extension Code Architecture](docs/project/EXTENSION_CODE_ARCHITECTURE.md).
+
 It is designed for projects that care about clean architecture, maintainable service boundaries, and clear separation between controllers, services, repositories, entities, DTOs, and infrastructure code.
 
 ## What RICA Does
@@ -76,6 +78,30 @@ For example, package boundary violations explain what to do when the issue is ca
 RICA's deterministic violation detection runs locally inside VS Code.
 
 The optional browser AST viewer uses the configured backend URL. If the backend is offline, architecture violation detection still works.
+
+## Project Structure
+
+```text
+src/
+  extension.ts       VS Code extension entry point and composition root
+  analyzers/         Java architecture and design-rule analyzers
+  application/       Use cases, AI coordination, and ports
+  core/              AST state, graphs, violations, impact, and rule catalog
+  domain/            Shared types and analyzer configuration
+  infrastructure/    Parser, VS Code, backend, file-watcher, and AI adapters
+  ui/                Documentation, violations, and code-action webviews
+  tooling/           Development-only source checks
+  test/              Automated tests and Java fixtures
+dist/                Generated JavaScript created by `npm run compile`
+docs/                Documentation sources and generated VitePress frontend
+engine/              Optional backend and browser visualizer
+resources/           Extension icons and static resources
+scripts/             Build/report tools and manual development utilities
+artifacts/            Generated local inspection output
+releases/             Packaged VSIX installers
+```
+
+See `src/README.md` for the source-level map. Only TypeScript source belongs in `src`; compiled JavaScript belongs in `dist`.
 
 ## Settings
 

@@ -1,6 +1,6 @@
 import { AiCandidate, AiDecision } from '../../domain/ai';
 import { FullASTOutput } from '../../domain/astTypes';
-import type { ProjectDependencyGraph } from '../../dependencyGraph';
+import type { ProjectDependencyGraph } from '../../core/dependencyGraph';
 import { buildCandidatePath } from './contextBuilder';
 
 export interface HeuristicAdvisorOptions {

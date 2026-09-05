@@ -1,6 +1,6 @@
 ﻿/**
  * Generates the VitePress documentation site for RICA violation codes from the
- * shared catalog (src/violationCatalog.ts) so docs can never drift from the analyzers.
+ * shared catalog (src/core/violationCatalog.ts) so docs can never drift from the analyzers.
  *
  * Usage:
  *   node scripts/generate-docs.cjs            # (re)write docs/violations/*.md + docs/rule-matrix.md
@@ -17,7 +17,7 @@ const path = require('path');
 const ts = require('typescript');
 
 const ROOT = path.resolve(__dirname, '..');
-const CATALOG_PATH = path.join(ROOT, 'src', 'violationCatalog.ts');
+const CATALOG_PATH = path.join(ROOT, 'src', 'core', 'violationCatalog.ts');
 const VIOLATIONS_DIR = path.join(ROOT, 'docs', 'violations');
 const RULE_MATRIX_PATH = path.join(ROOT, 'docs', 'rule-matrix.md');
 const RULE_CONCEPT_MAP_PATH = path.join(ROOT, 'docs', 'rule-concept-map.md');
@@ -839,7 +839,7 @@ function renderViolationPage(entry) {
 
   lines.push('---');
   lines.push('');
-  lines.push(`_This page is generated from \`src/violationCatalog.ts\` by \`scripts/generate-docs.cjs\`. Do not edit by hand._`);
+  lines.push(`_This page is generated from \`src/core/violationCatalog.ts\` by \`scripts/generate-docs.cjs\`. Do not edit by hand._`);
   lines.push('');
   return cleanDocText(lines.join('\n'));
 }
@@ -850,7 +850,7 @@ function renderRuleMatrix(entries) {
   lines.push('');
   lines.push(
     'Every code the analyzers can emit, generated from the single source of truth ' +
-    '`src/violationCatalog.ts`. Click a code for the full page (trigger, rationale, fix steps, examples).',
+    '`src/core/violationCatalog.ts`. Click a code for the full page (trigger, rationale, fix steps, examples).',
   );
   lines.push('');
 
@@ -882,7 +882,7 @@ function renderRuleMatrix(entries) {
   lines.push('---');
   lines.push('');
   lines.push(
-    'This page is generated from `src/violationCatalog.ts` by `scripts/generate-docs.cjs`. Run `npm run generate:docs` to regenerate.',
+    'This page is generated from `src/core/violationCatalog.ts` by `scripts/generate-docs.cjs`. Run `npm run generate:docs` to regenerate.',
   );
   lines.push('');
   return cleanDocText(lines.join('\n'));
@@ -959,7 +959,7 @@ function main() {
 
   if (verifyOnly) {
     if (drift) {
-      console.error('[docs:verify] Docs are out of sync with src/violationCatalog.ts. Run: npm run generate:docs');
+      console.error('[docs:verify] Docs are out of sync with src/core/violationCatalog.ts. Run: npm run generate:docs');
       process.exit(1);
     }
     console.log(`[docs:verify] Docs are in sync (${pages.size} files).`);

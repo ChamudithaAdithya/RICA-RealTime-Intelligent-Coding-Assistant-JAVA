@@ -1,6 +1,6 @@
 const assert = require('assert');
-const { JavaParser } = require('../javaParser');
-const { DesignPatternAnalyzer } = require('../designPatternAnalyzer');
+const { JavaParser } = require('../../dist/javaParser');
+const { DesignPatternAnalyzer } = require('../../dist/analyzers/designPatternAnalyzer');
 
 const outputChannel = { appendLine: () => {} };
 const parser = new JavaParser(outputChannel);
