@@ -647,13 +647,16 @@ class AppConfig {
 
 describe('DesignPatternAnalyzer — V321 Excessive Null Checking', () => {
 
-    it('should flag a method with 3+ null-testing decision points on distinct targets', () => {
+    it('should flag a method with many repetitive simple null exits', () => {
         const code = `package com.example;
 class OrderService {
-    public String render(Order o, User u, Address a) {
+    public String render(Order o, User u, Address a, Form f, Event e, File file) {
         if (o == null) return "";
         if (u == null) return "";
         if (a == null) return "";
+        if (f == null) return "";
+        if (e == null) return "";
+        if (file == null) return "";
         return "";
     }
 }`;
@@ -685,6 +688,41 @@ class OrderService {
 }`;
         const violations = analyze(code);
         assert.ok(!violations.some(v => v.code === 'RICA-V321'), '2 null checks are fine');
+    });
+
+    it('should not flag optional relationship lookups with existence validation', () => {
+        const code = `package com.example;
+class EventService {
+    public void create(CreateDto dto) {
+        Event event = null;
+        Form form = null;
+        if (dto.getEventId() != null) {
+            event = findEvent(dto.getEventId());
+            if (event == null) throw new IllegalArgumentException();
+        }
+        if (dto.getFormId() != null) {
+            form = findForm(dto.getFormId());
+            if (form == null) throw new IllegalArgumentException();
+        }
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V321'),
+            'optional inputs and lookup validation are meaningful business logic');
+    });
+
+    it('should retain domain getter guards as defensive checks', () => {
+        const code = `package com.example;
+class UserService {
+    public void validate(User user, Profile profile, Account account) {
+        if (user.getId() != null) return;
+        if (profile.getName() != null) return;
+        if (account.getOwner() != null) return;
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(violations.some(v => v.code === 'RICA-V321'),
+            'getter syntax alone should not make a domain-object guard optionality');
     });
 });
 

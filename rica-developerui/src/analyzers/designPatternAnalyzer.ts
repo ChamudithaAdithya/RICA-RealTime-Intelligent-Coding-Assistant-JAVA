@@ -1143,6 +1143,28 @@ export class DesignPatternAnalyzer {
     return t ? (t.split('.')[0]) : null;
   }
 
+  /** Returns the checked expression, including parser-spaced method calls. */
+  private nullCheckExpression(condition: string): string | null {
+    const normalized = condition.replace(/\s*\.\s*/g, '.');
+    const match = normalized.match(/([\w$]+(?:\.[\w$]+)*)\s*(?:==|!=)\s*null/i)
+      || normalized.match(/null\s*(?:==|!=)\s*([\w$]+(?:\.[\w$]+)*)/i);
+    if (match?.[1]) return match[1];
+
+    // Method calls in conditions may include parser-separated parentheses.
+    const callMatch = normalized.match(/(.+?)\s*(?:==|!=)\s*null/i)
+      || normalized.match(/null\s*(?:==|!=)\s*(.+)/i);
+    return callMatch?.[1]?.replace(/\s*\([^)]*\)\s*$/, '').trim() || null;
+  }
+
+  /** Getter checks are optionality only when their receiver is request-shaped input. */
+  private isOptionalityNullCheck(method: Method, condition: string): boolean {
+    if (!/\.\s*(?:get|is|has)[A-Z][\w$]*\s*\(/.test(condition)) return false;
+    const receiver = this.nullCheckTarget(condition) || '';
+    const parameter = method.parameters.find(p => p.name === receiver);
+    if (!parameter) return /^(dto|request|input|payload)$/i.test(receiver);
+    return /(dto|request|command|input|payload)/i.test(`${parameter.name} ${parameter.dataType}`);
+  }
+
   private checkExcessiveNullChecks(asts: FullASTOutput[]): Violation[] {
     const violations: Violation[] = [];
     const limit = this.config.nullCheckLimit ?? 3;
@@ -1152,18 +1174,35 @@ export class DesignPatternAnalyzer {
           const nullChecks = (method.complexityMetrics?.decisionPoints || [])
             .filter(d => /(==|!=)\s*null|null\s*(==|!=)/i.test(d.condition || ''));
           if (nullChecks.length < limit) continue;
+
+          // Optional request fields and lookup-result validation are meaningful
+          // application logic. Do not count getter checks or isolated local
+          // reference checks as defensive programming. Simple references are
+          // considered only when they are repeated well beyond the threshold.
+          const nonGetterChecks = nullChecks.filter(d => !this.isOptionalityNullCheck(method, d.condition || ''));
+          const simpleChecks = nonGetterChecks.filter(d => {
+            const expression = this.nullCheckExpression(d.condition || '');
+            return expression ? !expression.includes('.') : true;
+          });
+          const propertyChecks = nonGetterChecks.filter(d => !simpleChecks.includes(d));
+          const defensiveChecks = [
+            ...propertyChecks,
+            ...(simpleChecks.length >= limit + 2 ? simpleChecks : []),
+          ];
+          if (defensiveChecks.length < limit) continue;
+
           // Defensive chains on ONE target (o != null, o.user != null, o.user.name != null)
           // are a guard ladder, not scattered null paranoia — count distinct roots instead.
           const roots = new Set<string>();
-          for (const d of nullChecks) {
+          for (const d of defensiveChecks) {
             const t = this.nullCheckTarget(d.condition || '') || '';
             // root = first identifier segment
             roots.add(t.split('.')[0]);
           }
-          if (roots.size < Math.max(2, limit - 1)) continue;
+          if (roots.size < Math.max(2, limit - 1) && propertyChecks.length === 0) continue;
           violations.push(this.toViolation(
             'excessive-null-checks',
-            `Method '${method.name}' performs ${nullChecks.length} defensive null checks. Return Null Objects / empty collections (or Optional) instead.`,
+            `Method '${method.name}' performs ${defensiveChecks.length} defensive null checks. Reduce repetitive guards or use a clearer boundary abstraction.`,
             ast.filePath || '', method.startLine, undefined, method.name,
           ));
         }

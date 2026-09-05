@@ -96,6 +96,7 @@ function confidenceForSeverity(severity: Violation['severity']): 'High' | 'Mediu
 }
 
 function analysisTypeFor(source: Violation['detectorSource'], code: string): string {
+    if (code === 'RICA-V321') return 'Code smell / maintainability issue';
     if (source === 'APIResourceLayer' || code.startsWith('RICA-V2')) return 'API boundary best-practice violation';
     if (source === 'DesignPatternAnalyzer' || code.startsWith('RICA-V3')) return 'Design-pattern best-practice violation';
     if (source === 'PackageBoundaryAnalyzer' || source === 'CrossFileAnalyzer' || source === 'GraphAnalyzer' || code.startsWith('RICA-V4') || code === 'RICA-V501') {
@@ -284,7 +285,7 @@ export class ViolationManager {
         this.diagnosticReporter.clearFile(filePath);
         this.onViolationsChanged?.();
     }
-
+    
     /**
      * Phase 5: Incremental delta pipeline for single-file changes.
      */

@@ -482,6 +482,25 @@ public class MyResource {
         assert.ok(exposing, 'should detect exposing-internal-entity when entity type is returned');
     });
 
+    it('should not flag Spring ResponseEntity<Resource> as an internal entity', () => {
+        const code = `package com.example;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public class FileStorageController {
+    @GetMapping("/image")
+    public ResponseEntity<Resource> getImageByPath(String path) {
+        return ResponseEntity.notFound().build();
+    }
+}`;
+        const ast = parse(code, 'FileStorageController.java');
+        const violations = analyzer.analyze([ast]);
+        const exposing = violations.find(v => v.type === 'exposing-internal-entity');
+        assert.ok(!exposing, 'should not flag Spring response/resource types as entities');
+    });
+
     it('should detect missing-dto-usage when endpoint takes an internal domain/entity param', () => {
         const orderCode = `package com.example;
 import jakarta.persistence.Entity;
@@ -525,6 +544,26 @@ public class InvoiceResource {
         const violations = analyzer.analyze(allAsts);
         const exposing = violations.find(v => v.type === 'exposing-internal-structure');
         assert.ok(exposing, 'should detect exposing internal structure');
+    });
+
+    it('should not flag a response wrapper containing a conventional Dto type', () => {
+        const apiCode = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PostMapping;
+@RestController
+public class FileController {
+    @PostMapping
+    public ApiResponse<FileDto> uploadSingleFile() {
+        return null;
+    }
+}`;
+        const dtoCode = `package com.example;
+public class FileDto { }
+`;
+        const allAsts = [parse(apiCode, 'FileController.java'), parse(dtoCode, 'FileDto.java')];
+        const violations = analyzer.analyze(allAsts);
+        const exposing = violations.find(v => v.type === 'exposing-internal-structure');
+        assert.ok(!exposing, 'should not flag ApiResponse<FileDto> as internal structure');
     });
 
     it('should not treat a public helper as an endpoint when mappings exist', () => {

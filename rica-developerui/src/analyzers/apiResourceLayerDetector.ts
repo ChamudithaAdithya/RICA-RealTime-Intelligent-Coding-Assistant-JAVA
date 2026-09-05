@@ -386,7 +386,8 @@ export class APIResourceLayerAnalyzer {
   }
 
   private isDTOClassName(className: string): boolean {
-    return this.dtoPatterns.some(pattern => className.endsWith(pattern));
+    const normalizedClassName = className.toLowerCase();
+    return this.dtoPatterns.some(pattern => normalizedClassName.endsWith(pattern.toLowerCase()));
   }
 
   private isServiceType(typeName: string): boolean {
@@ -423,6 +424,9 @@ export class APIResourceLayerAnalyzer {
     'HttpServletRequest','HttpServletResponse','HttpSession','Principal','Model','ModelMap','BindingResult','Errors',
     'HttpHeaders','RequestContext','ServletRequest','ServletResponse','WebRequest','NativeWebRequest','RedirectAttributes'
   ]);
+
+  // Spring response wrappers are transport concerns, not persistence entities.
+  private readonly frameworkResponseTypes = new Set(['ResponseEntity']);
 
   /** Spring binding annotations that mark framework-managed params (not payload validation targets). */
   private readonly frameworkBindingAnnotations = new Set([
@@ -518,6 +522,7 @@ export class APIResourceLayerAnalyzer {
 
   private containsEntityType(typeName: string, imports?: ImportInfo[], currentPackage?: string): boolean {
     return this.typeTokens(typeName).some(token => {
+      if (this.frameworkResponseTypes.has(token)) return false;
       if (this.isEntityClassName(token)) return true;
       // A class annotated @Entity (or classified as 'entity' layer) is an
       // internal entity regardless of its name suffix — e.g. `Order`, `User`.
