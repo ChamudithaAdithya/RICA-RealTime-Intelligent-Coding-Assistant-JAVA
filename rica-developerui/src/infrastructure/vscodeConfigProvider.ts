@@ -18,6 +18,7 @@ export class VscodeConfigProvider implements ConfigProvider {
       aiAuditLogEnabled: cfg.get<boolean>('aiAuditLogEnabled', DEFAULT_AI_CONFIG.aiAuditLogEnabled),
     };
     return {
+      architectureStyle: cfg.get<AnalyzerConfig['architectureStyle']>('architectureStyle', 'auto'),
       enableArchitecturalChecks: cfg.get<boolean>('enableArchitecturalChecks', true),
       enableDesignPatternChecks: cfg.get<boolean>('enableDesignPatternChecks', true),
       enableBusinessLogicChecks: cfg.get<boolean>('enableBusinessLogicChecks', true),

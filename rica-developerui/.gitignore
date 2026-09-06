@@ -1,6 +1,7 @@
 out
 dist
 node_modules
+.npm-cache/
 .vscode-test/
 *.vsix
 docs/.vitepress/.temp/
@@ -9,6 +10,8 @@ docs/.vitepress/dist/
 docs/
 docs/final-report/Translated/
 .rica/
+artifacts/
+temp-test/
 ~$*
 ~WRL*.tmp
 *.tmp
@@ -20,3 +23,5 @@ target/
 !CHANGELOG.md
 !LICENSE.md
 !LICENSE.txt
+!src/README.md
+!scripts/manual/README.md

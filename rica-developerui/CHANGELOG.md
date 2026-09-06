@@ -8,6 +8,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - Initial release
 
+## [0.0.8]
+
+- Improved local documentation Webview navigation and violation-code links.
+- Added graceful handling for unavailable optional backend services.
+
 ## [0.0.3]
 
 - Included runtime parser dependencies in the VSIX package so the extension can activate after installation.

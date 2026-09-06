@@ -7,12 +7,12 @@ const {
   triageViolations,
   triageAll,
   collectEntryPointProbes,
-} = require('../application/ai/triage');
-const { buildContext, buildCandidatePath } = require('../application/ai/contextBuilder');
-const { runHeuristicAdvisor } = require('../application/ai/heuristicAdvisor');
-const { AiAdvisoryCoordinator } = require('../application/ai/aiAdvisoryCoordinator');
-const { FileAuditLogger } = require('../infrastructure/ai/fileAuditLogger');
-const { parseDecisions } = require('../infrastructure/ai/parseDecisions');
+} = require('../../dist/application/ai/triage');
+const { buildContext, buildCandidatePath } = require('../../dist/application/ai/contextBuilder');
+const { runHeuristicAdvisor } = require('../../dist/application/ai/heuristicAdvisor');
+const { AiAdvisoryCoordinator } = require('../../dist/application/ai/aiAdvisoryCoordinator');
+const { FileAuditLogger } = require('../../dist/infrastructure/ai/fileAuditLogger');
+const { parseDecisions } = require('../../dist/infrastructure/ai/parseDecisions');
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -149,7 +149,7 @@ function orderResourceFixture() {
   return { filesMap, orderResource, orderService, orderRepository };
 }
 
-const { buildGraphFromFiles } = require('../dependencyGraph');
+const { buildGraphFromFiles } = require('../../dist/core/dependencyGraph');
 
 const graphFor = (filesMap) => buildGraphFromFiles(filesMap);
 

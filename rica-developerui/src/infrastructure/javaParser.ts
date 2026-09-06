@@ -554,7 +554,13 @@ export class JavaParser {
 
         if (node.children.normalInterfaceDeclaration) {
             const nid = node.children.normalInterfaceDeclaration[0];
-            this.processNormalInterface(nid, classes, relationships, sourceCode);
+            this.processNormalInterface(
+                nid,
+                classes,
+                relationships,
+                sourceCode,
+                this.getAnnotationsFromModifierList(node.children.interfaceModifier || node.children.classModifier || []),
+            );
         }
 
         if (node.children.annotationTypeDeclaration) {
@@ -826,7 +832,8 @@ export class JavaParser {
         nid: any,
         classes: ClassInfo[],
         relationships: Relationship[],
-        sourceCode: string
+        sourceCode: string,
+        declarationAnnotations: Annotation[] = [],
     ): void {
         const interfaceName = this.getTypeIdentifier(nid);
         if (!interfaceName) return;
@@ -837,7 +844,7 @@ export class JavaParser {
         const modifiers = this.getModifiers(nid);
         const accessModifier = this.getAccessModifier(modifiers) as 'public' | 'package-private';
         const genericTypeParams = this.extractGenericTypeParameters(nid);
-        const annotations = this.extractAnnotations(nid);
+        const annotations = [...declarationAnnotations, ...this.extractAnnotations(nid)];
         const javaDocComment = this.extractJavaDoc(nid);
 
         const extendedInterfaces = this.getExtendsInterfaces(nid);

@@ -1,14 +1,14 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ASTManager } from './astManager';
+import { ASTManager } from './core/astManager';
 import { ApiClient } from './apiClient';
 import { BackendService } from './application/ports/backendService';
 import { SourceProvider } from './application/ports/sourceProvider';
-import { FileWatcher } from './fileWatcher';
+import { FileWatcher } from './infrastructure/fileWatcher';
 import { JavaParser } from './infrastructure/javaParser';
-import { ViolationsWebviewPanel } from './violationsWebviewPanel';
-import { ViolationManager } from './violationManager';
+import { ViolationsWebviewPanel } from './ui/violationsWebviewPanel';
+import { ViolationManager } from './core/violationManager';
 import { JavaParserAdapter } from './infrastructure/javaParserAdapter';
 import { VscodeDiagnosticReporter } from './infrastructure/vscodeDiagnosticReporter';
 import { VscodeConfigProvider } from './infrastructure/vscodeConfigProvider';
@@ -18,9 +18,9 @@ import { AiAdvisoryCoordinator } from './application/ai/aiAdvisoryCoordinator';
 import { OllamaAiAdapter } from './infrastructure/ai/ollamaAiAdapter';
 import { OpenAICompatibleAiAdapter } from './infrastructure/ai/openaiCompatibleAiAdapter';
 import { FileAuditLogger } from './infrastructure/ai/fileAuditLogger';
-import { AiQuickFixCodeActionProvider, showFixGuidance } from './codeActionProvider';
-import { DocumentationCodeActionProvider } from './documentationCodeActionProvider';
-import { openRicaDocumentation } from './documentation';
+import { AiQuickFixCodeActionProvider, showFixGuidance } from './ui/codeActionProvider';
+import { DocumentationCodeActionProvider } from './ui/documentationCodeActionProvider';
+import { openRicaDocumentation } from './ui/documentation';
 
 let astManager: ASTManager;
 let sourceProvider: SourceProvider;
@@ -85,7 +85,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.languages.registerCodeActionsProvider(
             'java',
-            new DocumentationCodeActionProvider(),
+            new DocumentationCodeActionProvider(() => violationManager.getActiveViolations()),
             { providedCodeActionKinds: DocumentationCodeActionProvider.providedCodeActionKinds },
         ),
     );
@@ -94,6 +94,12 @@ export async function activate(context: vscode.ExtensionContext) {
             return openRicaDocumentation(context.extensionUri, url);
         }),
         vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', showFixGuidance),
+        vscode.window.registerUriHandler({
+            handleUri: (uri: vscode.Uri) => {
+                const target = uri.path.replace(/^\/+/, '') || '/index.html';
+                return openRicaDocumentation(context.extensionUri, target);
+            },
+        }),
     );
 
     fileWatcher = new FileWatcher(astManager, violationManager, sourceProvider, outputChannel, debounceDelay);
@@ -137,10 +143,6 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         }),
 
-        vscode.commands.registerCommand('javaAstAnalyzer.showAstView', async () => {
-            await exportAnalysisSnapshot();
-        }),
-
         vscode.commands.registerCommand('javaAstAnalyzer.exportAnalysisSnapshot', async () => {
             await exportAnalysisSnapshot();
         }),
@@ -170,10 +172,16 @@ export async function activate(context: vscode.ExtensionContext) {
                 'Yes', 'No'
             );
             if (answer === 'Yes') {
-                await apiClient.resetBackend();
                 violationManager.clear();
-                vscode.window.showInformationMessage('Backend data and local violations cleared');
-                updateStatusBar('reset');
+                try {
+                    await apiClient.resetBackend();
+                    vscode.window.showInformationMessage('Backend data and local violations cleared');
+                    updateStatusBar('reset');
+                } catch (error: any) {
+                    outputChannel.appendLine(`Backend reset failed: ${error.message}`);
+                    vscode.window.showWarningMessage('Backend is unavailable. Local violations were cleared, but backend data could not be reset.');
+                    updateStatusBar('disconnected');
+                }
             }
         }),
     );

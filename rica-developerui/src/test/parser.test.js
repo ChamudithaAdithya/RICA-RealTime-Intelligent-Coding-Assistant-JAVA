@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { JavaParser } = require('../javaParser');
+const { JavaParser } = require('../../dist/javaParser');
 
 const outputChannel = { appendLine: () => {} };
 const parser = new JavaParser(outputChannel);

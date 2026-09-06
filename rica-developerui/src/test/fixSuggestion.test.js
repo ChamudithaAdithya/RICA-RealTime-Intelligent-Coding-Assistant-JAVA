@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { FixSuggestionEngine } = require('../fixSuggestionEngine');
+const { FixSuggestionEngine } = require('../../dist/core/fixSuggestionEngine');
 
 describe('FixSuggestionEngine', () => {
   const engine = new FixSuggestionEngine();

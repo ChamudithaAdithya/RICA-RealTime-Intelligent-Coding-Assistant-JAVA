@@ -16,6 +16,7 @@ export interface AiConfig {
 }
 
 export interface AnalyzerConfig {
+  architectureStyle?: 'auto' | 'conventional-spring' | 'clean';
   enableArchitecturalChecks: boolean;
   enableDesignPatternChecks: boolean;
   enableBusinessLogicChecks: boolean;

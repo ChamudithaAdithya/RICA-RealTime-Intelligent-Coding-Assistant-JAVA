@@ -65,10 +65,6 @@ function workspaceUri(workspaceFolder: vscode.WorkspaceFolder, relativePath: str
 
 function toDiagnostics(vlist: Violation[], advisory: boolean, uri: vscode.Uri): vscode.Diagnostic[] {
   const diagnostics: vscode.Diagnostic[] = [];
-  const docBase = vscode.workspace
-    .getConfiguration('javaAstAnalyzer')
-    .get<string>('documentationBaseUrl', '')
-    .replace(/\/+$/, '');
   for (const v of vlist) {
     let severity: vscode.DiagnosticSeverity;
     switch (v.severity) {
@@ -100,10 +96,13 @@ function toDiagnostics(vlist: Violation[], advisory: boolean, uri: vscode.Uri): 
         new vscode.DiagnosticRelatedInformation(new vscode.Location(uri, range), `Type: ${v.analysisMetadata.type}`),
       ];
     }
-    // Render the Problems-panel code as a clickable link to the matching docs page
-    // when a per-violation documentationUrl is available (advisory findings have none).
-    if (!advisory && v.documentationUrl && /^https?:\/\//i.test(docBase)) {
-      const target = vscode.Uri.parse(`${docBase}${v.documentationUrl}.html`);
+    // Always route documentation through the packaged Webview. This prevents
+    // VS Code from treating a generated .html path as a workspace file.
+    if (!advisory && v.documentationUrl) {
+      // Use the extension URI handler because Problems-panel diagnostic code
+      // targets are opened as URIs, not reliably executed as commands.
+      const extensionAuthority = 'Geeth-Chamuditha-Adithya-Herath.rica-realtime-code-violations-analyzer';
+      const target = vscode.Uri.parse(`vscode://${extensionAuthority}/${v.code || 'RICA-V000'}`);
       diag.code = { value: v.id, target };
     } else {
       diag.code = v.id;

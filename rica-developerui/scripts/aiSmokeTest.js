@@ -16,9 +16,9 @@
  * Exit code 0 = full round-trip OK; 1 = ping/reachable failed; 2 = evaluate failed.
  */
 
-const { OllamaAiAdapter } = require('../src/infrastructure/ai/ollamaAiAdapter');
-const { OpenAICompatibleAiAdapter } = require('../src/infrastructure/ai/openaiCompatibleAiAdapter');
-const { httpRequest } = require('../src/infrastructure/ai/httpJson');
+const { OllamaAiAdapter } = require('../dist/infrastructure/ai/ollamaAiAdapter');
+const { OpenAICompatibleAiAdapter } = require('../dist/infrastructure/ai/openaiCompatibleAiAdapter');
+const { httpRequest } = require('../dist/infrastructure/ai/httpJson');
 
 const endpoint = (process.argv[2] || process.env.OLLAMA_ENDPOINT || 'http://localhost:11434').replace(/\/+$/, '');
 const model = process.argv[3] || process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b';

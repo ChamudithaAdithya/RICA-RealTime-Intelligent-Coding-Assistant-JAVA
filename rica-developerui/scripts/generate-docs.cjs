@@ -1,6 +1,6 @@
 ﻿/**
  * Generates the VitePress documentation site for RICA violation codes from the
- * shared catalog (src/violationCatalog.ts) so docs can never drift from the analyzers.
+ * shared catalog (src/core/violationCatalog.ts) so docs can never drift from the analyzers.
  *
  * Usage:
  *   node scripts/generate-docs.cjs            # (re)write docs/violations/*.md + docs/rule-matrix.md
@@ -17,7 +17,7 @@ const path = require('path');
 const ts = require('typescript');
 
 const ROOT = path.resolve(__dirname, '..');
-const CATALOG_PATH = path.join(ROOT, 'src', 'violationCatalog.ts');
+const CATALOG_PATH = path.join(ROOT, 'src', 'core', 'violationCatalog.ts');
 const VIOLATIONS_DIR = path.join(ROOT, 'docs', 'violations');
 const RULE_MATRIX_PATH = path.join(ROOT, 'docs', 'rule-matrix.md');
 const RULE_CONCEPT_MAP_PATH = path.join(ROOT, 'docs', 'rule-concept-map.md');
@@ -580,9 +580,49 @@ const CONCEPT_REFERENCES = [
     id: 'behavioral-patterns',
     title: 'Behavioral patterns',
     link: '../concepts/behavioral-patterns.md',
-    description: 'Learn Strategy, State, Observer, Command, and Template Method as ways to move behavior out of conditionals.',
-    keywords: ['strategy', 'state', 'observer', 'command', 'template', 'conditional', 'branching', 'polymorphism'],
-    applies: (entry) => /strategy|state|observer|command|template|conditional|branch|polymorphism/i.test(entry.name + ' ' + entry.trigger + ' ' + entry.tags.join(' ')),
+    description: 'Learn Strategy, State, Observer, Command, Template Method, Mediator, Visitor, Memento, Iterator, and Interpreter as ways to organize behavior.',
+    keywords: ['strategy', 'state', 'observer', 'command', 'template', 'mediator', 'visitor', 'memento', 'iterator', 'interpreter', 'conditional', 'branching', 'polymorphism'],
+    applies: (entry) => /strategy|state|observer|command|template|mediator|visitor|memento|iterator|interpreter|conditional|branch|polymorphism/i.test(entry.name + ' ' + entry.trigger + ' ' + entry.tags.join(' ')),
+  },
+  {
+    id: 'mediator-pattern',
+    title: 'Mediator pattern',
+    link: '../concepts/mediator-pattern.md',
+    description: 'Learn when workflow coordination should move out of a class that directly manages many peer components.',
+    keywords: ['mediator', 'orchestrator', 'coordination', 'workflow', 'peer components'],
+    applies: (entry) => entry.code === 'RICA-V324',
+  },
+  {
+    id: 'visitor-pattern',
+    title: 'Visitor pattern',
+    link: '../concepts/visitor-pattern.md',
+    description: 'Learn how Visitor or polymorphism removes repeated type-dispatch operations over one object family.',
+    keywords: ['visitor', 'instanceof', 'type dispatch', 'object family', 'polymorphism'],
+    applies: (entry) => entry.code === 'RICA-V325',
+  },
+  {
+    id: 'memento-pattern',
+    title: 'Memento pattern',
+    link: '../concepts/memento-pattern.md',
+    description: 'Learn how Memento keeps undo, restore, and snapshot state controlled and explicit.',
+    keywords: ['memento', 'undo', 'redo', 'snapshot', 'restore', 'rollback'],
+    applies: (entry) => entry.code === 'RICA-V326',
+  },
+  {
+    id: 'iterator-pattern',
+    title: 'Iterator pattern',
+    link: '../concepts/iterator-pattern.md',
+    description: 'Learn how Iterator and read-only views protect collection ownership and traversal details.',
+    keywords: ['iterator', 'iterable', 'collection', 'encapsulation', 'read-only view'],
+    applies: (entry) => entry.code === 'RICA-V327',
+  },
+  {
+    id: 'interpreter-pattern',
+    title: 'Interpreter pattern',
+    link: '../concepts/interpreter-pattern.md',
+    description: 'Learn when rule, query, and expression parsing should become an explicit expression model.',
+    keywords: ['interpreter', 'parser', 'expression', 'rule engine', 'query', 'grammar'],
+    applies: (entry) => entry.code === 'RICA-V328',
   },
   {
     id: 'concurrency-boundaries',
@@ -599,6 +639,30 @@ const CONCEPT_REFERENCES = [
     description: 'Learn how Java packages express architectural ownership and why forbidden imports are meaningful.',
     keywords: ['package', 'import', 'boundary', 'forbidden', 'alloweddeps', 'dependency graph'],
     applies: (entry) => ['RICA-V401', 'RICA-V402', 'RICA-V403', 'RICA-V404', 'RICA-V501'].includes(entry.code),
+  },
+  {
+    id: 'architecture-profiles',
+    title: 'Architecture profiles',
+    link: '../concepts/architecture-profiles.md',
+    description: 'Learn how RICA changes package-boundary strictness for auto, conventional Spring, and Clean Architecture projects.',
+    keywords: ['architecture style', 'architecture profile', 'conventional spring', 'clean', 'layerBoundaries', 'allowedDeps'],
+    applies: (entry) => entry.code === 'RICA-V501',
+  },
+  {
+    id: 'framework-aware-classification',
+    title: 'Framework-aware classification',
+    link: '../concepts/framework-aware-classification.md',
+    description: 'Learn why annotations such as @RestController, @Service, @Repository, @Configuration, and @FeignClient are read before package names.',
+    keywords: ['framework-aware', 'annotation', '@restcontroller', '@service', '@repository', '@configuration', '@feignclient'],
+    applies: (entry) => ['RICA-V102', 'RICA-V103', 'RICA-V110', 'RICA-V114', 'RICA-V201', 'RICA-V202', 'RICA-V501'].includes(entry.code),
+  },
+  {
+    id: 'confidence-levels-and-rule-tuning',
+    title: 'Confidence levels and rule tuning',
+    link: '../concepts/confidence-levels-and-rule-tuning.md',
+    description: 'Learn how to interpret High, Medium, and Low confidence findings and tune noisy rules safely.',
+    keywords: ['confidence', 'severity', 'evidence', 'rule tuning', 'false positive', 'advisory'],
+    applies: (entry) => entry.code === 'RICA-V501' || /^RICA-V3/.test(entry.code) || entry.stage === 'fallback',
   },
 ];
 
@@ -648,12 +712,17 @@ const PRIMARY_RULE_CONCEPT_IDS = {
   'RICA-V321': ['behavioral-patterns', 'design-patterns', 'static-analysis-basics'],
   'RICA-V322': ['structural-patterns', 'infrastructure', 'concurrency-boundaries'],
   'RICA-V323': ['structural-patterns', 'dependency-inversion', 'design-patterns'],
+  'RICA-V324': ['mediator-pattern', 'behavioral-patterns', 'service-layer-pattern'],
+  'RICA-V325': ['visitor-pattern', 'behavioral-patterns', 'solid-principles'],
+  'RICA-V326': ['memento-pattern', 'behavioral-patterns', 'domain-model-vs-anemic-model'],
+  'RICA-V327': ['iterator-pattern', 'behavioral-patterns', 'solid-principles'],
+  'RICA-V328': ['interpreter-pattern', 'behavioral-patterns', 'static-analysis-basics'],
   'RICA-V400': ['dependency-graphs-and-cycles', 'static-analysis-basics', 'package-boundaries'],
   'RICA-V401': ['package-boundaries', 'layered-architecture', 'controllers-services-repositories'],
   'RICA-V402': ['package-boundaries', 'layered-architecture', 'dependency-graphs-and-cycles'],
   'RICA-V403': ['dependency-graphs-and-cycles', 'dependency-inversion', 'package-boundaries'],
   'RICA-V404': ['package-boundaries', 'entities-dtos-api-contracts', 'layered-architecture'],
-  'RICA-V501': ['package-boundaries', 'dependency-graphs-and-cycles', 'framework-coupling', 'false-positives-and-rule-tuning'],
+  'RICA-V501': ['package-boundaries', 'architecture-profiles', 'framework-aware-classification', 'confidence-levels-and-rule-tuning'],
 };
 
 const CONCEPT_BY_ID = new Map(CONCEPT_REFERENCES.map(concept => [concept.id, concept]));
@@ -839,7 +908,7 @@ function renderViolationPage(entry) {
 
   lines.push('---');
   lines.push('');
-  lines.push(`_This page is generated from \`src/violationCatalog.ts\` by \`scripts/generate-docs.cjs\`. Do not edit by hand._`);
+  lines.push(`_This page is generated from \`src/core/violationCatalog.ts\` by \`scripts/generate-docs.cjs\`. Do not edit by hand._`);
   lines.push('');
   return cleanDocText(lines.join('\n'));
 }
@@ -850,7 +919,7 @@ function renderRuleMatrix(entries) {
   lines.push('');
   lines.push(
     'Every code the analyzers can emit, generated from the single source of truth ' +
-    '`src/violationCatalog.ts`. Click a code for the full page (trigger, rationale, fix steps, examples).',
+    '`src/core/violationCatalog.ts`. Click a code for the full page (trigger, rationale, fix steps, examples).',
   );
   lines.push('');
 
@@ -882,7 +951,7 @@ function renderRuleMatrix(entries) {
   lines.push('---');
   lines.push('');
   lines.push(
-    'This page is generated from `src/violationCatalog.ts` by `scripts/generate-docs.cjs`. Run `npm run generate:docs` to regenerate.',
+    'This page is generated from `src/core/violationCatalog.ts` by `scripts/generate-docs.cjs`. Run `npm run generate:docs` to regenerate.',
   );
   lines.push('');
   return cleanDocText(lines.join('\n'));
@@ -959,7 +1028,7 @@ function main() {
 
   if (verifyOnly) {
     if (drift) {
-      console.error('[docs:verify] Docs are out of sync with src/violationCatalog.ts. Run: npm run generate:docs');
+      console.error('[docs:verify] Docs are out of sync with src/core/violationCatalog.ts. Run: npm run generate:docs');
       process.exit(1);
     }
     console.log(`[docs:verify] Docs are in sync (${pages.size} files).`);

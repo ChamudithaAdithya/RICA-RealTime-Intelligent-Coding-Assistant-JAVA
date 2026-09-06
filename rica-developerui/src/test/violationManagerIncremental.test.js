@@ -1,7 +1,7 @@
 const assert = require('assert');
-const { JavaParser } = require('../javaParser');
-const { ViolationManager } = require('../violationManager');
-const { DEFAULT_AI_CONFIG, DEFAULT_LAYER_BOUNDARIES } = require('../domain/analyzerConfig');
+const { JavaParser } = require('../../dist/javaParser');
+const { ViolationManager } = require('../../dist/core/violationManager');
+const { DEFAULT_AI_CONFIG, DEFAULT_LAYER_BOUNDARIES } = require('../../dist/domain/analyzerConfig');
 
 const outputChannel = { appendLine: () => {} };
 const parser = new JavaParser(outputChannel);
