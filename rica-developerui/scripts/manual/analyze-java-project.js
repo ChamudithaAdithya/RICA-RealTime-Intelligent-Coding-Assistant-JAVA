@@ -24,6 +24,29 @@ const projectRoot = path.resolve(projectRootArg);
 const outputDir = path.resolve(outputDirArg || path.join("outputs", "evaluation", "manual-project-analysis"));
 const parser = new JavaParser({ appendLine: () => {} });
 
+const LAYER_RULE_CODES = {
+  "self-instantiation": "RICA-V101",
+  "uninjected-repository-access": "RICA-V102",
+  "uninjected-service-access": "RICA-V103",
+  "anemic-service": "RICA-V104",
+  "business-logic": "RICA-V106",
+  "direct-layer-access": "RICA-V107",
+  "anemic-entity": "RICA-V108",
+  "improper-data-access": "RICA-V109",
+  "direct-http-call": "RICA-V110",
+  "file-io": "RICA-V111",
+  "background-thread": "RICA-V112",
+  "static-cache": "RICA-V113",
+  "raw-sql-access": "RICA-V114",
+  "exposing-internal-entity": "RICA-V201",
+  "missing-dto-usage": "RICA-V202",
+  "improper-error-handling": "RICA-V203",
+  "business-logic-in-resource": "RICA-V204",
+  "direct-service-instantiation": "RICA-V205",
+  "missing-validation": "RICA-V206",
+  "exposing-internal-structure": "RICA-V207",
+};
+
 function walkJavaFiles(dir, files = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith(".") || ["node_modules", "target", "build", "dist", "out"].includes(entry.name)) {
@@ -65,9 +88,10 @@ function writeCsv(filePath, rows) {
 }
 
 function normalizeViolation(violation) {
+  const type = violation.type || violation.ruleName || violation.ruleId || "";
   return {
-    type: violation.type || violation.ruleName || violation.ruleId || "",
-    code: violation.code || violation.ruleId || "",
+    type,
+    code: violation.code || violation.ruleId || LAYER_RULE_CODES[type] || "",
     severity: violation.severity || "",
     filePath: violation.filePath || "",
     lineNumber: violation.lineNumber || violation.line || "",

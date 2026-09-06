@@ -110,6 +110,7 @@ RICA can be configured from VS Code settings under `javaAstAnalyzer`.
 Common settings include:
 
 - `javaAstAnalyzer.autoAnalyzeOnOpen`
+- `javaAstAnalyzer.architectureStyle`
 - `javaAstAnalyzer.excludePatterns`
 - `javaAstAnalyzer.enableArchitecturalChecks`
 - `javaAstAnalyzer.enableDesignPatternChecks`

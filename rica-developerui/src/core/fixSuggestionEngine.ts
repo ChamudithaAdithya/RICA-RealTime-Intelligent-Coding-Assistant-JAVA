@@ -77,6 +77,11 @@ const DESIGN_PATTERN_STEPS: Record<string, string[]> = {
   'RICA-V321': ['Return Null Object, Optional, or empty collections where appropriate.', 'Centralize defensive validation at the boundary.', 'Avoid scattered null decisions inside business workflow code.'],
   'RICA-V322': ['Wrap the heavy resource behind a proxy/gateway.', 'Inject the wrapper instead of constructing the resource directly.', 'Keep resource lifecycle in infrastructure/configuration code.'],
   'RICA-V323': ['Split abstraction and implementation dimensions.', 'Introduce a bridge interface for the varying implementation side.', 'Compose variants instead of multiplying subclasses.'],
+  'RICA-V324': ['Name the workflow being coordinated.', 'Move peer coordination into a mediator/orchestrator.', 'Keep peer services focused on one capability.'],
+  'RICA-V325': ['Identify the repeated object-family type checks.', 'Move behavior to polymorphic methods or a Visitor.', 'Add tests for every subtype/operation pair before refactoring.'],
+  'RICA-V326': ['Create an immutable snapshot/memento type.', 'Move capture and restore logic behind named methods.', 'Keep undo history outside the object that owns the mutable state.'],
+  'RICA-V327': ['Stop returning the mutable backing collection.', 'Return Iterator, Iterable, Stream, or an unmodifiable view.', 'Expose explicit mutation methods on the owner when mutation is allowed.'],
+  'RICA-V328': ['Define the rule/query/expression grammar explicitly.', 'Represent parsed terms as expression objects.', 'Move parsing and evaluation into an interpreter/evaluator component.'],
 };
 
 export class FixSuggestionEngine {

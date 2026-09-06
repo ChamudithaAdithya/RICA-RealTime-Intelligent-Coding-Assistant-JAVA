@@ -93,10 +93,20 @@
           "default": true,
           "description": "Enable cross-file architectural rules: controller-bypass, cyclic-dependency, cross-layer-violation, entity-exposure (V401-V404)"
         },
+        "javaAstAnalyzer.architectureStyle": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "conventional-spring",
+            "clean"
+          ],
+          "default": "auto",
+          "description": "Architecture profile for package-boundary analysis. Use auto for framework-aware defaults, conventional-spring for service-to-repository projects, or clean for stricter dependency direction."
+        },
         "javaAstAnalyzer.enableDesignPatternChecks": {
           "type": "boolean",
           "default": true,
-          "description": "Enable dependency injection and layer-access pattern checks: self-instantiation, uninjected-service, uninjected-repository (V101-V109)"
+          "description": "Enable design-pattern opportunity and design-smell rules, including GoF-inspired checks from RICA-V301 to RICA-V328"
         },
         "javaAstAnalyzer.enableBusinessLogicChecks": {
           "type": "boolean",
@@ -216,7 +226,8 @@
                 "**/useCase/**"
               ],
               "allowedDeps": [
-                "domain"
+                "domain",
+                "infrastructure"
               ]
             },
             "infrastructure": {
@@ -224,7 +235,10 @@
                 "**/infrastructure/**",
                 "**/dao/**",
                 "**/repository/**",
-                "**/adapter/**"
+                "**/adapter/**",
+                "**/config/**",
+                "**/feign/**",
+                "**/feignClient/**"
               ],
               "allowedDeps": [
                 "domain",
@@ -240,8 +254,7 @@
               ],
               "allowedDeps": [
                 "domain",
-                "application",
-                "infrastructure"
+                "application"
               ]
             }
           },

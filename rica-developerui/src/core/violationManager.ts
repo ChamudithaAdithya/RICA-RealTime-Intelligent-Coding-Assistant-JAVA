@@ -87,6 +87,11 @@ const PROJECT_SCOPED_DESIGN_PATTERN_RULES: ReadonlySet<string> = new Set([
     'duplicate-algorithm',
     'missing-proxy',
     'missing-bridge',
+    'missing-mediator',
+    'missing-visitor',
+    'missing-memento',
+    'missing-iterator',
+    'interpreter-candidate',
 ]);
 
 function confidenceForSeverity(severity: Violation['severity']): 'High' | 'Medium' | 'Low' {

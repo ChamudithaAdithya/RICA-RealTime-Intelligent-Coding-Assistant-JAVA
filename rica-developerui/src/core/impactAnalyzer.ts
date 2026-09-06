@@ -102,6 +102,8 @@ export class ImpactAnalyzer {
         'fragmented-factories',
         'missing-proxy',
         'missing-bridge',
+        'missing-memento',
+        'missing-iterator',
       );
     }
     if (impact.methodCallsChanged) {
@@ -114,6 +116,9 @@ export class ImpactAnalyzer {
         'hardcoded-notifier',
         'service-locator',
         'missing-proxy',
+        'missing-mediator',
+        'missing-iterator',
+        'interpreter-candidate',
       );
     }
     if (impact.objectCreationsChanged) {
@@ -124,6 +129,7 @@ export class ImpactAnalyzer {
         'missing-command',
         'redundant-memory',
         'missing-proxy',
+        'missing-memento',
       );
     }
     if (impact.methodComplexityChanged) {
@@ -134,6 +140,9 @@ export class ImpactAnalyzer {
         'scattered-state-machine',
         'monolithic-pipeline',
         'excessive-null-checks',
+        'missing-mediator',
+        'missing-visitor',
+        'interpreter-candidate',
       );
     }
 

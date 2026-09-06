@@ -91,13 +91,19 @@ function analyze(root) {
   }
 
   const graph = buildGraphFromFiles(map);
+  const classAnnotations = new Map();
+  for (const ast of asts) {
+    for (const cls of ast.classes || []) {
+      classAnnotations.set(cls.fullyQualifiedName || cls.className, (cls.annotations || []).map(annotation => annotation.name));
+    }
+  }
   const design = new DesignPatternAnalyzer().analyze(asts, graph, map);
   const crossFile = new CrossFileAnalyzer().analyze(graph, map);
 
   let packageBoundary = [];
   try {
     const analyzer = new PackageBoundaryAnalyzer();
-    packageBoundary = analyzer.toUnifiedViolations(analyzer.analyze(asts, graph, new Map()));
+    packageBoundary = analyzer.toUnifiedViolations(analyzer.analyze(asts, graph, classAnnotations));
   } catch (err) {
     console.warn(`Package-boundary analysis failed for ${root}: ${err.message}`);
   }

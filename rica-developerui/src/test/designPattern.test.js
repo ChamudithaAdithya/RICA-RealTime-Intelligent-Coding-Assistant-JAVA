@@ -90,7 +90,7 @@ class OrderService {
         assert.strictEqual(v308.severity, 'warning');
         assert.match(v308.message, /buildOrder/);
         assert.strictEqual(v308.analysisMetadata.confidence, 'Medium');
-        assert.strictEqual(v308.analysisMetadata.type, 'Design-pattern best-practice violation');
+        assert.strictEqual(v308.analysisMetadata.type, 'Design-pattern advisory / best-practice opportunity');
         assert.match(v308.analysisMetadata.evidence, /rule signal leaking-construction/);
     });
 
@@ -978,9 +978,246 @@ describe('DesignPatternAnalyzer — V323 Missing Bridge', () => {
     });
 });
 
+describe('DesignPatternAnalyzer - V324 Missing Mediator', () => {
+
+    it('should flag a workflow method coordinating many peer components', () => {
+        const code = `package com.example.service;
+class CheckoutService {
+    private InventoryService inventoryService;
+    private PaymentClient paymentClient;
+    private FraudValidator fraudValidator;
+    private ShippingManager shippingManager;
+    private EmailNotifier emailNotifier;
+    private AuditPublisher auditPublisher;
+
+    public void checkout(Order order) {
+        if (order == null) return;
+        inventoryService.reserve(order);
+        fraudValidator.validate(order);
+        paymentClient.authorize(order);
+        if (order.express) {
+            shippingManager.scheduleExpress(order);
+        } else {
+            shippingManager.schedule(order);
+        }
+        emailNotifier.send(order);
+        auditPublisher.publish(order);
+        inventoryService.confirm(order);
+        paymentClient.capture(order);
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(violations.some(v => v.code === 'RICA-V324'), 'should emit V324 for large peer coordination');
+    });
+
+    it('should not flag simple service delegation', () => {
+        const code = `package com.example.service;
+class OrderService {
+    private OrderRepository orderRepository;
+    private AuditPublisher auditPublisher;
+    public void save(Order order) {
+        orderRepository.save(order);
+        auditPublisher.publish(order);
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V324'), 'small delegation should not emit V324');
+    });
+
+    it('should not flag Spring configuration classes', () => {
+        const code = `package com.example.config;
+import org.springframework.context.annotation.Configuration;
+@Configuration
+class AppConfiguration {
+    public void configure() {
+        alpha.setup(); beta.setup(); gamma.setup(); delta.setup();
+        alpha.start(); beta.start(); gamma.start(); delta.start();
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V324'), 'configuration wiring should be exempt');
+    });
+});
+
+describe('DesignPatternAnalyzer - V325 Missing Visitor', () => {
+
+    it('should flag repeated type-dispatch over the same object family', () => {
+        const code = `package com.example.domain;
+class ReportExporter {
+    public String render(Node node) {
+        if (node instanceof TextNode) return "text";
+        if (node instanceof ImageNode) return "image";
+        if (node instanceof TableNode) return "table";
+        return "";
+    }
+    public int calculate(Node node) {
+        if (node instanceof TextNode) return 1;
+        if (node instanceof ImageNode) return 2;
+        if (node instanceof TableNode) return 3;
+        return 0;
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(violations.some(v => v.code === 'RICA-V325'), 'should emit V325 for repeated type dispatch');
+    });
+
+    it('should not flag one isolated type-dispatch method', () => {
+        const code = `package com.example.domain;
+class ReportExporter {
+    public String render(Node node) {
+        if (node instanceof TextNode) return "text";
+        if (node instanceof ImageNode) return "image";
+        if (node instanceof TableNode) return "table";
+        return "";
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V325'), 'single operation should not emit V325');
+    });
+
+    it('should not flag repository interfaces', () => {
+        const code = `package com.example.repository;
+import org.springframework.data.jpa.repository.JpaRepository;
+interface OrderRepository extends JpaRepository<Order, Long> {
+    Order findByCode(String code);
+}`;
+        const violations = analyze(code, { fatInterfaceMethodLimit: 2 });
+        assert.ok(!violations.some(v => v.code === 'RICA-V325'), 'repository interface should be exempt');
+    });
+});
+
+describe('DesignPatternAnalyzer - V326 Missing Memento', () => {
+
+    it('should flag mutable classes with snapshot and restore behavior', () => {
+        const code = `package com.example.domain;
+class EditorSession {
+    private String text;
+    private int cursor;
+    private String selection;
+    private boolean dirty;
+
+    public void saveState() {
+        backupText = text;
+        backupCursor = cursor;
+    }
+    public void restoreState() {
+        text = backupText;
+        cursor = backupCursor;
+        dirty = false;
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(violations.some(v => v.code === 'RICA-V326'), 'should emit V326 for manual snapshot/restore state');
+    });
+
+    it('should not flag request/response DTOs', () => {
+        const code = `package com.example.dto;
+class EditorResponse {
+    private String text;
+    private int cursor;
+    public void saveState() {}
+    public void restoreState() {}
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V326'), 'DTO shape should be exempt');
+    });
+
+    it('should not flag classes without mutable state', () => {
+        const code = `package com.example.domain;
+class AuditSnapshot {
+    private final String value = "";
+    public void saveState() {}
+    public void restoreState() {}
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V326'), 'immutable class should not emit V326');
+    });
+});
+
+describe('DesignPatternAnalyzer - V327 Missing Iterator', () => {
+
+    it('should flag public getter exposing an internal mutable collection', () => {
+        const code = `package com.example.domain;
+import java.util.List;
+class OrderBook {
+    private List<Order> orders;
+    public List<Order> getOrders() {
+        return orders;
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(violations.some(v => v.code === 'RICA-V327'), 'should emit V327 for mutable collection getter');
+    });
+
+    it('should not flag DTO collection getters used for serialization', () => {
+        const code = `package com.example.dto;
+import java.util.List;
+class OrderResponse {
+    private List<OrderItemResponse> items;
+    public List<OrderItemResponse> getItems() {
+        return items;
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V327'), 'DTO collection getter should be exempt');
+    });
+
+    it('should not flag read-only Iterable return types', () => {
+        const code = `package com.example.domain;
+import java.util.List;
+class OrderBook {
+    private List<Order> orders;
+    public Iterable<Order> orders() {
+        return orders;
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V327'), 'Iterable is a safer traversal boundary');
+    });
+});
+
+describe('DesignPatternAnalyzer - V328 Interpreter Candidate', () => {
+
+    it('should flag expression-like parsing with branching', () => {
+        const code = `package com.example.service;
+class RuleEvaluator {
+    public boolean evaluate(String rule) {
+        if (rule.startsWith("age")) return true;
+        if (rule.contains("status")) return true;
+        if (rule.endsWith("vip")) return true;
+        if (rule.matches(".*active.*")) return true;
+        if (rule.split(":").length > 1) return true;
+        return false;
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(violations.some(v => v.code === 'RICA-V328'), 'should emit V328 for ad hoc rule parsing');
+    });
+
+    it('should not flag ordinary small string parsing', () => {
+        const code = `package com.example.service;
+class SlugService {
+    public String createSlug(String title) {
+        return title.toLowerCase().replace(" ", "-");
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V328'), 'small string formatting should not emit V328');
+    });
+
+    it('should not flag repository query method declarations', () => {
+        const code = `package com.example.repository;
+interface PatientRepository {
+    Patient findByStatusAndName(String status, String name);
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V328'), 'repository query declarations should be exempt');
+    });
+});
+
 describe('DesignPatternAnalyzer — no-op gating', () => {
 
-    it('should emit nothing for V308-V310 when design-pattern checks are disabled', () => {
+    it('should emit nothing for design-pattern rules when design-pattern checks are disabled', () => {
         const code = `package com.example;
 interface Big {
     void a(); void b(); void c(); void d(); void e();
@@ -999,6 +1236,11 @@ class OrderService {
         const violations = analyzer.analyze([ast]);
         assert.ok(!violations.some(v => v.code === 'RICA-V308'
             || v.code === 'RICA-V309'
-            || v.code === 'RICA-V310'), 'disabled checks should suppress new rules');
+            || v.code === 'RICA-V310'
+            || v.code === 'RICA-V324'
+            || v.code === 'RICA-V325'
+            || v.code === 'RICA-V326'
+            || v.code === 'RICA-V327'
+            || v.code === 'RICA-V328'), 'disabled checks should suppress design-pattern rules');
     });
 });

@@ -28,6 +28,11 @@ export const DESIGN_PATTERN_RULE_TYPES = [
   'excessive-null-checks',
   'missing-proxy',
   'missing-bridge',
+  'missing-mediator',
+  'missing-visitor',
+  'missing-memento',
+  'missing-iterator',
+  'interpreter-candidate',
 ] as const;
 
 export type DesignPatternRuleType = typeof DESIGN_PATTERN_RULE_TYPES[number];
@@ -56,6 +61,11 @@ const DP_RULE_CODES: Record<DesignPatternRuleType, string> = {
   'excessive-null-checks': 'RICA-V321',
   'missing-proxy': 'RICA-V322',
   'missing-bridge': 'RICA-V323',
+  'missing-mediator': 'RICA-V324',
+  'missing-visitor': 'RICA-V325',
+  'missing-memento': 'RICA-V326',
+  'missing-iterator': 'RICA-V327',
+  'interpreter-candidate': 'RICA-V328',
 };
 
 const DP_MITIGATIONS: Record<DesignPatternRuleType, string> = {
@@ -82,6 +92,11 @@ const DP_MITIGATIONS: Record<DesignPatternRuleType, string> = {
   'excessive-null-checks': 'Replace repetitive null checks with Optional, Null Objects, or empty collections at the source',
   'missing-proxy': 'Access heavy resources through a Proxy or managed wrapper/bean (lazy loading, access control, caching) instead of direct instantiation in business logic',
   'missing-bridge': 'Decouple orthogonal dimensions via composition (Bridge) instead of exploding into combinatorial subclasses',
+  'missing-mediator': 'Introduce a Mediator/orchestrator so peer components do not coordinate each other directly',
+  'missing-visitor': 'Move repeated type-dispatch operations into a Visitor or polymorphic operation on the object family',
+  'missing-memento': 'Encapsulate snapshot/restore state in a Memento instead of scattering manual rollback fields',
+  'missing-iterator': 'Expose iteration through Iterator/Iterable or read-only views instead of leaking mutable collections',
+  'interpreter-candidate': 'Extract rule/query/expression parsing into an Interpreter or dedicated expression model',
 };
 
 export class DesignPatternAnalyzer {
@@ -157,6 +172,11 @@ export class DesignPatternAnalyzer {
     run('excessive-null-checks', () => this.checkExcessiveNullChecks(asts));
     run('missing-proxy', () => this.checkMissingProxy(asts, allAsts));
     run('missing-bridge', () => this.checkMissingBridge(asts, allAsts));
+    run('missing-mediator', () => this.checkMissingMediator(asts));
+    run('missing-visitor', () => this.checkMissingVisitor(asts));
+    run('missing-memento', () => this.checkMissingMemento(asts));
+    run('missing-iterator', () => this.checkMissingIterator(asts));
+    run('interpreter-candidate', () => this.checkInterpreterCandidate(asts));
 
     return violations;
   }
@@ -198,7 +218,7 @@ export class DesignPatternAnalyzer {
         confidence: severity === 'error' ? 'High' : 'Medium',
         evidence,
         reason: doc?.trigger || message,
-        type: 'Design-pattern best-practice violation',
+        type: 'Design-pattern advisory / best-practice opportunity',
       },
       legacyType: ruleType,
     };
@@ -1506,6 +1526,272 @@ export class DesignPatternAnalyzer {
     const repeatedSuffix = [...suffixes.values()].some(v => v >= 2);
     const repeatedPrefix = [...prefixes.values()].some(v => v >= 2);
     return repeatedSuffix && repeatedPrefix;
+  }
+
+  // --- V324 Missing Mediator -------------------------------------------------
+
+  private checkMissingMediator(asts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+    const noisyPeerCount = 4;
+    const callCount = 8;
+
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        if (this.isPatternOpportunityExempt(ast, cls)) continue;
+        if (/(Controller|Resource|Config|Configuration|Repository|Client)$/i.test(cls.className)) continue;
+
+        for (const method of cls.methods) {
+          if (this.isSimpleCrudMethod(method) || this.isReadOnlyQueryMethod(method)) continue;
+          const peers = new Set<string>();
+          let peerCalls = 0;
+
+          for (const call of method.calledMethods || []) {
+            const peer = this.peerComponentName(call, cls.className);
+            if (!peer) continue;
+            peers.add(peer);
+            peerCalls++;
+          }
+
+          const decisionCount = method.complexityMetrics?.decisionPoints?.length || 0;
+          if (peers.size < noisyPeerCount || peerCalls < callCount || decisionCount < 2) continue;
+
+          violations.push(this.toViolation(
+            'missing-mediator',
+            `Method '${method.name}' coordinates ${peers.size} peer components directly (${[...peers].slice(0, 5).join(', ')}). Consider a Mediator/orchestrator for the workflow.`,
+            ast.filePath || '', method.startLine, undefined, method.name, undefined, [...peers].slice(0, 5).join(', '),
+          ));
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  private peerComponentName(call: MethodCall, ownerClassName: string): string | null {
+    const raw = call.receiverType || call.targetClass || call.receiverVariableName || '';
+    const simple = this.simpleTypeName(raw);
+    if (!simple || simple === ownerClassName) return null;
+    if (/^(this|super|self)$/i.test(simple)) return null;
+    if (/^(String|System|Objects|Collections|Collectors|Collection|List|Set|Map|Optional|Stream|Logger|log|Math|LocalDate|LocalDateTime|ObjectMapper|ObjectNode|JsonNode|ResponseEntity|ApiResponse|MultipartFile|MediaType|BodyInserters|Specification|Sort|Builder|PasswordEncoder|StringUtils)$/i.test(simple)) return null;
+    if (/(Repository|Dao|DAO|Mapper|Converter|Dto|DTO|Request|Response|Payload|Entity|Model|Util|Utils|Helper)$/i.test(simple)) return null;
+    if (!/(Service|Client|Gateway|Manager|Validator|Publisher|Notifier|Coordinator|Mediator|Handler|Processor)$/i.test(simple)) return null;
+    if (/^(toString|equals|hashCode|size|isEmpty|stream|map|filter|collect|get|set|add|remove)$/i.test(call.calledMethodName)) return null;
+    if (call.isLibraryCall && !/(Service|Client|Gateway|Manager|Handler|Processor|Publisher|Notifier|Validator)$/i.test(simple)) return null;
+    return simple[0] === simple[0]?.toLowerCase()
+      ? simple[0].toUpperCase() + simple.slice(1)
+      : simple;
+  }
+
+  // --- V325 Missing Visitor --------------------------------------------------
+
+  private checkMissingVisitor(asts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        if (this.isPatternOpportunityExempt(ast, cls)) continue;
+        const dispatchMethods = cls.methods
+          .map(method => ({ method, types: this.instanceofTypes(method) }))
+          .filter(entry => entry.types.size >= 3 && this.isOperationLikeMethod(entry.method));
+
+        for (let i = 0; i < dispatchMethods.length; i++) {
+          for (let j = i + 1; j < dispatchMethods.length; j++) {
+            const overlap = [...dispatchMethods[i].types].filter(type => dispatchMethods[j].types.has(type));
+            if (overlap.length < 3) continue;
+            violations.push(this.toViolation(
+              'missing-visitor',
+              `Class '${cls.className}' repeats type-dispatch over ${overlap.length} related types in '${dispatchMethods[i].method.name}' and '${dispatchMethods[j].method.name}'. Consider Visitor or polymorphic operations.`,
+              ast.filePath || '', dispatchMethods[i].method.startLine, undefined, dispatchMethods[i].method.name, undefined, overlap.slice(0, 5).join(', '),
+            ));
+            i = dispatchMethods.length;
+            break;
+          }
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  private instanceofTypes(method: Method): Set<string> {
+    const types = new Set<string>();
+    for (const point of method.complexityMetrics?.decisionPoints || []) {
+      const condition = point.condition || '';
+      for (const match of condition.matchAll(/\binstanceof\s+([A-Z][\w$]*(?:\.[A-Z][\w$]*)*)/g)) {
+        types.add(this.simpleTypeName(match[1]));
+      }
+    }
+    return types;
+  }
+
+  private isOperationLikeMethod(method: Method): boolean {
+    return /^(render|export|serialize|deserialize|print|validate|calculate|compute|map|convert|write|read|process|handle|format|visit)/i.test(method.name);
+  }
+
+  // --- V326 Missing Memento --------------------------------------------------
+
+  private checkMissingMemento(asts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        if (this.isPatternOpportunityExempt(ast, cls)) continue;
+        if (!this.hasMutableState(cls)) continue;
+
+        const stateMethods = cls.methods.filter(method =>
+          /(saveState|snapshot|restore|undo|redo|rollback|revert|checkpoint|capture)/i.test(method.name)
+          && !this.isSimpleCrudMethod(method)
+        );
+        if (stateMethods.length < 2) continue;
+
+        const stateSignals = cls.attributes.filter(field => !field.isStatic && !field.isFinal).length
+          + stateMethods.reduce((sum, method) => sum + (method.body?.writtenVariables?.length || 0), 0);
+        if (stateSignals < 4) continue;
+
+        violations.push(this.toViolation(
+          'missing-memento',
+          `Class '${cls.className}' has mutable state and multiple snapshot/restore style methods (${stateMethods.map(m => m.name).slice(0, 4).join(', ')}). Consider a Memento for state capture and rollback.`,
+          ast.filePath || '', cls.startLine, undefined, stateMethods[0]?.name, undefined, cls.className,
+        ));
+      }
+    }
+
+    return violations;
+  }
+
+  private hasMutableState(cls: ClassInfo): boolean {
+    return cls.attributes.some(field => !field.isStatic && !field.isFinal && field.accessModifier !== 'public');
+  }
+
+  // --- V327 Missing Iterator -------------------------------------------------
+
+  private checkMissingIterator(asts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        if (this.isPatternOpportunityExempt(ast, cls)) continue;
+        if (/(Controller|Resource|Repository|Client|Mapper|Converter|Config|Configuration)$/i.test(cls.className)) continue;
+
+        const collectionFields = cls.attributes
+          .filter(field => field.accessModifier !== 'public' && this.isMutableCollectionType(field.dataType))
+          .map(field => ({ field, rawType: this.rawTypeName(field.dataType) }));
+        if (collectionFields.length === 0) continue;
+
+        for (const method of cls.methods) {
+          if (method.accessModifier !== 'public') continue;
+          if (!/^get[A-Z]|^list[A-Z]|^all[A-Z]|^items$/i.test(method.name)) continue;
+          if (!this.isMutableCollectionType(method.returnType)) continue;
+
+          const returnRaw = this.rawTypeName(method.returnType);
+          const matchingField = collectionFields.find(entry => entry.rawType === returnRaw)
+            || collectionFields.find(entry => method.name.toLowerCase().includes(entry.field.name.toLowerCase()));
+          if (!matchingField) continue;
+
+          violations.push(this.toViolation(
+            'missing-iterator',
+            `Public method '${method.name}' exposes internal mutable collection '${matchingField.field.name}'. Consider Iterable/Iterator or a read-only view.`,
+            ast.filePath || '', method.startLine, undefined, method.name, matchingField.field.name, method.returnType,
+          ));
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  private isMutableCollectionType(type: string | undefined): boolean {
+    const raw = this.rawTypeName(type || '');
+    return /^(List|ArrayList|LinkedList|Set|HashSet|LinkedHashSet|Map|HashMap|LinkedHashMap|Collection|Queue|Deque)$/i.test(raw);
+  }
+
+  private rawTypeName(type: string): string {
+    return this.simpleTypeName(type.replace(/<.*$/, '').replace(/\[\]$/, '').trim());
+  }
+
+  // --- V328 Interpreter Candidate -------------------------------------------
+
+  private checkInterpreterCandidate(asts: FullASTOutput[]): Violation[] {
+    const violations: Violation[] = [];
+
+    for (const ast of asts) {
+      for (const cls of ast.classes) {
+        if (this.isPatternOpportunityExempt(ast, cls)) continue;
+        if (/(Controller|Resource|Repository|Entity|DTO|Dto|Request|Response|Config|Configuration)$/i.test(cls.className)) continue;
+
+        for (const method of cls.methods) {
+          if (this.isSimpleCrudMethod(method) || this.isReadOnlyQueryMethod(method)) continue;
+          const textSignal = this.hasExpressionInput(cls, method);
+          if (!textSignal) continue;
+
+          const branchCount = method.complexityMetrics?.decisionPoints?.filter(point =>
+            ['if', 'else-if', 'switch', 'case'].includes(point.type)
+          ).length || 0;
+          const parsingCalls = (method.calledMethods || []).filter(call =>
+            /^(split|matches|matcher|compile|substring|charAt|startsWith|endsWith|contains|replace|replaceAll|indexOf|tokenize|parse|evaluate)$/i.test(call.calledMethodName)
+          ).length;
+          if (branchCount < 4 || parsingCalls < 2) continue;
+
+          violations.push(this.toViolation(
+            'interpreter-candidate',
+            `Method '${method.name}' parses or evaluates expression-like text with ${branchCount} branches. Consider an Interpreter or expression model.`,
+            ast.filePath || '', method.startLine, undefined, method.name, undefined, cls.className,
+          ));
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  private hasExpressionInput(cls: ClassInfo, method: Method): boolean {
+    if (/(Expression|Rule|Criteria|Query|Filter|Condition|Policy|Parser|Evaluator|Interpreter)/i.test(`${cls.className} ${method.name}`)) {
+      return true;
+    }
+    return method.parameters.some(param =>
+      this.rawTypeName(param.dataType) === 'String'
+      && /(expression|expr|rule|query|filter|criteria|condition|policy|script|formula)/i.test(param.name)
+    );
+  }
+
+  private isPatternOpportunityExempt(ast: FullASTOutput, cls: ClassInfo): boolean {
+    if (this.isDTOOrPersistenceModel(cls)) return true;
+    if (this.isConfigurationClass(ast)) return true;
+    if (this.isUtilityHolderClass(ast, cls)) return true;
+    if (this.isGeneratedOrTestPath(ast.filePath || '')) return true;
+    if (this.isRepositoryLikeClass(cls)) return true;
+    if (cls.classType === 'annotation' || cls.className.endsWith('Exception')) return true;
+    return false;
+  }
+
+  private isGeneratedOrTestPath(filePath: string): boolean {
+    return /[\\/](generated|target|build|test|tests|src[\\/]test)[\\/]/i.test(filePath)
+      || /[\\/]generated-sources[\\/]/i.test(filePath);
+  }
+
+  private isRepositoryLikeClass(cls: ClassInfo): boolean {
+    return /Repository$|Dao$/i.test(cls.className)
+      || cls.annotations?.some(annotation => /Repository$/i.test(annotation.name))
+      || cls.interfaces?.some(name => /(Repository|JpaRepository|CrudRepository|PagingAndSortingRepository)$/i.test(this.simpleTypeName(name)));
+  }
+
+  private isSimpleCrudMethod(method: Method): boolean {
+    const name = method.name || '';
+    if (/^(get|set|is|has|find|findAll|list|load|read|query|save|create|update|delete|remove|exists|count)(By[A-Z]\w*)?$/i.test(name)) {
+      const decisions = method.complexityMetrics?.decisionPoints?.length || 0;
+      const calls = method.calledMethods?.length || 0;
+      return decisions <= 2 && calls <= 4;
+    }
+    return false;
+  }
+
+  private simpleTypeName(type: string | undefined): string {
+    return (type || '')
+      .replace(/\[\]$/, '')
+      .replace(/<.*$/, '')
+      .split('.')
+      .pop()
+      ?.trim() || '';
   }
 
   private isConfigurationClass(ast: FullASTOutput): boolean {

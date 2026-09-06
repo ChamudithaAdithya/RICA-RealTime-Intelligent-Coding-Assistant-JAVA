@@ -1015,7 +1015,7 @@ public class OrderController {
 
 d({
   code: 'RICA-V403',
-  name: 'Cyclic / Inverted Dependency',
+  name: 'Cyclic Dependency',
   severity: 'error',
   stage: 'stage2',
   stageLabel: STAGE2,
@@ -1023,9 +1023,9 @@ d({
   detector: 'cyclicDependencyRule (dependencyGraph.ts)',
   layer: 'cross-layer / graph',
   trigger:
-    'Tarjan SCC finds a true cycle among classes, or an inverted edge (a lower layer depending on a higher layer) appears when following `calls`/`has-a`/`uses` edges.',
+    'Tarjan SCC finds a true cycle among classes when following `calls`/`has-a`/`uses` dependency edges.',
   whyItMatters:
-    'Circular dependencies make the code impossible to test in isolation, block other components, and cause initialization and packaging headaches. Inverted edges violate the Dependency Rule and prevent lower layers from being reused by anything above them.',
+    'Circular dependencies make code harder to test, package, and change independently because two or more classes cannot evolve without each other.',
   howToFix: [
     'Break the cycle by extracting the shared members into a separate module/class.',
     'Introduce an interface in the lower layer and let the higher layer implement it.',
@@ -1050,7 +1050,7 @@ class C { A a; } // cycle!`,
   ],
   relatedRules: ['RICA-V402', 'RICA-V501'],
   sourceRef: 'src/core/dependencyGraph.ts:585',
-  tags: ['cycle', 'graph', 'inversion', 'layering'],
+  tags: ['cycle', 'graph', 'layering'],
 });
 
 d({
@@ -1867,6 +1867,194 @@ class Square extends Shape { Square(Color c){super(c);} void draw(){ color.apply
 });
 
 d({
+  code: 'RICA-V324',
+  name: 'Missing Mediator',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingMediator',
+  layer: 'service / application workflow',
+  trigger:
+    'A non-exempt method coordinates at least four collaborator-shaped peer components (Service, Client, Gateway, Manager, Validator, Publisher, Notifier, Handler, Processor, etc.) with several calls and branching decisions. DTOs, repositories, mappers, framework utilities, generated code, tests, config classes, and simple CRUD are ignored.',
+  whyItMatters:
+    'When one class directly coordinates many peers, responsibilities become tangled and changes to one workflow can ripple across many collaborators. A Mediator or dedicated orchestrator can centralize the workflow while keeping peer components simpler.',
+  howToFix: [
+    'Identify the workflow being coordinated by the method.',
+    'Extract the coordination steps into a Mediator/orchestrator interface or service.',
+    'Keep individual peer components focused on their own capability and let the mediator manage the sequence.',
+    'Do not introduce a mediator for ordinary service-to-repository CRUD or simple DTO mapping.',
+  ],
+  beforeCode: `class CheckoutService {
+    void checkout(Order order) {
+        inventory.reserve(order);
+        fraud.score(order);
+        payment.authorize(order);
+        shipping.schedule(order);
+        email.send(order);
+    }
+}`,
+  afterCode: `class CheckoutService {
+    private final CheckoutMediator mediator;
+    void checkout(Order order) {
+        mediator.completeCheckout(order);
+    }
+}`,
+  mitigationHint: 'Introduce a Mediator/orchestrator so peer components do not coordinate each other directly',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V302', 'RICA-V318', 'RICA-V319'],
+  sourceRef: 'src/analyzers/designPatternAnalyzer.ts:1505',
+  tags: ['mediator', 'workflow', 'behavioral', 'orchestration'],
+});
+
+d({
+  code: 'RICA-V325',
+  name: 'Missing Visitor',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingVisitor',
+  layer: 'domain / application operation',
+  trigger:
+    'A class repeats instanceof-based type dispatch over the same object family across multiple operation-like methods.',
+  whyItMatters:
+    'Repeated type dispatch means every new subtype requires edits in several operations. Visitor or polymorphic methods move the operation to the type family and reduce repeated conditional logic.',
+  howToFix: [
+    'Find the repeated object family being checked with `instanceof`.',
+    'Move behavior to polymorphic methods when the operation belongs to the subtype.',
+    'Use Visitor when many operations must be added without changing the object family frequently.',
+  ],
+  beforeCode: `class Exporter {
+    String render(Node node) {
+        if (node instanceof TextNode) return "text";
+        if (node instanceof ImageNode) return "image";
+        if (node instanceof TableNode) return "table";
+        return "";
+    }
+}`,
+  afterCode: `interface NodeVisitor<T> {
+    T visit(TextNode node);
+    T visit(ImageNode node);
+    T visit(TableNode node);
+}
+interface Node { <T> T accept(NodeVisitor<T> visitor); }`,
+  mitigationHint: 'Move repeated type-dispatch operations into a Visitor or polymorphic operation on the object family',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V303', 'RICA-V314', 'RICA-V316'],
+  sourceRef: 'src/analyzers/designPatternAnalyzer.ts:1555',
+  tags: ['visitor', 'instanceof', 'behavioral', 'polymorphism'],
+});
+
+d({
+  code: 'RICA-V326',
+  name: 'Missing Memento',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingMemento',
+  layer: 'mutable domain/application object',
+  trigger:
+    'A non-exempt mutable class contains multiple snapshot, restore, undo, redo, rollback, or checkpoint style methods together with mutable state signals.',
+  whyItMatters:
+    'Manual state capture and rollback logic can leak internal representation and become inconsistent as fields change. Memento keeps snapshots explicit and protects object invariants during restore operations.',
+  howToFix: [
+    'Create a small immutable memento/snapshot type for the state that must be restored.',
+    'Move capture and restore logic into the originator class.',
+    'Keep undo history outside the originator when multiple snapshots must be managed.',
+  ],
+  beforeCode: `class Editor {
+    private String text;
+    private int cursor;
+    Map<String,Object> saveState() { /* copy fields */ return map; }
+    void restore(Map<String,Object> state) { /* write fields */ }
+}`,
+  afterCode: `record EditorMemento(String text, int cursor) {}
+class Editor {
+    EditorMemento save() { return new EditorMemento(text, cursor); }
+    void restore(EditorMemento snapshot) { /* restore safely */ }
+}`,
+  mitigationHint: 'Encapsulate snapshot/restore state in a Memento instead of scattering manual rollback fields',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V321'],
+  sourceRef: 'src/analyzers/designPatternAnalyzer.ts:1595',
+  tags: ['memento', 'undo', 'snapshot', 'behavioral'],
+});
+
+d({
+  code: 'RICA-V327',
+  name: 'Missing Iterator',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkMissingIterator',
+  layer: 'domain/application collection owner',
+  trigger:
+    'A non-exempt class exposes an internal mutable collection through a public getter-like method.',
+  whyItMatters:
+    'Returning internal mutable collections lets callers modify object state directly and forces them to understand storage details. Iterator, Iterable, streams, or read-only views preserve encapsulation.',
+  howToFix: [
+    'Return `Iterable<T>`, `Iterator<T>`, `Stream<T>`, or an unmodifiable view.',
+    'Keep mutation methods explicit on the owning aggregate/service.',
+    'Avoid returning the actual backing collection instance.',
+  ],
+  beforeCode: `class OrderBook {
+    private final List<Order> orders = new ArrayList<>();
+    public List<Order> getOrders() { return orders; }
+}`,
+  afterCode: `class OrderBook implements Iterable<Order> {
+    private final List<Order> orders = new ArrayList<>();
+    public Iterator<Order> iterator() { return orders.iterator(); }
+}`,
+  mitigationHint: 'Expose iteration through Iterator/Iterable or read-only views instead of leaking mutable collections',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V207'],
+  sourceRef: 'src/analyzers/designPatternAnalyzer.ts:1635',
+  tags: ['iterator', 'encapsulation', 'collection', 'behavioral'],
+});
+
+d({
+  code: 'RICA-V328',
+  name: 'Interpreter Candidate',
+  severity: 'warning',
+  stage: 'stage4',
+  stageLabel: STAGE4,
+  detectorSource: 'DesignPatternAnalyzer',
+  detector: 'checkInterpreterCandidate',
+  layer: 'rule/query/expression processing',
+  trigger:
+    'A non-exempt parser/evaluator method receives expression-like text and uses multiple string parsing calls together with branching logic.',
+  whyItMatters:
+    'Rule, query, and expression parsing quickly becomes hard to maintain when it is written as ad hoc string checks. An Interpreter or explicit expression model separates grammar concerns from application workflow.',
+  howToFix: [
+    'Define the supported grammar or rule terms explicitly.',
+    'Represent each expression/rule as a small object or command.',
+    'Move parsing/evaluation branches into an Interpreter or dedicated expression evaluator.',
+  ],
+  beforeCode: `class RuleEvaluator {
+    boolean evaluate(String rule) {
+        if (rule.startsWith("age")) return true;
+        if (rule.contains("status")) return true;
+        if (rule.matches(".*vip.*")) return true;
+        return false;
+    }
+}`,
+  afterCode: `interface RuleExpression { boolean matches(Customer customer); }
+class RuleEvaluator {
+    boolean evaluate(RuleExpression rule, Customer customer) {
+        return rule.matches(customer);
+    }
+}`,
+  mitigationHint: 'Extract rule/query/expression parsing into an Interpreter or dedicated expression model',
+  configKey: 'enableDesignPatternChecks',
+  relatedRules: ['RICA-V303', 'RICA-V310'],
+  sourceRef: 'src/analyzers/designPatternAnalyzer.ts:1685',
+  tags: ['interpreter', 'parser', 'rule-engine', 'behavioral'],
+});
+
+d({
   code: 'RICA-V300',
   name: 'Unmapped Design-Pattern Rule (fallback)',
   severity: 'warning',
@@ -1876,7 +2064,7 @@ d({
   detector: 'DesignPatternAnalyzer (fallback)',
   layer: 'design-pattern',
   trigger:
-    'Any design-pattern rule type that is not mapped to a specific code. Currently unreachable because every emitted rule type has a dedicated code.',
+    'Any design-pattern rule type that is not mapped to a specific code. Currently unreachable because every emitted rule type from V301 to V328 has a dedicated code.',
   whyItMatters:
     'Safety net for future design-pattern rules so they surface as visible violations rather than being swallowed. New rules should be documented with a real code.',
   howToFix: [
