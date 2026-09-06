@@ -357,6 +357,7 @@ function createAiCoordinator(cfg: vscode.WorkspaceConfiguration): AiAdvisoryCoor
         enableAiAdvisory: cfg.get<boolean>('enableAiAdvisory', false),
         aiProvider: cfg.get<'off' | 'ollama' | 'openai-compatible'>('aiProvider', 'ollama'),
         aiEndpoint: cfg.get<string>('aiEndpoint', 'http://localhost:11434'),
+        aiApiKey: cfg.get<string>('aiApiKey', ''),
         aiModel: cfg.get<string>('aiModel', 'qwen2.5-coder:7b'),
         aiMaxTokensPerRequest: cfg.get<number>('aiMaxTokensPerRequest', 2000),
         aiTimeoutMs: cfg.get<number>('aiTimeoutMs', 30000),
@@ -364,7 +365,11 @@ function createAiCoordinator(cfg: vscode.WorkspaceConfiguration): AiAdvisoryCoor
         aiTrigger: cfg.get<'onDemand' | 'onSave' | 'onFullScan'>('aiTrigger', 'onDemand'),
         aiAuditLogEnabled: cfg.get<boolean>('aiAuditLogEnabled', true),
     };
-    const timeout = { timeoutMs: aiConfig.aiTimeoutMs, maxTokensPerRequest: aiConfig.aiMaxTokensPerRequest };
+    const timeout = {
+        timeoutMs: aiConfig.aiTimeoutMs,
+        maxTokensPerRequest: aiConfig.aiMaxTokensPerRequest,
+        apiKey: aiConfig.aiApiKey,
+    };
     const provider = aiConfig.aiProvider === 'openai-compatible'
         ? new OpenAICompatibleAiAdapter(aiConfig.aiEndpoint, aiConfig.aiModel, timeout)
         : new OllamaAiAdapter(aiConfig.aiEndpoint, aiConfig.aiModel, timeout);

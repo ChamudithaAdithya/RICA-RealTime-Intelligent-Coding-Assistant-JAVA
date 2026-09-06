@@ -7,6 +7,7 @@ export interface AiConfig {
   enableAiAdvisory: boolean;
   aiProvider: 'off' | 'ollama' | 'openai-compatible';
   aiEndpoint: string;
+  aiApiKey?: string;
   aiModel: string;
   aiMaxTokensPerRequest: number;
   aiTimeoutMs: number;
@@ -40,6 +41,7 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
   enableAiAdvisory: false,
   aiProvider: 'ollama',
   aiEndpoint: 'http://localhost:11434',
+  aiApiKey: '',
   aiModel: 'qwen2.5-coder:7b',
   aiMaxTokensPerRequest: 2000,
   aiTimeoutMs: 30000,

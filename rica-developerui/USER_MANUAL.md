@@ -192,7 +192,34 @@ For clean screenshots:
 4. Hide unrelated sidebars or terminals unless they are part of the evidence.
 5. Crop only empty space, not important fields.
 
-## 12. Recommended Marketplace Description
+## 12. AI API Key Setup
+
+RICA can use an OpenAI-compatible API instead of Ollama for optional AI advisory review.
+
+Add this in VS Code User Settings:
+
+```json
+{
+  "javaAstAnalyzer.enableAiAdvisory": true,
+  "javaAstAnalyzer.aiProvider": "openai-compatible",
+  "javaAstAnalyzer.aiEndpoint": "https://api.openai.com",
+  "javaAstAnalyzer.aiApiKey": "YOUR_API_KEY",
+  "javaAstAnalyzer.aiModel": "gpt-4o-mini",
+  "javaAstAnalyzer.aiTrigger": "onDemand"
+}
+```
+
+Use `https://api.openai.com` or `https://api.openai.com/v1` for OpenAI-style APIs. RICA normalises the endpoint internally.
+
+Do not commit API keys into a project repository. Prefer VS Code User Settings for personal keys, and review privacy requirements before sending commercial source-code snippets to an external provider.
+
+Then:
+
+1. Run `Java AST: Analyze Full Project`.
+2. Run the AI review command from the Command Palette.
+3. Check the `Java AST Analyzer` output channel if the provider is unavailable.
+
+## 13. Recommended Marketplace Description
 
 Short description:
 
@@ -211,7 +238,7 @@ Feature bullets:
 - exportable AST, dependency graph, violation, and statistics snapshot
 - optional AI advisory workflow that does not replace deterministic analysis
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 | Problem | What to check |
 | --- | --- |
@@ -219,10 +246,11 @@ Feature bullets:
 | No violations appear | Run `Java AST: Analyze Full Project`, confirm Java files are not excluded, and check the output channel named `Java AST Analyzer`. |
 | Too many warnings | Check `architectureStyle`, `layerBoundaries`, `excludePatterns`, and whether design-pattern advisory rules should be enabled for that project. |
 | Browser viewer does not open | Start the optional backend or use local diagnostics and exported snapshots instead. |
+| AI advisory does not respond | Check `enableAiAdvisory`, `aiProvider`, `aiEndpoint`, `aiApiKey`, `aiModel`, and the `Java AST Analyzer` output channel. |
 | Generated code is reported | Add generated/build folders to `excludePatterns`. |
 | Marketplace details look too long | The Marketplace details page is generated from `README.md`; keep README short and link this user manual for full instructions. |
 
-## 14. Recommended First Demo
+## 15. Recommended First Demo
 
 For a viva or Marketplace demo:
 
@@ -234,4 +262,3 @@ For a viva or Marketplace demo:
 6. Open the rule documentation.
 7. Export the analysis snapshot.
 8. Explain how a false positive can be handled through configuration.
-

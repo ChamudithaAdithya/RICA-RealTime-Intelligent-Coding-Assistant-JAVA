@@ -1,120 +1,186 @@
-# RICA - Code Analyzer
+# RICA - JAVA Code Analyzer
 
-RICA is a Visual Studio Code extension that helps Java developers detect architecture, dependency, API boundary, package boundary, business-logic placement, and design-pattern opportunity findings while they work.
+[![Version](https://img.shields.io/badge/version-0.1.0-blue)](package.json)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.110.0%2B-007ACC)](https://code.visualstudio.com/)
 
-It brings architecture feedback closer to the developer by showing diagnostics directly inside VS Code, opening the affected source location, and linking each finding to rule documentation with examples and fix guidance.
+RICA is a Visual Studio Code extension for real-time Java architecture analysis. It helps developers find architecture, dependency, API boundary, package boundary, business-logic placement, and design-pattern opportunity findings directly inside the editor.
 
-For the complete installation guide, screenshots checklist, troubleshooting notes, and viva/demo workflow, see the [RICA User Manual](USER_MANUAL.md).
+Instead of waiting for a manual review or late refactoring stage, RICA shows architecture feedback while the developer is working. Each finding includes a stable RICA rule code, severity, evidence, confidence, source location, and documentation link.
+
+## Visual Demonstrations
+
+High-quality screenshots or GIFs should be added before the final Marketplace release.
+
+Recommended files:
+
+| File | What it should show |
+| --- | --- |
+| `resources/screenshots/01-command-palette.png` | RICA commands visible after searching `Java AST` in the Command Palette. |
+| `resources/screenshots/02-inline-diagnostic.png` | A Java file with a RICA diagnostic underline and hover explanation. |
+| `resources/screenshots/03-violations-panel.png` | Architecture Violations panel with rule code, severity, evidence, confidence, file, and docs button. |
+| `resources/screenshots/04-rule-documentation.png` | Rule documentation page showing trigger, before/after examples, diff, how to fix, and verification steps. |
+| `resources/screenshots/05-settings.png` | `javaAstAnalyzer` extension settings in VS Code. |
+| `resources/screenshots/06-analysis-snapshot.png` | Exported `.rica/analysis-snapshot` files containing AST, dependency graph, violations, and stats. |
+
+Detailed screenshot instructions are available in the [RICA User Manual](USER_MANUAL.md#11-screenshot-guide).
+
+## Features
+
+- Real-time Java architecture diagnostics inside VS Code
+- Full project analysis and current-file analysis
+- Architecture Violations panel for reviewing all findings in one place
+- Click-to-source navigation from violation rows
+- AST-based Java structure extraction
+- Dependency graph analysis for cross-file architecture issues
+- Package boundary checking for Clean Architecture and conventional Spring layouts
+- API boundary rules for DTO, validation, and resource-layer issues
+- Selected business-logic placement checks
+- Design-pattern opportunity rules from `RICA-V301` to `RICA-V328`
+- Rule documentation with violating examples, fixed examples, diffs, fix guidance, and verification steps
+- Concept documentation for architecture, dependency direction, repositories, DTOs, design patterns, confidence levels, and rule tuning
+- Incremental revalidation for faster feedback after edits
+- Exportable AST, dependency graph, violation, configuration, and statistics snapshot
+- Optional AI advisory workflow for explanation and remediation support
 
 ## What RICA Detects
 
-- Layered architecture violations in Java projects
-- Controller, service, repository, entity, DTO, and infrastructure boundary issues
-- API boundary problems such as entity exposure and missing validation
-- Project-wide dependency graph issues such as controller bypass, cycles, and inverted dependencies
-- Package boundary violations for Clean Architecture and conventional Spring layouts
-- Selected business-logic placement issues, such as business logic inside controllers/resources
-- Design-pattern opportunities and structural design smells from `RICA-V301` to `RICA-V328`
-- Advisory AI findings when optional AI review is enabled
+RICA focuses on architecture and design-quality issues that are often missed by ordinary syntax-level checks.
 
-## Main Features
-
-- Inline VS Code diagnostics with severity, rule code, evidence, confidence, and explanation
-- Architecture Violations panel for reviewing findings in one place
-- Click-to-source navigation from each violation
-- Documentation links for every RICA rule
-- Concept documentation for architecture, dependency direction, DTOs, repositories, design patterns, framework classification, confidence levels, and rule tuning
-- Incremental revalidation for faster feedback after file edits
-- Exportable analysis snapshot containing AST facts, dependency graph, violations, stats, and configuration
-- Configurable architecture profile and package boundary rules
-- Local deterministic analysis that works without the optional backend
-
-## Screenshots
-
-Recommended Marketplace screenshots:
-
-| Screenshot | What it should show |
+| Area | Examples |
 | --- | --- |
-| Command Palette | `Java AST` commands visible in VS Code. |
-| Inline Diagnostic | A Java source file with a RICA underline and hover message. |
-| Architecture Violations Panel | Rule code, severity, evidence, confidence, file, and docs button. |
-| Rule Documentation | A violation page showing trigger, before/after examples, diff, how to fix, and how to verify. |
-| Settings | `javaAstAnalyzer` settings such as architecture style, excluded folders, and detector toggles. |
-| Analysis Snapshot | `.rica/analysis-snapshot` files showing exported AST, dependency graph, violations, and stats. |
+| Layer rules | Controller using repository directly, service with raw infrastructure access, entity persistence leakage. |
+| API boundaries | Entity exposure, missing validation, resource/controller logic leakage. |
+| Dependency graph | Controller bypass, cross-layer dependency, cyclic dependency, inverted dependency, entity exposure. |
+| Package boundaries | Disallowed dependency from one configured architecture layer to another. |
+| Business-logic placement | Business logic inside controllers/resources instead of service/domain layers. |
+| Design patterns | Strategy, Factory, Builder, Adapter, Command, State, Observer, Decorator, Proxy, Visitor, Mediator, Memento, Iterator, Interpreter opportunities. |
+| AI advisory | Optional review of selected ambiguous or business-rule-adjacent findings. |
 
-Screenshot instructions are included in the [User Manual](USER_MANUAL.md#11-screenshot-guide).
+Design-pattern findings are presented as reviewable opportunities, not automatic proof that a design pattern must be added.
 
 ## Quick Start
 
-1. Install RICA from the VS Code Marketplace or from a packaged `.vsix`.
+1. Install RICA from the VS Code Marketplace or from a `.vsix` package.
 2. Open a Java project folder in VS Code.
-3. Run `Java AST: Analyze Full Project` from the Command Palette.
+3. Run `Java AST: Analyze Full Project`.
 4. Run `Java AST: Show Architecture Violations`.
-5. Review each finding, open the source location, and use `Docs` for remediation guidance.
+5. Select a finding to open the source location.
+6. Click `Docs` to read the rule explanation and fix guidance.
 
 ## Commands
 
-| Command | Purpose |
+| Command | Description |
 | --- | --- |
 | `Java AST: Analyze Full Project` | Parses and analyses the full Java workspace. |
 | `Java AST: Analyze Current File` | Re-analyses only the active Java file. |
 | `Java AST: Show Architecture Violations` | Opens the RICA violations panel. |
-| `Java AST: Export Analysis Snapshot` | Exports ASTs, dependency graph, violations, incremental maps, stats, and config JSON. |
-| `Java AST: Open RICA Documentation` | Opens the bundled RICA documentation. |
+| `Java AST: Export Analysis Snapshot` | Exports AST, dependency graph, violations, incremental maps, stats, and config JSON. |
+| `Java AST: Open RICA Documentation` | Opens bundled RICA documentation. |
 | `Java AST: Open Browser Viewer` | Opens the optional browser AST viewer when the backend is running. |
 | `Java AST: Show Status` | Shows RICA status and quick actions. |
 | `Java AST: Reset Backend Data` | Clears stored AST and violation state. |
 
-## Understanding Violations
+## Extension Settings
 
-RICA findings include:
+RICA can be configured from VS Code Settings or `settings.json`.
 
-- `code`: stable rule identifier, such as `RICA-V501`
-- `severity`: error, warning, or info
-- `evidence`: the source fact that triggered the rule
-- `reason`: short explanation of the problem
-- `confidence`: how deterministic or heuristic the finding is
-- `docs`: a link to the relevant rule documentation
+| Setting | Default | Description |
+| --- | --- | --- |
+| `javaAstAnalyzer.autoAnalyzeOnOpen` | `true` | Automatically analyses a Java workspace when opened. |
+| `javaAstAnalyzer.debounceDelay` | `1000` | Delay in milliseconds before analysing file changes. |
+| `javaAstAnalyzer.architectureStyle` | `auto` | Architecture profile: `auto`, `conventional-spring`, or `clean`. |
+| `javaAstAnalyzer.excludePatterns` | build/test defaults | Glob patterns excluded from analysis. |
+| `javaAstAnalyzer.enableArchitecturalChecks` | `true` | Enables cross-file architecture rules. |
+| `javaAstAnalyzer.enableDesignPatternChecks` | `true` | Enables design-pattern opportunity rules from `RICA-V301` to `RICA-V328`. |
+| `javaAstAnalyzer.enableBusinessLogicChecks` | `true` | Enables selected business-logic placement rules. |
+| `javaAstAnalyzer.businessLogicThreshold` | `3` | Controls sensitivity for business-logic-in-controller/resource checks. |
+| `javaAstAnalyzer.layerBoundaries` | Clean/Spring defaults | Custom package-to-layer mapping and allowed dependencies. |
+| `javaAstAnalyzer.backendUrl` | `http://localhost:8082` | Optional backend URL for the browser AST viewer. |
+| `javaAstAnalyzer.enableAiAdvisory` | `false` | Enables optional AI advisory findings. |
+| `javaAstAnalyzer.aiProvider` | `ollama` | AI provider: `off`, `ollama`, or `openai-compatible`. |
+| `javaAstAnalyzer.aiEndpoint` | `http://localhost:11434` | AI provider endpoint. |
+| `javaAstAnalyzer.aiApiKey` | empty | Optional API key for OpenAI-compatible providers. |
+| `javaAstAnalyzer.aiModel` | `qwen2.5-coder:7b` | Model name used by the AI provider. |
+| `javaAstAnalyzer.aiTrigger` | `onDemand` | AI trigger mode: `onDemand`, `onSave`, or `onFullScan`. |
 
-Architecture and package-boundary findings are usually more deterministic. Design-pattern findings are intentionally advisory because a pattern opportunity still requires developer judgement.
+Example OpenAI-compatible AI setup:
+
+```json
+{
+  "javaAstAnalyzer.enableAiAdvisory": true,
+  "javaAstAnalyzer.aiProvider": "openai-compatible",
+  "javaAstAnalyzer.aiEndpoint": "https://api.openai.com",
+  "javaAstAnalyzer.aiApiKey": "YOUR_API_KEY",
+  "javaAstAnalyzer.aiModel": "gpt-4o-mini",
+  "javaAstAnalyzer.aiTrigger": "onDemand"
+}
+```
+
+Store private API keys in VS Code User Settings, not in committed workspace settings.
+
+## Requirements
+
+RICA local deterministic analysis requires:
+
+- Visual Studio Code `1.110.0` or newer
+- A Java project opened in VS Code
+
+Running RICA from source requires:
+
+- Node.js
+- npm
+
+Optional features:
+
+- The browser AST viewer requires the RICA backend service at the configured `javaAstAnalyzer.backendUrl`.
+- AI advisory requires either Ollama or an OpenAI-compatible API endpoint.
+
+## Documentation
+
+RICA includes bundled documentation for rules and concepts.
+
+Open documentation from:
+
+- `Java AST: Open RICA Documentation`
+- the `Docs` button in the Architecture Violations panel
+- the editor lightbulb action for RICA diagnostics
+
+Each rule page explains:
+
+- what triggers the violation
+- when the finding is probably real
+- when it may be a false positive
+- violating and fixed examples
+- highlighted diff
+- why the fix helps
+- how to verify the fix
+
+For full usage instructions, see [RICA User Manual](USER_MANUAL.md).
 
 ## Handling False Positives
 
-RICA is configurable because real Java projects use different architecture styles.
+Architecture rules depend on project conventions, so RICA is configurable.
 
-If a finding is not wrong for your project:
+If a finding is acceptable in your project:
 
 - choose the correct `javaAstAnalyzer.architectureStyle`
 - update `javaAstAnalyzer.layerBoundaries`
 - add generated/build/test/vendor folders to `javaAstAnalyzer.excludePatterns`
-- disable a detector category that does not apply to the project
-- treat low-confidence design-pattern findings as review suggestions rather than mandatory fixes
+- disable a detector category if it does not apply
+- treat low-confidence design-pattern findings as advisory review items
 
-Inline suppression for one exact line or method is planned as future work. The current version mainly handles false positives through project configuration, exclusions, framework-aware classification, confidence levels, and documentation guidance.
+Inline suppression for a single exact finding is planned as future work. The current version handles false positives mainly through configuration, exclusions, framework-aware classification, confidence levels, and documentation guidance.
 
-## Key Settings
+## Exporting Evidence
 
-| Setting | Purpose |
-| --- | --- |
-| `javaAstAnalyzer.autoAnalyzeOnOpen` | Automatically analyses a Java workspace when opened. |
-| `javaAstAnalyzer.architectureStyle` | Selects `auto`, `conventional-spring`, or `clean` architecture interpretation. |
-| `javaAstAnalyzer.excludePatterns` | Excludes generated, build, test, vendor, or irrelevant folders. |
-| `javaAstAnalyzer.enableArchitecturalChecks` | Enables cross-file architecture rules. |
-| `javaAstAnalyzer.enableDesignPatternChecks` | Enables design-pattern opportunity rules from `RICA-V301` to `RICA-V328`. |
-| `javaAstAnalyzer.enableBusinessLogicChecks` | Enables selected business-logic placement rules. |
-| `javaAstAnalyzer.layerBoundaries` | Customises package-to-layer mapping and allowed dependencies. |
-| `javaAstAnalyzer.backendUrl` | Configures the optional backend/browser viewer URL. |
-| `javaAstAnalyzer.enableAiAdvisory` | Enables optional AI advisory findings. |
-
-## Exporting AST And Dependency Evidence
-
-After running `Java AST: Analyze Full Project`, run:
+Run:
 
 ```text
 Java AST: Export Analysis Snapshot
 ```
 
-RICA writes the current internal analysis structures to:
+RICA writes analysis evidence to:
 
 ```text
 .rica/analysis-snapshot/
@@ -131,35 +197,13 @@ The snapshot includes:
 - `config.json`
 - `full-snapshot.json`
 
-This is useful for debugging false positives, preparing evaluation evidence, and demonstrating how RICA builds AST and dependency graph facts.
+This is useful for debugging, evaluation, research evidence, and demonstrations.
 
-## Documentation
+## Privacy
 
-Use `Java AST: Open RICA Documentation` to open the bundled documentation.
+RICA's deterministic analysis runs locally. Source code does not need to leave the machine for normal violation detection.
 
-From the Architecture Violations panel, click `Docs` on a violation row to open the matching rule page.
-
-Each rule page explains:
-
-- what triggers the violation
-- when it is probably real
-- when it may be a false positive
-- violating and fixed examples
-- highlighted diff
-- why the fix helps
-- how to verify the fix
-
-## Optional Backend And AI Advisory
-
-Local deterministic violation detection works without the backend.
-
-The optional browser AST viewer requires the configured backend URL, defaulting to:
-
-```text
-http://localhost:8082
-```
-
-AI advisory mode is optional and disabled by default. Deterministic RICA analysis remains available without sending source code to an external AI provider. Teams should review privacy requirements before enabling AI advisory mode for commercial or private codebases.
+AI advisory is optional and disabled by default. If enabled, diagnostic context and source snippets may be sent to the configured AI provider. Teams should review privacy and compliance requirements before enabling AI advisory for private or commercial codebases.
 
 ## Running From Source
 
@@ -170,7 +214,12 @@ npm install
 npm run compile
 ```
 
-Then open the project in VS Code and press `F5`. A new Extension Development Host window opens. In that window, open a Java project and run `Java AST: Analyze Full Project`.
+Then:
+
+1. Open the RICA repository in VS Code.
+2. Press `F5`.
+3. In the Extension Development Host window, open a Java project.
+4. Run `Java AST: Analyze Full Project`.
 
 ## Packaging
 
@@ -180,40 +229,30 @@ npm run compile
 npx vsce package
 ```
 
-Install the generated `.vsix` from VS Code:
+Install the generated `.vsix`:
 
-1. Open the Extensions view.
+1. Open the VS Code Extensions view.
 2. Select `...`.
 3. Choose `Install from VSIX...`.
 4. Pick the generated package.
 5. Reload VS Code if prompted.
 
-## Known Limitations
+## Known Issues
 
-- RICA detects selected architecture, boundary, business-logic placement, and design-pattern issues. It does not claim to prove every possible business rule.
+- RICA detects selected architecture, boundary, business-logic placement, and design-pattern issues. It does not prove every possible business rule.
 - Some design-pattern findings are advisory because static analysis cannot always infer design intent perfectly.
 - Full IFDS-based authorization and taint-flow tracing remains future work.
 - The browser AST viewer is unavailable when the optional backend is offline.
-- Inline suppression for a single exact finding is planned as future work.
+- Inline suppression for one exact finding is planned as future work.
 
-## Project Structure
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
-```text
-src/
-  extension.ts       VS Code extension entry point and composition root
-  analyzers/         Java architecture and design-rule analyzers
-  application/       Use cases, AI coordination, and ports
-  core/              AST state, graphs, violations, impact, and rule catalog
-  domain/            Shared types and analyzer configuration
-  infrastructure/    Parser, VS Code, backend, file-watcher, and AI adapters
-  ui/                Documentation, violations, and code-action webviews
-  tooling/           Development-only source checks
-  test/              Automated tests and Java fixtures
-dist/                Generated JavaScript created by `npm run compile`
-docs/                Documentation sources and generated VitePress frontend
-engine/              Optional backend and browser visualizer
-resources/           Extension icons and static resources
-scripts/             Build/report tools and manual development utilities
-```
+## License
 
-For a code-level map of activation, parsing, detection, diagnostics, incremental revalidation, and documentation, see `src/README.md`.
+This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
+
+## Support
+
+Use the GitHub issue tracker for bugs, false-positive reports, feature requests, and documentation improvements:
+
+https://github.com/ChamudithaAdithya/RICA-RealTime-Intelligent-Coding-Assistant-JAVA/issues

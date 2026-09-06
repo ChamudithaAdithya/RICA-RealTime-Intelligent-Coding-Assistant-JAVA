@@ -20,7 +20,7 @@ export class OpenAICompatibleAiAdapter implements AiDecisionProvider {
 
   async isAvailable(): Promise<boolean> {
     try {
-      const res = await httpRequest(`${this.stripSlash(this.endpoint)}/models`, {
+      const res = await httpRequest(`${this.apiBase()}/models`, {
         method: 'GET',
         timeoutMs: this.options.timeoutMs,
         headers: this.authHeaders(),
@@ -32,7 +32,6 @@ export class OpenAICompatibleAiAdapter implements AiDecisionProvider {
   }
 
   async evaluate(context: AiContextPayload): Promise<AiDecision[]> {
-    const base = this.stripSlash(this.endpoint);
     const body = {
       model: this.model,
       messages: buildMessages(context),
@@ -40,7 +39,7 @@ export class OpenAICompatibleAiAdapter implements AiDecisionProvider {
       max_tokens: this.options.maxTokensPerRequest,
       response_format: { type: 'json_object' },
     };
-    const res = await httpRequest(`${base}/v1/chat/completions`, {
+    const res = await httpRequest(`${this.apiBase()}/chat/completions`, {
       body,
       timeoutMs: this.options.timeoutMs,
       headers: this.authHeaders(),
@@ -56,6 +55,11 @@ export class OpenAICompatibleAiAdapter implements AiDecisionProvider {
 
   private authHeaders(): Record<string, string> | undefined {
     return this.options.apiKey ? { Authorization: `Bearer ${this.options.apiKey}` } : undefined;
+  }
+
+  private apiBase(): string {
+    const base = this.stripSlash(this.endpoint);
+    return base.endsWith('/v1') ? base : `${base}/v1`;
   }
 
   private stripSlash(url: string): string {

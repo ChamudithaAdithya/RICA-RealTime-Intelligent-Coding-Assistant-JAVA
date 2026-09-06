@@ -10,6 +10,7 @@ export class VscodeConfigProvider implements ConfigProvider {
       enableAiAdvisory: cfg.get<boolean>('enableAiAdvisory', DEFAULT_AI_CONFIG.enableAiAdvisory),
       aiProvider: cfg.get<AiConfig['aiProvider']>('aiProvider', DEFAULT_AI_CONFIG.aiProvider),
       aiEndpoint: cfg.get<string>('aiEndpoint', DEFAULT_AI_CONFIG.aiEndpoint),
+      aiApiKey: cfg.get<string>('aiApiKey', DEFAULT_AI_CONFIG.aiApiKey ?? ''),
       aiModel: cfg.get<string>('aiModel', DEFAULT_AI_CONFIG.aiModel),
       aiMaxTokensPerRequest: cfg.get<number>('aiMaxTokensPerRequest', DEFAULT_AI_CONFIG.aiMaxTokensPerRequest),
       aiTimeoutMs: cfg.get<number>('aiTimeoutMs', DEFAULT_AI_CONFIG.aiTimeoutMs),

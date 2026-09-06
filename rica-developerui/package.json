@@ -1,6 +1,6 @@
 {
   "name": "rica-realtime-code-violations-analyzer",
-  "displayName": "RICA - Code Analyzer",
+  "displayName": "RICA - JAVA Code Analyzer",
   "description": "Real-time Java architecture, dependency, API boundary, and design-pattern analysis inside VS Code.",
   "version": "0.1.0",
   "publisher": "Geeth-Chamuditha-Adithya-Herath",
@@ -290,7 +290,12 @@
         "javaAstAnalyzer.aiEndpoint": {
           "type": "string",
           "default": "http://localhost:11434",
-          "description": "AI provider endpoint. Set to your Colab/tunnel Ollama URL when running the model remotely"
+          "description": "AI provider endpoint. For OpenAI-compatible APIs, use the provider base URL such as https://api.openai.com or https://api.openai.com/v1"
+        },
+        "javaAstAnalyzer.aiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional API key for openai-compatible AI providers. Prefer storing this in User Settings, not workspace settings, when using private keys."
         },
         "javaAstAnalyzer.aiModel": {
           "type": "string",
