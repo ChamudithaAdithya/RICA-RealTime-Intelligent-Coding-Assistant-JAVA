@@ -113,6 +113,30 @@ public class ServiceB {
         assert.ok(cyclic, 'should detect cyclic dependency');
     });
 
+    it('should not classify a one-way service-to-client dependency as V403', () => {
+        const files = {
+            'NotificationService.java': parse(`package com.example.service;
+import org.springframework.stereotype.Service;
+import com.example.controller.feignClient.NotificationServiceClient;
+@Service
+public class NotificationService {
+    private final NotificationServiceClient client;
+    public NotificationService(NotificationServiceClient client) { this.client = client; }
+    public void notifyUser() { client.send(); }
+}`, 'NotificationService.java'),
+            'NotificationServiceClient.java': parse(`package com.example.controller.feignClient;
+import org.springframework.cloud.openfeign.FeignClient;
+@FeignClient("notifications")
+public interface NotificationServiceClient {
+    void send();
+}`, 'NotificationServiceClient.java'),
+        };
+        const graph = buildGraphFromFiles(files);
+        const violations = buildCrossFileAnalyzer().analyze(graph, files);
+        assert.ok(!violations.some(v => v.code === 'RICA-V403'),
+            'a one-way dependency is not a circular dependency');
+    });
+
     it('should detect cross-layer-violation (entity referencing service)', () => {
         const files = {
             'MyEntity.java': parse(`package com.example;

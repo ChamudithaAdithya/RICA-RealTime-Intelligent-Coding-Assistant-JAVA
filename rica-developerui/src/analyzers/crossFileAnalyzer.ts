@@ -19,10 +19,8 @@ const CROSS_FILE_CODE_MAP: Record<string, string> = {
     'LAYER_BYPASS': 'RICA-V401',
     'CROSS_LAYER': 'RICA-V402',
     'CYCLIC_DEP': 'RICA-V403',
-    // The cyclic-dependency graph rule also emits INVERTED_DEP findings
-    // (lower layer depending on a higher layer). Map them to the same
-    // RICA-V403 family instead of falling back to the generic RICA-V400.
-    'INVERTED_DEP': 'RICA-V403',
+    // Inverted layer direction is a cross-layer finding, not a cycle.
+    'INVERTED_DEP': 'RICA-V402',
     'ENTITY_EXPOSURE': 'RICA-V404',
 };
 
@@ -32,11 +30,12 @@ function toUnifiedViolation(
     ruleName: string,
     mitigationHint: string,
 ): Violation {
-    const code = CROSS_FILE_CODE_MAP[ruleId] || 'RICA-V400';
+    const effectiveRuleId = gv.ruleId || ruleId;
+    const code = CROSS_FILE_CODE_MAP[effectiveRuleId] || 'RICA-V400';
     return {
-        id: gv.ruleId ? `${gv.ruleId}-${gv.filePath}-${gv.line || 0}` : `${ruleId}-${gv.filePath}-${gv.line || 0}`,
+        id: `${effectiveRuleId}-${gv.sourceId}-${gv.targetId || ''}-${gv.filePath}-${gv.line || 0}`,
         code,
-        ruleName,
+        ruleName: effectiveRuleId === 'INVERTED_DEP' ? 'Cross-layer dependency violation' : ruleName,
         severity: gv.severity,
         message: gv.message,
         filePath: gv.filePath,
@@ -145,7 +144,18 @@ export class CrossFileAnalyzer {
                 console.error(`[CrossFileAnalyzer] Error in rule "${rule.name}":`, error);
             }
         }
-        return allViolations;
+        const seen = new Set<string>();
+        const relationWideCodes = new Set(['RICA-V402', 'RICA-V403']);
+        return allViolations.filter(violation => {
+            const code = violation.code || '';
+            const evidence = violation.analysisMetadata?.evidence || `${violation.id}`;
+            const key = relationWideCodes.has(code)
+                ? `${code}|${evidence}|${violation.filePath || ''}`
+                : `${code}|${violation.contextMetadata?.targetComponent || ''}|${violation.filePath}|${violation.lineNumber || 0}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
     }
 
     public getRules(): CrossFileRule[] {

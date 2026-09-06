@@ -31,7 +31,11 @@ export class APIResourceLayerAnalyzer {
   // Known entity patterns
   private entityPatterns = ['Entity'];
   // Known DTO patterns
-  private dtoPatterns = ['DTO', 'Request', 'Response', 'VO'];
+  private dtoPatterns = [
+    'DTO', 'Dto', 'Request', 'Response', 'VO', 'VM', 'ViewModel', 'View',
+    'Projection', 'Payload', 'Command', 'Form', 'Resource', 'PickList',
+    'Option',
+  ];
   // Known infrastructure patterns
   private infrastructurePatterns = ['Client', 'Gateway', 'Connector', 'Producer', 'Consumer'];
   // Primitive/wrapper/JDK types — never internal domain types
@@ -98,14 +102,16 @@ export class APIResourceLayerAnalyzer {
             if (!targetFQCN) continue;
 
             // Check if target is a service, repository, or infrastructure
-            const targetInfo = this.classMap.get(targetFQCN);
             const targetLayer = this.classLayers.get(targetFQCN);
+            const targetSimpleName = targetFQCN.split('.').pop() || '';
+            if (this.isStaticUtilityClassName(targetSimpleName)) continue;
+
             const isServiceByLayer = targetLayer === 'service';
             const isRepoByLayer = targetLayer === 'repository' || targetLayer === 'dao';
-            const isInfrastructureByLayer = targetLayer === 'infrastructure' || targetLayer === 'utility';
-            const isServiceByName = this.isServiceClassName(targetFQCN.split('.').pop() || '');
-            const isRepoByName = this.isRepositoryClassName(targetFQCN.split('.').pop() || '');
-            const isInfrastructureByName = this.isInfrastructureClassName(targetFQCN.split('.').pop() || '');
+            const isInfrastructureByLayer = targetLayer === 'infrastructure';
+            const isServiceByName = this.isServiceClassName(targetSimpleName);
+            const isRepoByName = this.isRepositoryClassName(targetSimpleName);
+            const isInfrastructureByName = this.isInfrastructureClassName(targetSimpleName);
 
             if ((isServiceByLayer || isServiceByName) ||
                 (isRepoByLayer || isRepoByName) ||
@@ -153,7 +159,13 @@ export class APIResourceLayerAnalyzer {
 
           // Check for business logic in API resource methods
           const businessLogicScore = method.body?.businessLogicScore ?? 0;
-          if (businessLogicScore >= this.businessLogicThreshold) { // Threshold for significant business logic
+          const controllerAlreadyCovered = cls.annotations?.some(annotation =>
+            annotation.name === 'RestController'
+            || annotation.name === 'Controller'
+            || annotation.name.endsWith('.RestController')
+            || annotation.name.endsWith('.Controller')
+          );
+          if (!controllerAlreadyCovered && businessLogicScore >= this.businessLogicThreshold) {
             violations.push({
               type: 'business-logic-in-resource',
               message: `API resource method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer.`,
@@ -381,6 +393,10 @@ export class APIResourceLayerAnalyzer {
     return this.infrastructurePatterns.some(pattern => className.endsWith(pattern));
   }
 
+  private isStaticUtilityClassName(className: string): boolean {
+    return /(Utils?|Utility|Helper|Constants?)$/i.test(className);
+  }
+
   private isEntityClassName(className: string): boolean {
     return this.entityPatterns.some(pattern => className.endsWith(pattern));
   }
@@ -425,8 +441,14 @@ export class APIResourceLayerAnalyzer {
     'HttpHeaders','RequestContext','ServletRequest','ServletResponse','WebRequest','NativeWebRequest','RedirectAttributes'
   ]);
 
-  // Spring response wrappers are transport concerns, not persistence entities.
-  private readonly frameworkResponseTypes = new Set(['ResponseEntity']);
+  // Transport, collection, pagination, and common API envelope types are API
+  // contract wrappers. They can contain unsafe entity types, but are not
+  // themselves internal domain exposure.
+  private readonly apiContractWrapperTypes = new Set([
+    'ResponseEntity', 'HttpEntity', 'ApiResponse', 'PageVM', 'Page', 'Slice',
+    'Pageable', 'Sort', 'List', 'Set', 'Map', 'Collection', 'Iterable',
+    'Optional', 'CompletableFuture', 'Mono', 'Flux',
+  ]);
 
   /** Spring binding annotations that mark framework-managed params (not payload validation targets). */
   private readonly frameworkBindingAnnotations = new Set([
@@ -505,13 +527,20 @@ export class APIResourceLayerAnalyzer {
   private isInternalDomainType(typeName: string, imports: ImportInfo[], currentPackage?: string): boolean {
     if (!typeName) return false;
     const raw = this.stripGenerics(typeName);
+    const simple = raw.split('.').pop() || raw;
     if (this.isSimpleType(raw)) return false;
+    if (this.isSimpleType(simple)) return false;
+    if (this.apiContractWrapperTypes.has(simple)) return false;
+    if (this.isDTOClassName(simple)) return false;
     if (this.isDTOClassName(raw)) return false;
     if (this.isStandardLibraryType(raw)) return false;
 
     const fqcn = this.resolveTypeName(raw, imports, currentPackage);
     if (fqcn) {
+      const resolvedSimple = fqcn.split('.').pop() || fqcn;
       if (this.isStandardLibraryType(fqcn)) return false;
+      if (this.apiContractWrapperTypes.has(resolvedSimple)) return false;
+      if (this.isDTOClassName(resolvedSimple)) return false;
       if (this.classMap.has(fqcn)) return true;
       return this.isEntityClassName(raw);
     }
@@ -522,7 +551,8 @@ export class APIResourceLayerAnalyzer {
 
   private containsEntityType(typeName: string, imports?: ImportInfo[], currentPackage?: string): boolean {
     return this.typeTokens(typeName).some(token => {
-      if (this.frameworkResponseTypes.has(token)) return false;
+      if (this.apiContractWrapperTypes.has(token)) return false;
+      if (this.isSimpleType(token) || this.isDTOClassName(token)) return false;
       if (this.isEntityClassName(token)) return true;
       // A class annotated @Entity (or classified as 'entity' layer) is an
       // internal entity regardless of its name suffix — e.g. `Order`, `User`.
@@ -530,6 +560,7 @@ export class APIResourceLayerAnalyzer {
       if (fqcn) {
         const cls = this.classMap.get(fqcn);
         if (cls) {
+          if (this.isDTOClassName(cls.className) || this.apiContractWrapperTypes.has(cls.className)) return false;
           const annotated = cls.annotations?.some(a => a.name === 'Entity');
           return annotated || cls.detectedLayer === 'entity';
         }
@@ -540,7 +571,9 @@ export class APIResourceLayerAnalyzer {
 
   private containsInternalDomainType(typeName: string, imports: ImportInfo[], currentPackage?: string): boolean {
     return this.typeTokens(typeName).some(token =>
-      this.isInternalDomainType(token, imports, currentPackage)
+      !this.apiContractWrapperTypes.has(token)
+      && !this.isDTOClassName(token)
+      && this.isInternalDomainType(token, imports, currentPackage)
     );
   }
 

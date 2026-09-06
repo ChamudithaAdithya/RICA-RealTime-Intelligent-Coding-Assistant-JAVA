@@ -117,6 +117,48 @@ class OrderService {
         assert.ok(!violations.some(v => v.code === 'RICA-V308'), 'Thread/Runnable should be skipped');
     });
 
+    it('should NOT flag cohesive PDF infrastructure setup with scalar constructor arguments', () => {
+        const code = `package com.example;
+class LeadPdfService {
+    public byte[] generateLeadPdf() {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        Document document = new Document(PageSize.A4, 20, 20, 20, 20);
+        PdfWriter.getInstance(document, outputStream);
+        return outputStream.toByteArray();
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V308'),
+            'scalar PDF configuration arguments are not Factory/Builder evidence');
+    });
+
+    it('should NOT score ordinary scalar constructor arguments as construction complexity', () => {
+        const code = `package com.example;
+class ReportService {
+    public Report createReport(String title, String author, int pages, boolean draft, long timestamp, String format) {
+        return new Report(title, author, pages, draft, timestamp, format);
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V308'),
+            'constructor arity alone is not Factory/Builder evidence');
+    });
+
+    it('should NOT treat independent object allocations as one complex construction', () => {
+        const code = `package com.example;
+class OrderService {
+    public void prepare() {
+        Customer customer = new Customer();
+        Address address = new Address();
+        Order order = new Order();
+        Invoice invoice = new Invoice();
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V308'),
+            'independent allocations should not inflate each construction score');
+    });
+
     it('should honor the constructionStatementLimit config', () => {
         const code = `package com.example;
 class OrderService {
@@ -166,6 +208,28 @@ interface SmallIf {
 }`;
         const violations = analyze(code);
         assert.ok(!violations.some(v => v.code === 'RICA-V309'), 'small interface should be fine');
+    });
+
+    it('should NOT flag Spring Data repository interfaces as fat interfaces', () => {
+        const code = `package com.example.repository;
+import org.springframework.stereotype.Repository;
+@Repository
+interface UserRepository extends JpaRepository<User, Long> {
+    User findByEmail(String email);
+    User findByPhone(String phone);
+    User findByStatus(String status);
+    User findByTenantId(Long tenantId);
+    User findByExternalId(String externalId);
+    User findByUsername(String username);
+    User findByCreatedBy(Long createdBy);
+    User findByUpdatedBy(Long updatedBy);
+    User findByRole(String role);
+    User findByLanguage(String language);
+    User findByDepartment(String department);
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V309'),
+            'Spring Data query interfaces should not be treated as ISP violations');
     });
 
     it('should honor fatInterfaceMethodLimit config', () => {
@@ -391,8 +455,28 @@ class OrderService {
     private OrderRepository repo;
     public void save(Order o) {
         logger.info("start");
+        validate(o);
+        logger.debug("validated");
+        repo.reserve(o);
+        logger.trace("reserved");
         repo.save(o);
+        repo.flush();
+        audit(o);
+        logger.warn("audited");
+        repo.index(o);
+        publish(o);
         logger.info("end");
+        repo.markComplete(o);
+        logger.debug("complete");
+    }
+    private void validate(Order o) {
+        repo.validate(o);
+    }
+    private void audit(Order o) {
+        repo.audit(o);
+    }
+    private void publish(Order o) {
+        repo.publish(o);
     }
 }`;
         const violations = analyze(code);
@@ -588,15 +672,34 @@ class OrderService {
 
 describe('DesignPatternAnalyzer — V319 Monolithic Validation Pipeline', () => {
 
-    it('should flag a method with 5+ guard clauses', () => {
+    it('should flag a long workflow with 7+ guard clauses', () => {
         const code = `package com.example;
-class Validator {
-    public void validate(Order o) {
+class OrderWorkflow {
+    public void process(Order o, User u, Payment p, Inventory inv) {
         if (o == null) throw new IllegalArgumentException();
-        if (o.id == null) throw new IllegalArgumentException();
-        if (o.name == null) throw new IllegalArgumentException();
-        if (o.qty < 0) throw new IllegalArgumentException();
-        if (o.price < 0) throw new IllegalArgumentException();
+        loadOrder(o);
+        if (u == null) throw new IllegalArgumentException();
+        loadUser(u);
+        if (p == null) throw new IllegalArgumentException();
+        loadPayment(p);
+        if (inv == null) throw new IllegalArgumentException();
+        reserve(inv);
+        if (o.cancelled) throw new IllegalStateException();
+        audit(o);
+        if (u.blocked) throw new IllegalStateException();
+        notifyUser(u);
+        if (p.failed) throw new IllegalStateException();
+        settle(p);
+        if (inv.empty) throw new IllegalStateException();
+        ship(o);
+        reconcile(o);
+        calculateTotals(o);
+        writeAuditTrail(o);
+        sendReceipt(u);
+        scheduleFollowUp(o);
+        complete(o);
+        publish(o);
+        index(o);
     }
 }`;
         const violations = analyze(code);

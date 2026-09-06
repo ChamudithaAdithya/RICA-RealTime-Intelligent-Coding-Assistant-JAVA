@@ -150,10 +150,10 @@ export class ServiceLayerAnalyzer {
         }
 
         // Check for anemic service (once per class)
-        if (this.isAnemicService(cls)) {
+        if (this.isServiceImplementationName(cls.className) && this.isAnemicService(cls)) {
           violations.push({
             type: 'anemic-service',
-            message: `Service class '${cls.className}' is anemic: its methods are trivial accessors or pure delegation with no business logic. Consider moving domain logic into this service.`,
+            message: `Service class '${cls.className}' is empty or contains only accessors, with no detected application responsibility. Consider whether this service abstraction is necessary.`,
             className: cls.fullyQualifiedName,
             severity: 'warning',
             filePath: ast.filePath,
@@ -161,7 +161,7 @@ export class ServiceLayerAnalyzer {
               start: { line: cls.startLine, character: cls.startColumn || 0 },
               end: { line: cls.endLine || cls.startLine, character: cls.endColumn || (cls.startColumn || 0) + 1 },
             } : undefined,
-            explanation: 'Your service class contains no meaningful business logic — just getters/setters or pass-through delegation. Services are the natural home for business rules; move behavior (validation, calculations, orchestration) into this class so the logic is testable and reusable, instead of living in controllers or entities.'
+            explanation: 'Your service class is empty or only exposes accessors. Repository delegation can be legitimate, so this finding is limited to services with no detected application responsibility; consider consolidating or removing an unnecessary abstraction.'
           });
         }
       }
@@ -254,45 +254,14 @@ export class ServiceLayerAnalyzer {
       return false;
     }
     const concrete = cls.methods.filter(m => m.methodType !== 'abstract' && m.methodType !== 'native');
-    // Marker and lifecycle-only services do not provide enough evidence for
-    // an anemic-service finding.
-    if (concrete.length === 0) {
-      return false;
-    }
-    // Require multiple methods before calling it anemic to avoid noise on thin 1-method pass-throughs.
-    if (concrete.length < 2) {
-      return false;
-    }
-    return concrete.every(m => this.isTrivialServiceMethod(m));
+    // An empty service is strong evidence that the abstraction has no
+    // responsibility. A one-method or delegation-only service is not.
+    if (concrete.length === 0) return true;
+    return concrete.every(m => this.isAccessor(m));
   }
 
-  private isTrivialServiceMethod(method: Method): boolean {
-    if (this.isAccessor(method)) {
-      return true;
-    }
-    if ((method.createdObjects || []).length > 0) {
-      return false;
-    }
-    if ((method.calledMethods || []).length > 1) {
-      return false;
-    }
-    const body = method.body;
-    if (!body) {
-      return true;
-    }
-    if (body.linesOfCode > 5) {
-      return false;
-    }
-    if (body.localVariables.length > 3) {
-      return false;
-    }
-    if (body.cyclomaticComplexity !== undefined && body.cyclomaticComplexity > 1) {
-      return false;
-    }
-    if (body.businessLogicScore !== undefined && body.businessLogicScore > 0) {
-      return false;
-    }
-    return true;
+  private isServiceImplementationName(className: string): boolean {
+    return /(Service|ServiceImpl|Manager|Handler)$/i.test(className);
   }
 
   private isAccessor(method: Method): boolean {

@@ -20,7 +20,7 @@ const MITIGATION_HINTS: Record<string, string> = {
     'self-instantiation': 'Use dependency injection (@Autowired/@Inject) instead of directly instantiating with new()',
     'uninjected-repository-access': 'Annotate the field with @Autowired or use constructor injection',
     'uninjected-service-access': 'Annotate the field with @Autowired or use constructor injection',
-    'anemic-service': 'Move business logic from controllers/entities into this service class',
+    'anemic-service': 'Review whether this empty or accessor-only service abstraction is necessary',
     'business-logic': 'Business logic should be in the Service layer, not in Controllers or Entities',
     'direct-layer-access': 'Access external layers through the Service layer instead of directly',
     'anemic-entity': 'Add behavior (methods) to the entity instead of keeping it as a pure data holder',

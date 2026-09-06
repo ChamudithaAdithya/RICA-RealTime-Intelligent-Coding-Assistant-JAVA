@@ -127,13 +127,15 @@ export class ControllerLayerAnalyzer {
             if (!targetFQCN) continue;
 
             // Check if target is a service, repository, or infrastructure
-            const targetInfo = this.classMap.get(targetFQCN);
             const targetLayer = this.classLayers.get(targetFQCN);
+            const targetSimpleName = targetFQCN.split('.').pop() || '';
+            if (this.isStaticUtilityClassName(targetSimpleName)) continue;
+
             const isServiceByLayer = targetLayer === 'service';
             const isRepoByLayer = targetLayer === 'repository' || targetLayer === 'dao';
-            const isServiceByName = this.isServiceClassName(targetFQCN.split('.').pop() || '');
-            const isRepoByName = this.isRepositoryClassName(targetFQCN.split('.').pop() || '');
-            const isInfrastructure = this.isInfrastructureClassName(targetFQCN.split('.').pop() || '');
+            const isServiceByName = this.isServiceClassName(targetSimpleName);
+            const isRepoByName = this.isRepositoryClassName(targetSimpleName);
+            const isInfrastructure = this.isInfrastructureClassName(targetSimpleName);
 
             // Skip standard library types (they look like services via suffix matching but aren't)
             const isStandardLib = /^(java\.|javax\.|jakarta\.|com\.sun\.|org\.apache\.|org\.springframework\.)/.test(targetFQCN);
@@ -464,6 +466,10 @@ export class ControllerLayerAnalyzer {
 
   private isInfrastructureClassName(className: string): boolean {
     return this.infrastructurePatterns.some(pattern => className.endsWith(pattern));
+  }
+
+  private isStaticUtilityClassName(className: string): boolean {
+    return /(Utils?|Utility|Helper|Constants?)$/i.test(className);
   }
 
   private isServiceType(typeName: string): boolean {

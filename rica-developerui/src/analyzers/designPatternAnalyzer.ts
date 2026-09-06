@@ -495,6 +495,7 @@ export class DesignPatternAnalyzer {
       if (info.callers.size < 3) continue;
       const concreteCls = this.resolveClass(concrete, allAsts);
       if (!concreteCls) continue;
+      if (this.isFactoryNoiseClass(concrete, concreteCls)) continue;
       const hasAbstraction = concreteCls.interfaces.length > 0
         || (concreteCls.superClass !== 'Object' && concreteCls.superClass !== 'Enum' && concreteCls.superClass !== 'Record');
       if (!hasAbstraction) continue;
@@ -518,6 +519,18 @@ export class DesignPatternAnalyzer {
       }
     }
     return undefined;
+  }
+
+  private isFactoryNoiseClass(typeName: string, cls: ClassInfo): boolean {
+    const simple = typeName.split('.').pop() || typeName;
+    if (/(Exception|Error|DTO|Dto|VM|ViewModel|Request|Response|Payload|Projection|PickList|PageVM)$/i.test(simple)) {
+      return true;
+    }
+    if (cls.annotations?.some(a => ['Entity', 'Embeddable', 'MappedSuperclass'].some(n => a.name.endsWith(n)))) {
+      return true;
+    }
+    const parent = cls.superClass || '';
+    return /(Exception|Error|Throwable)$/i.test(parent);
   }
 
   // ─── V302 God Facade ─────────────────────────────────────────────
@@ -607,6 +620,14 @@ export class DesignPatternAnalyzer {
   // ─── V308 Leaking Construction Logic ─────────────────────────────
 
   private readonly BUILDER_PATTERN_RE = /builder|\.with[A-Z]/i;
+  private readonly CONSTRUCTION_INFRASTRUCTURE_TYPES = new Set([
+    'ArrayList', 'HashMap', 'HashSet', 'LinkedHashMap', 'LinkedHashSet', 'LinkedList',
+    'StringBuilder', 'StringBuffer', 'ByteArrayOutputStream', 'ByteArrayInputStream',
+    'File', 'Date', 'Calendar',
+    'Document', 'Paragraph', 'Font', 'PdfWriter', 'PdfPTable', 'PdfPCell',
+    'Phrase', 'Chunk', 'BaseColor', 'Image', 'Rectangle',
+    'SimpleGrantedAuthority', 'UsernamePasswordAuthenticationToken',
+  ]);
 
   private checkLeakingConstruction(asts: FullASTOutput[]): Violation[] {
     const violations: Violation[] = [];
@@ -618,10 +639,17 @@ export class DesignPatternAnalyzer {
         for (const method of cls.methods) {
           // Report only the heaviest construction per method to avoid flooding nested-new sites.
           let best: { creation: any; count: number } | undefined;
-          for (const creation of method.createdObjects) {
-            if (this.BUILDER_PATTERN_RE.test(creation.className)) continue; // fluent builders
-            if (creation.className === 'Thread' || creation.className === 'Runnable') continue; // anon/infra, covered by V306
-            const stmtCount = this.countConstructionStatements(creation);
+          const relevantCreations = method.createdObjects.filter(creation =>
+            !this.BUILDER_PATTERN_RE.test(creation.className)
+            && creation.className !== 'Thread'
+            && creation.className !== 'Runnable'
+            && !this.isRoutineConstructionType(creation.className)
+          );
+          for (const creation of relevantCreations) {
+            const clusterSize = creation.lineNumber
+              ? relevantCreations.filter(candidate => candidate.lineNumber === creation.lineNumber).length
+              : 1;
+            const stmtCount = this.countConstructionStatements(clusterSize);
             const branching = creation.hasBranching === true;
             const flagged = stmtCount > limit || branching;
             if (flagged && (!best || (branching && !best.creation.hasBranching) || stmtCount > best.count)) {
@@ -635,7 +663,7 @@ export class DesignPatternAnalyzer {
               : '';
             violations.push(this.toViolation(
               'leaking-construction',
-              `Method '${method.name}' performs ${count} construction statements for '${creation.className}'${branchNote} (limit ${limit}). Extract a Builder or Factory.`,
+              `Method '${method.name}' performs complex object construction for '${creation.className}'${branchNote} (construction score ${count}, limit ${limit}). Consider a Builder, Factory, or dedicated creation method.`,
               ast.filePath || '', creation.lineNumber, undefined, method.name, undefined, creation.className,
             ));
           }
@@ -645,16 +673,18 @@ export class DesignPatternAnalyzer {
     return violations;
   }
 
-  /** Construction complexity: base `new` + count of nested `new` and multi-arg constructor calls. */
-  private countConstructionStatements(creation: any): number {
-    let count = 1;
-    for (const arg of creation.constructorArgs || []) {
-      const text = String(arg);
-      if (text.includes('new ')) count += 2;       // nested object construction
-      else if (text.includes('(') || text.includes(',')) count += 1; // chained/compound args
-      else count += 1;
-    }
-    return count;
+  /** Construction complexity is based on a same-line composition cluster, not argument count. */
+  private countConstructionStatements(clusterSize = 1): number {
+    if (clusterSize <= 1) return 1;
+    // Nested `new` expressions are emitted as sibling records on the parent
+    // expression's line; unrelated statements on other lines remain separate.
+    return 1 + Math.min(clusterSize, 3) + 2;
+  }
+
+  private isRoutineConstructionType(className: string): boolean {
+    if (this.CONSTRUCTION_INFRASTRUCTURE_TYPES.has(className)) return true;
+    return /(Exception|Error|DTO|Dto|VM|ViewModel|Request|Response|Payload|Projection|PickList|Event|Message|Command)$/i
+      .test(className);
   }
 
   // ─── V309 Fat Interface (ISP) ────────────────────────────────────
@@ -667,6 +697,7 @@ export class DesignPatternAnalyzer {
     for (const ast of asts) {
       for (const cls of ast.classes) {
         if (cls.classType !== 'interface') continue;
+        if (this.isFrameworkInterface(cls)) continue;
         const fqcn = cls.fullyQualifiedName || cls.className;
         const declaredMethods = cls.methods || [];
         const declared = declaredMethods.length;
@@ -713,6 +744,17 @@ export class DesignPatternAnalyzer {
       }
     }
     return names;
+  }
+
+  private isFrameworkInterface(cls: ClassInfo): boolean {
+    if (cls.detectedLayer === 'repository') return true;
+    if (/Repository$/i.test(cls.className)) return true;
+    if (cls.annotations?.some(a => ['Repository', 'FeignClient', 'HttpExchange'].some(n => a.name.endsWith(n)))) {
+      return true;
+    }
+    return (cls.interfaces || []).some(iface =>
+      /(Repository|JpaRepository|CrudRepository|PagingAndSortingRepository|FeignClient)$/i.test(iface)
+    );
   }
 
   /** Interface methods actually referenced via an interface- or implementation-typed receiver. */
@@ -839,14 +881,17 @@ export class DesignPatternAnalyzer {
 
   private readonly CROSS_CUTTING_CALL_RE = /^(info|debug|warn|error|trace|log|increment|counter|startSpan|span|endSpan|audit|record|observe|time)$/i;
   private readonly CROSS_CUTTING_TYPE_RE = /(Logger|Log|Metrics|Meter|MeterRegistry|Tracer|Audit|AuditLog|RateLimiter|TracerProvider)$/i;
+  private readonly CROSS_CUTTING_CLASS_RE = /(Config|Configuration|Filter|Interceptor|Aspect|Advice|Handler|ExceptionMapper|ExceptionHandler)$/i;
 
   private checkMissingDecorator(asts: FullASTOutput[]): Violation[] {
     const violations: Violation[] = [];
-    const limit = this.config.crossCuttingCallLimit ?? 2;
+    const limit = Math.max(this.config.crossCuttingCallLimit ?? 2, 4);
     for (const ast of asts) {
       for (const cls of ast.classes) {
         if (cls.annotations?.some(a => a.name === 'Configuration')) continue;
+        if (this.CROSS_CUTTING_CLASS_RE.test(cls.className)) continue;
         for (const method of cls.methods) {
+          if (this.methodLineCount(method) < 15) continue;
           const calls = method.calledMethods || [];
           const cross = calls.filter(c =>
             this.CROSS_CUTTING_TYPE_RE.test((c.receiverType || '').replace(/<.*>/g, '').split('.').pop() || '')
@@ -854,7 +899,7 @@ export class DesignPatternAnalyzer {
           );
           if (cross.length < limit) continue;
           const business = calls.filter(c => !this.CROSS_CUTTING_TYPE_RE.test((c.receiverType || '').split('.').pop() || ''));
-          if (business.length < 1) continue;
+          if (business.length < 3) continue;
           violations.push(this.toViolation(
             'missing-decorator',
             `Method '${method.name}' interleaves ${cross.length} cross-cutting ${cross[0].receiverType?.split('.').pop()} call(s) with business logic. Extract into a Decorator/AOP advisor.`,
@@ -878,6 +923,7 @@ export class DesignPatternAnalyzer {
           if (!hasLoop) continue;
           const instanceOfChecks = dps.filter(d => /instanceof/i.test(d.condition || ''));
           if (instanceOfChecks.length < 2) continue;
+          if (!this.hasCompositeDomainSignal(ast, cls, method, instanceOfChecks)) continue;
           violations.push(this.toViolation(
             'missing-composite',
             `Method '${method.name}' handles leaves vs. containers heterogeneously (${instanceOfChecks.length} instanceof checks inside a loop). Introduce a uniform Component interface (Composite).`,
@@ -887,6 +933,23 @@ export class DesignPatternAnalyzer {
       }
     }
     return violations;
+  }
+
+  private hasCompositeDomainSignal(
+    ast: FullASTOutput,
+    cls: ClassInfo,
+    method: Method,
+    instanceOfChecks: Array<{ condition?: string }>,
+  ): boolean {
+    const context = [
+      ast.filePath,
+      cls.className,
+      method.name,
+      ...instanceOfChecks.map(check => check.condition || ''),
+    ].join(' ');
+
+    return /(tree|node|child|children|parent|component|element|field|column|structure|hierarchy|recursive|nested|json|folder|directory)/i
+      .test(context);
   }
 
   // ─── V315 Redundant Memory Footprint (allocations in loops) ──────
@@ -1063,10 +1126,12 @@ export class DesignPatternAnalyzer {
 
   private checkMonolithicPipeline(asts: FullASTOutput[]): Violation[] {
     const violations: Violation[] = [];
-    const limit = this.config.guardClauseLimit ?? 5;
+    const limit = Math.max(this.config.guardClauseLimit ?? 5, 7);
     for (const ast of asts) {
       for (const cls of ast.classes) {
         for (const method of cls.methods) {
+          if (this.methodLineCount(method) < 25) continue;
+          if (this.isReadOnlyQueryMethod(method)) continue;
           const dps = method.complexityMetrics?.decisionPoints || [];
           const topLevel = dps.filter(d => d.type === 'if' && ((d.nestingDepth ?? 0) <= 1));
           if (topLevel.length < limit) continue;
@@ -1087,6 +1152,7 @@ export class DesignPatternAnalyzer {
           }
           // If most top-level ifs are null-guards over few distinct roots, treat as ladder.
           if (nullLadder >= topLevel.length * 0.6 && roots.size <= 2) continue;
+          if (this.looksLikeOrdinaryValidationMethod(method, topLevel)) continue;
           violations.push(this.toViolation(
             'monolithic-pipeline',
             `Method '${method.name}' runs ${topLevel.length} sequential guard/validation clauses. Decompose into a Chain-of-Responsibility pipeline.`,
@@ -1096,6 +1162,24 @@ export class DesignPatternAnalyzer {
       }
     }
     return violations;
+  }
+
+  private methodLineCount(method: Method): number {
+    if (!method.startLine || !method.endLine) return 0;
+    return Math.max(0, method.endLine - method.startLine + 1);
+  }
+
+  private looksLikeOrdinaryValidationMethod(
+    method: Method,
+    topLevelDecisionPoints: Array<{ condition?: string }>,
+  ): boolean {
+    const methodNameSuggestsValidation = /validate|check|verify|assert|ensure/i.test(method.name);
+    const validationConditions = topLevelDecisionPoints.filter(point =>
+      /(==|!=)\s*null|null\s*(==|!=)|isBlank|isEmpty|hasText|hasLength|matches|length|size|contains|startsWith|endsWith/i
+        .test(point.condition || '')
+    );
+
+    return methodNameSuggestsValidation && validationConditions.length >= topLevelDecisionPoints.length * 0.7;
   }
 
   // ─── V320 Service Locator Anti-Pattern ───────────────────────────
@@ -1170,7 +1254,9 @@ export class DesignPatternAnalyzer {
     const limit = this.config.nullCheckLimit ?? 3;
     for (const ast of asts) {
       for (const cls of ast.classes) {
+        if (this.isDTOOrPersistenceModel(cls) || this.isUtilityHolderClass(ast, cls)) continue;
         for (const method of cls.methods) {
+          if (this.isReadOnlyQueryMethod(method)) continue;
           const nullChecks = (method.complexityMetrics?.decisionPoints || [])
             .filter(d => /(==|!=)\s*null|null\s*(==|!=)/i.test(d.condition || ''));
           if (nullChecks.length < limit) continue;
@@ -1209,6 +1295,24 @@ export class DesignPatternAnalyzer {
       }
     }
     return violations;
+  }
+
+  private isDTOOrPersistenceModel(cls: ClassInfo): boolean {
+    const name = cls.className || '';
+    if (/(DTO|Dto|VM|ViewModel|Request|Response|Payload|Command|Projection)$/i.test(name)) return true;
+    if (cls.detectedLayer === 'dto') return true;
+    if (cls.annotations?.some(a => ['Entity', 'Embeddable', 'MappedSuperclass'].some(n => a.name.endsWith(n)))) return true;
+    return false;
+  }
+
+  private isUtilityHolderClass(ast: FullASTOutput, cls: ClassInfo): boolean {
+    return /(Utils?|Utility|Helper|Constants?)$/i.test(cls.className)
+      || /[\\/]utils?[\\/]/i.test(ast.filePath || '');
+  }
+
+  private isReadOnlyQueryMethod(method: Method): boolean {
+    if (!/^(get|find|search|list|load|read|query)/i.test(method.name)) return false;
+    return (method.body?.persistenceWrites || []).length === 0;
   }
 
   // ─── V322 Missing Proxy ──────────────────────────────────────────

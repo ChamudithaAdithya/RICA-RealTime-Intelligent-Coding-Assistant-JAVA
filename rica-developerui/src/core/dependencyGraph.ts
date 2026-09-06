@@ -330,6 +330,7 @@ export function buildGraphFromFiles(files: Record<string, FullASTOutput>): Proje
     // Pass 1: Register all file + class nodes
     for (const [filePath, ast] of Object.entries(files)) {
         const pkgName = ast.packageInfo?.name || '';
+        const classes = Array.isArray(ast.classes) ? ast.classes : [];
 
         graph.addNode(filePath, 'file', {
             filePath,
@@ -337,7 +338,7 @@ export function buildGraphFromFiles(files: Record<string, FullASTOutput>): Proje
             simpleName: filePath.split(/[/\\]/).pop() || filePath
         });
 
-        for (const cls of ast.classes) {
+        for (const cls of classes) {
             graph.addNode(cls.fullyQualifiedName, cls.classType === 'interface' ? 'interface' : 'class', {
                 layer: cls.detectedLayer,
                 filePath,
@@ -350,8 +351,9 @@ export function buildGraphFromFiles(files: Record<string, FullASTOutput>): Proje
     // Pass 2: Build edges from imports
     for (const [filePath, ast] of Object.entries(files)) {
         const pkgName = ast.packageInfo?.name || '';
+        const imports = Array.isArray(ast.imports) ? ast.imports : [];
 
-        for (const imp of ast.imports) {
+        for (const imp of imports) {
             const targetNodeId = imp.isWildcard ? imp.qualifiedName.replace(/\.\*$/, '') : imp.qualifiedName;
 
             // Try to link file -> imported target
@@ -372,10 +374,12 @@ export function buildGraphFromFiles(files: Record<string, FullASTOutput>): Proje
         }
 
         // Build edges from class relationships
-        for (const cls of ast.classes) {
-            for (const rel of ast.relationships) {
+        const classes = Array.isArray(ast.classes) ? ast.classes : [];
+        const relationships = Array.isArray(ast.relationships) ? ast.relationships : [];
+        for (const cls of classes) {
+            for (const rel of relationships) {
                 if (rel.sourceId === cls.fullyQualifiedName) {
-                    const targetId = resolveEdgeTarget(rel.targetId, graph, ast.imports, pkgName);
+                    const targetId = resolveEdgeTarget(rel.targetId, graph, imports, pkgName);
                     if (targetId) {
                         graph.ensureNode(targetId, 'class', {
                             filePath: '',
@@ -392,10 +396,12 @@ export function buildGraphFromFiles(files: Record<string, FullASTOutput>): Proje
             }
 
             // Build 'uses' edges from method call targets that aren't already covered
-            for (const method of cls.methods) {
-                for (const call of method.calledMethods) {
+            const methods = Array.isArray(cls.methods) ? cls.methods : [];
+            for (const method of methods) {
+                const calledMethods = Array.isArray(method.calledMethods) ? method.calledMethods : [];
+                for (const call of calledMethods) {
                     if (call.targetClass && !call.isLibraryCall) {
-                        const resolved = graph.resolveTypeFQN(call.targetClass, ast.imports, pkgName);
+                        const resolved = graph.resolveTypeFQN(call.targetClass, imports, pkgName);
                         if (resolved && resolved !== cls.fullyQualifiedName) {
                             graph.addEdge(cls.fullyQualifiedName, resolved, 'calls', {
                                 line: call.lineNumber || 0,
@@ -408,9 +414,10 @@ export function buildGraphFromFiles(files: Record<string, FullASTOutput>): Proje
             }
 
             // Build 'instantiates' edges from object creation
-            for (const method of cls.methods) {
-                for (const creation of method.createdObjects) {
-                    const resolved = graph.resolveTypeFQN(creation.className, ast.imports, pkgName);
+            for (const method of methods) {
+                const createdObjects = Array.isArray(method.createdObjects) ? method.createdObjects : [];
+                for (const creation of createdObjects) {
+                    const resolved = graph.resolveTypeFQN(creation.className, imports, pkgName);
                     if (resolved) {
                         graph.addEdge(cls.fullyQualifiedName, resolved, 'instantiates', {
                             line: creation.lineNumber || 0,
@@ -432,6 +439,7 @@ export function addFileToGraph(
     ast: FullASTOutput,
 ): void {
     const pkgName = ast.packageInfo?.name || '';
+    const classes = Array.isArray(ast.classes) ? ast.classes : [];
 
     graph.addNode(filePath, 'file', {
         filePath,
@@ -439,7 +447,7 @@ export function addFileToGraph(
         simpleName: filePath.split(/[/\\]/).pop() || filePath
     });
 
-    for (const cls of ast.classes) {
+    for (const cls of classes) {
         graph.addNode(cls.fullyQualifiedName, cls.classType === 'interface' ? 'interface' : 'class', {
             layer: cls.detectedLayer,
             filePath,
@@ -488,7 +496,8 @@ export function patchGraphForFile(
 
     // Rebuild edges for this file (imports, relationships, calls, instantiations)
     const pkgName = newAst.packageInfo?.name || '';
-    for (const imp of newAst.imports) {
+    const imports = Array.isArray(newAst.imports) ? newAst.imports : [];
+    for (const imp of imports) {
         const targetNodeId = imp.isWildcard ? imp.qualifiedName.replace(/\.\*$/, '') : imp.qualifiedName;
         if (!imp.isWildcard) {
             graph.ensureNode(targetNodeId, 'class', {
@@ -504,10 +513,12 @@ export function patchGraphForFile(
         }
     }
 
-    for (const cls of newAst.classes) {
-        for (const rel of newAst.relationships) {
+    const classes = Array.isArray(newAst.classes) ? newAst.classes : [];
+    const relationships = Array.isArray(newAst.relationships) ? newAst.relationships : [];
+    for (const cls of classes) {
+        for (const rel of relationships) {
             if (rel.sourceId === cls.fullyQualifiedName) {
-                const targetId = resolveEdgeTarget(rel.targetId, graph, newAst.imports, pkgName);
+                const targetId = resolveEdgeTarget(rel.targetId, graph, imports, pkgName);
                 if (targetId) {
                     graph.ensureNode(targetId, 'class', {
                         filePath: '',
@@ -523,10 +534,12 @@ export function patchGraphForFile(
             }
         }
 
-        for (const method of cls.methods) {
-            for (const call of method.calledMethods) {
+        const methods = Array.isArray(cls.methods) ? cls.methods : [];
+        for (const method of methods) {
+            const calledMethods = Array.isArray(method.calledMethods) ? method.calledMethods : [];
+            for (const call of calledMethods) {
                 if (call.targetClass && !call.isLibraryCall) {
-                    const resolved = graph.resolveTypeFQN(call.targetClass, newAst.imports, pkgName);
+                    const resolved = graph.resolveTypeFQN(call.targetClass, imports, pkgName);
                     if (resolved && resolved !== cls.fullyQualifiedName) {
                         graph.addEdge(cls.fullyQualifiedName, resolved, 'calls', {
                             line: call.lineNumber || 0,
@@ -537,8 +550,9 @@ export function patchGraphForFile(
                 }
             }
 
-            for (const creation of method.createdObjects) {
-                const resolved = graph.resolveTypeFQN(creation.className, newAst.imports, pkgName);
+            const createdObjects = Array.isArray(method.createdObjects) ? method.createdObjects : [];
+            for (const creation of createdObjects) {
+                const resolved = graph.resolveTypeFQN(creation.className, imports, pkgName);
                 if (resolved) {
                     graph.addEdge(cls.fullyQualifiedName, resolved, 'instantiates', {
                         line: creation.lineNumber || 0,
@@ -646,7 +660,7 @@ export const cyclicDependencyRule: AnalyzerRule = {
                                 filePath: loc.sourceFile || sourceNode.metadata.filePath,
                                 line: loc.line,
                                 layerContext: sourceNode.metadata.layer,
-                                explanation: 'Two or more classes depend on each other, creating a circular dependency. This makes the code harder to test, maintain, and reason about.'
+                                explanation: 'This dependency crosses the configured layer direction. A cross-layer dependency is not itself a circular dependency; V403 is reserved for proven graph cycles.'
                             });
                         }
                     }

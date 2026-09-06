@@ -157,7 +157,7 @@ public class MyService {
         }
     });
 
-    it('should detect anemic service (delegation-only methods)', () => {
+    it('should NOT flag a legitimate repository delegation service as anemic', () => {
         const code = `package com.example;
 import org.springframework.stereotype.Service;
 @Service
@@ -170,7 +170,19 @@ public class ThinService {
         const ast = parse(code, 'ThinService.java');
         const violations = analyzer.analyze([ast]);
         const anemic = violations.find(v => v.type === 'anemic-service');
-        assert.ok(anemic, 'should detect anemic service');
+        assert.ok(!anemic, 'repository delegation alone is not an anemic-service violation');
+    });
+
+    it('should detect an empty service as anemic', () => {
+        const code = `package com.example;
+import org.springframework.stereotype.Service;
+@Service
+public class EmptyService { }
+`;
+        const ast = parse(code, 'EmptyService.java');
+        const violations = analyzer.analyze([ast]);
+        const anemic = violations.find(v => v.type === 'anemic-service');
+        assert.ok(anemic, 'should detect an empty service');
         assert.strictEqual(anemic.severity, 'warning');
     });
 
@@ -415,8 +427,8 @@ public class MyResource {
 
     it('should detect business-logic-in-resource', () => {
         const code = `package com.example;
-import org.springframework.web.bind.annotation.RestController;
-@RestController
+import javax.ws.rs.Resource;
+@Resource
 public class MyResource {
     public String process(String input) {
         if (input == null || input.isEmpty()) { throw new IllegalArgumentException("Invalid"); }
@@ -464,6 +476,24 @@ public class MyResource {
         assert.ok(directInst, 'should detect direct service instantiation');
     });
 
+    it('should not require dependency injection for static utility helper calls', () => {
+        const utilCode = `package com.example;
+public class SecurityUtils {
+    public static Long currentUserId() { return 1L; }
+}`;
+        const apiCode = `package com.example;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public class UserController {
+    public Long me() {
+        return SecurityUtils.currentUserId();
+    }
+}`;
+        const violations = analyzer.analyze([parse(utilCode, 'SecurityUtils.java'), parse(apiCode, 'UserController.java')]);
+        assert.ok(!violations.some(v => v.type === 'direct-service-instantiation'),
+            'static utility helpers should not be treated as uninjected collaborators');
+    });
+
     it('should detect exposing-internal-entity instead of missing-dto-usage', () => {
         // NOTE: The analyzer reports exposing-internal-entity for entity return types
         const code = `package com.example;
@@ -499,6 +529,28 @@ public class FileStorageController {
         const violations = analyzer.analyze([ast]);
         const exposing = violations.find(v => v.type === 'exposing-internal-entity');
         assert.ok(!exposing, 'should not flag Spring response/resource types as entities');
+    });
+
+    it('should not flag API envelope responses containing PickList contracts', () => {
+        const pickListCode = `package com.example;
+public class PickList {
+    private Long id;
+    private String name;
+}`;
+        const apiCode = `package com.example;
+import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+@RestController
+public class OptionController {
+    @GetMapping
+    public ApiResponse<List<PickList>> options() {
+        return null;
+    }
+}`;
+        const violations = analyzer.analyze([parse(pickListCode, 'PickList.java'), parse(apiCode, 'OptionController.java')]);
+        assert.ok(!violations.some(v => v.type === 'exposing-internal-structure' || v.type === 'exposing-internal-entity'),
+            'pick-list API contracts should not be treated as internal domain exposure');
     });
 
     it('should detect missing-dto-usage when endpoint takes an internal domain/entity param', () => {

@@ -356,6 +356,12 @@ export class EntityLayerAnalyzer {
   }
 
   private isAnemicEntity(cls: ClassInfo): boolean {
+    // In many Spring projects, @Entity classes under model/persistence packages
+    // are intentionally data-shaped persistence records. Treat "anemic entity"
+    // as an explicit domain-model smell, not a blanket warning for every JPA
+    // table mapping.
+    if (!this.isEntityClassName(cls.className)) return false;
+
     const totalMethods = cls.methods.length;
     // An entity with no methods is a dumb data holder with no behavior.
     if (totalMethods === 0) return true;

@@ -25,6 +25,7 @@ export class PackageBoundaryAnalyzer {
   constructor(config?: Partial<AnalyzerConfig>) {
     this.config = {
       enableArchitecturalChecks: true,
+      architectureStyle: 'auto',
       enableDesignPatternChecks: true,
       enableBusinessLogicChecks: true,
       businessLogicThreshold: 3,
@@ -52,12 +53,23 @@ export class PackageBoundaryAnalyzer {
 
     for (const fileAst of astOutputs) {
       const filePath = fileAst.filePath || '';
-      const fileLayer = this.matchLayer(filePath, boundaries);
+      const sourceAnnotations = fileAst.classes.flatMap(cls =>
+        (cls.annotations || []).map(annotation => annotation.name)
+      );
+      const fileLayer = this.effectiveSourceLayer(
+        this.matchLayer(filePath, boundaries),
+        sourceAnnotations,
+      );
 
       if (!fileLayer) continue;
 
       for (const imp of (fileAst.imports || [])) {
-        const targetLayer = this.matchLayerByFqn(imp.qualifiedName, boundaries, layers);
+        if (classAnnotations && !classAnnotations.has(imp.qualifiedName)) continue;
+        const targetLayer = this.effectiveTargetLayer(
+          imp.qualifiedName,
+          this.matchLayerByFqn(imp.qualifiedName, boundaries, layers),
+          classAnnotations,
+        );
         if (!targetLayer) continue;
 
         // If the target is in a controller package but annotated @Component (not @Controller/@RestController),
@@ -71,6 +83,13 @@ export class PackageBoundaryAnalyzer {
 
         const allowed = boundaries[fileLayer].allowedDeps;
         if (targetLayer === fileLayer) continue;
+
+        if (this.isConventionalSpringPersistenceDependency(
+          fileLayer,
+          sourceAnnotations,
+          imp.qualifiedName,
+          classAnnotations,
+        )) continue;
 
         if (!allowed.includes(targetLayer)) {
           violations.push({
@@ -99,10 +118,26 @@ export class PackageBoundaryAnalyzer {
           classesByName,
         );
         if (!targetFqn) continue;
-        const targetLayer = this.matchLayerByFqn(targetFqn, boundaries, layers);
+        if (classAnnotations && !classAnnotations.has(targetFqn)) continue;
+        const targetLayer = this.effectiveTargetLayer(
+          targetFqn,
+          this.matchLayerByFqn(targetFqn, boundaries, layers),
+          classAnnotations,
+        );
         if (!targetLayer || targetLayer === fileLayer) continue;
         const allowed = boundaries[fileLayer].allowedDeps;
         if (allowed.includes(targetLayer)) continue;
+
+        const sourceAnnotations = fileAst.classes.flatMap(cls =>
+          (cls.annotations || []).map(annotation => annotation.name)
+        );
+        if (this.isConventionalSpringPersistenceDependency(
+          fileLayer,
+          sourceAnnotations,
+          targetFqn,
+          classAnnotations,
+        )) continue;
+
         violations.push({
           type: 'package-violation',
           message: `Layer '${fileLayer}' should not depend on layer '${targetLayer}'. Allowed deps: [${allowed.join(', ')}]`,
@@ -162,6 +197,48 @@ export class PackageBoundaryAnalyzer {
       }
     }
     return bestLayer;
+  }
+
+  private effectiveTargetLayer(
+    fqn: string,
+    packageLayer: string | null,
+    classAnnotations?: Map<string, string[]>,
+  ): string | null {
+    const annotations = classAnnotations?.get(fqn) || [];
+    if (annotations.some(annotation => annotation === 'FeignClient' || annotation.endsWith('.FeignClient'))) {
+      return 'infrastructure';
+    }
+    return packageLayer;
+  }
+
+  private effectiveSourceLayer(packageLayer: string | null, annotations: string[]): string | null {
+    if (annotations.some(annotation => annotation === 'FeignClient' || annotation.endsWith('.FeignClient'))) {
+      return 'infrastructure';
+    }
+    if (annotations.some(annotation => annotation === 'Configuration' || annotation.endsWith('.Configuration'))) {
+      return 'infrastructure';
+    }
+    return packageLayer;
+  }
+
+  /** Conventional Spring permits a service to use a persistence repository. */
+  private isConventionalSpringPersistenceDependency(
+    sourceLayer: string,
+    sourceAnnotations: string[],
+    targetFqn: string,
+    classAnnotations?: Map<string, string[]>,
+  ): boolean {
+    if (this.config.architectureStyle === 'clean') return false;
+    if (sourceLayer !== 'application') return false;
+    if (!sourceAnnotations.some(annotation =>
+      annotation === 'Service' || annotation === 'Component' || annotation.endsWith('.Service') || annotation.endsWith('.Component')
+    )) return false;
+
+    const targetAnnotations = classAnnotations?.get(targetFqn) || [];
+    return targetAnnotations.some(annotation =>
+      annotation === 'Repository' || annotation === 'Dao' || annotation === 'DAO'
+      || annotation.endsWith('.Repository')
+    ) || /\.(repository|repositories|dao|persistence)\./i.test(targetFqn);
   }
 
   private globMatch(path: string, pattern: string): boolean {
@@ -225,10 +302,12 @@ export class PackageBoundaryAnalyzer {
         targetComponent: v.targetType,
       },
       analysisMetadata: {
-        confidence: 'High',
+        confidence: this.config.architectureStyle === 'clean' ? 'High' : 'Medium',
         evidence: v.evidence,
         reason: `${v.sourceLayer} layer depends on ${v.targetLayer} layer, but allowed dependencies are [${v.allowedDeps.join(', ')}].`,
-        type: 'Architecture best-practice violation',
+        type: this.config.architectureStyle === 'clean'
+          ? 'Architecture best-practice violation'
+          : 'Architecture-dependent boundary warning',
       },
       legacyType: 'package-violation',
       detectorSource: 'PackageBoundaryAnalyzer',
