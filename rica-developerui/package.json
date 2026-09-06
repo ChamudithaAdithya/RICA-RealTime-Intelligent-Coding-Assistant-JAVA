@@ -1,14 +1,26 @@
 {
   "name": "rica-realtime-code-violations-analyzer",
   "displayName": "RICA - Code Analyzer",
-  "description": "violations detection and guidance to solve",
-  "version": "0.0.9",
+  "description": "Real-time Java architecture, dependency, API boundary, and design-pattern analysis inside VS Code.",
+  "version": "0.1.0",
   "publisher": "Geeth-Chamuditha-Adithya-Herath",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/ChamudithaAdithya/RICA-RealTime-Intelligent-Coding-Assistant-JAVA.git"
   },
+  "homepage": "https://github.com/ChamudithaAdithya/RICA-RealTime-Intelligent-Coding-Assistant-JAVA#readme",
+  "bugs": {
+    "url": "https://github.com/ChamudithaAdithya/RICA-RealTime-Intelligent-Coding-Assistant-JAVA/issues"
+  },
+  "keywords": [
+    "java",
+    "architecture",
+    "static-analysis",
+    "clean-architecture",
+    "design-patterns",
+    "vscode-extension"
+  ],
   "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.110.0"

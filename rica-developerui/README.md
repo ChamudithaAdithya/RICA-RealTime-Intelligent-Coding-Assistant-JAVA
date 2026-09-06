@@ -2,6 +2,8 @@
 
 RICA helps Java developers find architecture, layer, API boundary, and design-pattern violations directly inside VS Code.
 
+For installation, first-run workflow, screenshots, false-positive handling, Marketplace notes, and troubleshooting, see the [RICA User Manual](USER_MANUAL.md).
+
 For a code-level map of extension activation, parsing, detection, diagnostics, incremental revalidation, and bundled documentation, see [Extension Code Architecture](docs/project/EXTENSION_CODE_ARCHITECTURE.md).
 
 It is designed for projects that care about clean architecture, maintainable service boundaries, and clear separation between controllers, services, repositories, entities, DTOs, and infrastructure code.

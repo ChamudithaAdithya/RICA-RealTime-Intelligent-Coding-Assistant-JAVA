@@ -20,6 +20,7 @@ target/
 *.md
 *.txt
 !README.md
+!USER_MANUAL.md
 !CHANGELOG.md
 !LICENSE.md
 !LICENSE.txt
