@@ -75,6 +75,59 @@ public class CheckoutService {
     });
 });
 
+describe('DesignPatternAnalyzer - V303 Missing Strategy', () => {
+
+    it('should flag repeated behavior selection on the same discriminator', () => {
+        const code = `package com.example.service;
+class PaymentService {
+    public void pay(String type) {
+        if (type == "CARD") {
+            payCard();
+        }
+        if (type == "PAYPAL") {
+            payPaypal();
+        }
+        if (type == "BANK") {
+            payBank();
+        }
+        if (type == "CASH") {
+            payCash();
+        }
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(violations.some(v => v.code === 'RICA-V303'), 'strategy-style discriminator branches should emit V303');
+    });
+
+    it('should NOT flag null/empty guard mapping in JavaMailSender utility methods', () => {
+        const code = `package com.simlea.service.util;
+import org.apache.commons.lang3.StringUtils;
+class JavaMailSenderUtils {
+    public JavaMailSender createMailSenderFromClientDto(ClientDto clientDto, EventEmailTemplate eventEmailTemplate) {
+        String host = clientDto.getSmtpHost();
+        int port = (clientDto.getSmtpPort() != null && clientDto.getSmtpPort() > 0) ? clientDto.getSmtpPort() : 587;
+        String username = clientDto.getSmtpUsername();
+        String password = clientDto.getSmtpPassword();
+        String encryption = clientDto.getSmtpEncryption();
+        if (eventEmailTemplate != null ) {
+            if (StringUtils.isNotEmpty(clientDto.getReplyToEmail())) {
+                eventEmailTemplate.setReplyTo(clientDto.getReplyToEmail());
+            }
+            if (StringUtils.isNotEmpty(clientDto.getCompanyEmail())) {
+                eventEmailTemplate.setMailFrom(clientDto.getCompanyEmail());
+            }
+            if (StringUtils.isNotEmpty(clientDto.getSenderName())) {
+                eventEmailTemplate.setMailFromName(clientDto.getSenderName());
+            }
+        }
+        return createMailSender(host, port, username, password, encryption);
+    }
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V303'), 'guard-based DTO/template mapping should not emit V303');
+    });
+});
+
 describe('DesignPatternAnalyzer — V308 Leaking Construction Logic', () => {
 
     it('should flag heavy nested construction in a business method', () => {
@@ -975,6 +1028,32 @@ describe('DesignPatternAnalyzer — V323 Missing Bridge', () => {
         assert.ok(strict.some(v => v.code === 'RICA-V323'), 'low threshold should flag');
         const lenient = new DesignPatternAnalyzer({ bridgeHierarchyThreshold: 10 }).analyze(asts);
         assert.ok(!lenient.some(v => v.code === 'RICA-V323'), 'high threshold should not flag');
+    });
+
+    it('should NOT flag generic Spring base service implementations as Bridge opportunities', () => {
+        const sources = [
+            {
+                path: 'src/main/java/com/simlea/service/impl/BaseServiceImpl.java',
+                code: `package com.simlea.service.impl;
+import org.springframework.data.jpa.repository.JpaRepository;
+public abstract class BaseServiceImpl<T, Dto, ID, Res> {
+    protected final JpaRepository<T, ID> repository;
+    protected BaseServiceImpl(JpaRepository<T, ID> repository) {
+        this.repository = repository;
+    }
+    public java.util.List<T> findAll() { return repository.findAll(); }
+    public T save(T entity) { return repository.save(entity); }
+    public void deleteById(ID id) { repository.deleteById(id); }
+}`,
+            },
+            { path: 'src/main/java/com/simlea/service/impl/FileServiceImpl.java', code: `package com.simlea.service.impl; class FileServiceImpl extends BaseServiceImpl<File, FileDto, Long, FileRes> { void send() {} }` },
+            { path: 'src/main/java/com/simlea/service/impl/EventServiceImpl.java', code: `package com.simlea.service.impl; class EventServiceImpl extends BaseServiceImpl<Event, EventDto, Long, EventRes> { void send() {} }` },
+            { path: 'src/main/java/com/simlea/service/impl/StatisticsServiceImpl.java', code: `package com.simlea.service.impl; class StatisticsServiceImpl extends BaseServiceImpl<Statistics, StatisticsDto, Long, StatisticsRes> { void send() {} }` },
+            { path: 'src/main/java/com/simlea/service/impl/ApiServiceImpl.java', code: `package com.simlea.service.impl; class ApiServiceImpl extends BaseServiceImpl<Api, ApiDto, Long, ApiRes> { void send() {} }` },
+            { path: 'src/main/java/com/simlea/service/impl/MobileServiceImpl.java', code: `package com.simlea.service.impl; class MobileServiceImpl extends BaseServiceImpl<Mobile, MobileDto, Long, MobileRes> { void send() {} }` },
+        ];
+        const violations = analyzeAll(sources);
+        assert.ok(!violations.some(v => v.code === 'RICA-V323'), 'generic repository-backed base service is a framework template, not Bridge evidence');
     });
 });
 

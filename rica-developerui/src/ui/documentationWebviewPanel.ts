@@ -58,7 +58,7 @@ export class DocumentationWebviewPanel {
         const cleanRoute = route.split('#', 1)[0].split('?', 1)[0];
         if (!cleanRoute) return;
         const normalized = cleanRoute.replace(/\\/g, '/');
-        const routePath = normalized.endsWith('.html') ? normalized : `${normalized}.html`;
+        const routePath = this.toHtmlRoutePath(normalized);
         const candidate = path.posix.normalize(
             normalized.startsWith('/') ? routePath.slice(1) : path.posix.join(currentDirectory, routePath),
         );
@@ -73,6 +73,17 @@ export class DocumentationWebviewPanel {
         } catch {
             // Keep the current page open when a link is not part of the package.
         }
+    }
+
+    private toHtmlRoutePath(route: string): string {
+        const withoutLeadingDot = route.replace(/^\.\//, '');
+        if (withoutLeadingDot.endsWith('/')) {
+            return `${withoutLeadingDot}index.html`;
+        }
+        if (withoutLeadingDot.endsWith('.html')) {
+            return withoutLeadingDot;
+        }
+        return `${withoutLeadingDot}.html`;
     }
 
     private update(): void {
@@ -99,13 +110,14 @@ export class DocumentationWebviewPanel {
             `script-src ${this.panel.webview.cspSource} 'unsafe-inline' 'unsafe-eval'`,
             `img-src ${this.panel.webview.cspSource} data:`,
             `font-src ${this.panel.webview.cspSource} data:`,
+            `connect-src ${this.panel.webview.cspSource}`,
         ].join('; ');
 
         const route = path.relative(distRoot.fsPath, this.routeUri.fsPath).replace(/\\/g, '/');
         const pageDirectory = path.posix.dirname(route);
         const resourceUrl = (attribute: string, raw: string): string => {
             if (/^(?:data:|https?:|#|mailto:|javascript:)/i.test(raw)) return raw;
-            if (attribute.toLowerCase() === 'href' && (/\.html(?:#.*)?$/i.test(raw) || /^\//.test(raw))) {
+            if (attribute.toLowerCase() === 'href' && this.isInternalDocumentationHref(raw)) {
                 return raw;
             }
             const normalized = raw.replace(/\\/g, '/');
@@ -120,9 +132,6 @@ export class DocumentationWebviewPanel {
             return this.panel.webview.asWebviewUri(uri).toString();
         };
 
-        pageHtml = pageHtml.replace(/<script\b[^>]*type=["']module["'][^>]*>[\s\S]*?<\/script>/gi, '');
-        pageHtml = pageHtml.replace(/<script\b[^>]*src=["'][^"']+["'][^>]*><\/script>/gi, '');
-        pageHtml = pageHtml.replace(/<link\b[^>]*rel=["']modulepreload["'][^>]*>/gi, '');
         pageHtml = pageHtml.replace(/\b(src|href)=(['"])([^'"]+)\2/gi, (_match, attribute, quote, raw) =>
             `${attribute}=${quote}${resourceUrl(attribute, raw)}${quote}`,
         );
@@ -134,7 +143,7 @@ export class DocumentationWebviewPanel {
                     const link = event.target.closest && event.target.closest('a[href]');
                     if (!link) return;
                     const href = link.getAttribute('href') || '';
-                    if (href.startsWith('/') || href.endsWith('.html') || href.endsWith('.html#')) {
+                    if (href.startsWith('/') || href.startsWith('./') || href.endsWith('.html') || href.endsWith('/')) {
                         event.preventDefault();
                         vscode.postMessage({ command: 'openRoute', route: href });
                     }
@@ -146,6 +155,15 @@ export class DocumentationWebviewPanel {
             .replace(/<head>/i, `<head><meta http-equiv="Content-Security-Policy" content="${csp}">`)
             .replace(/<\/body>/i, `${navigationScript}</body>`)
             .replace(/<title>[^<]*<\/title>/i, `<title>${this.escapeHtml(pageTitle)}</title>`);
+    }
+
+    private isInternalDocumentationHref(raw: string): boolean {
+        if (/^(?:data:|https?:|mailto:|javascript:|#)/i.test(raw)) return false;
+        const pathOnly = raw.split('#', 1)[0].split('?', 1)[0];
+        if (!pathOnly) return true;
+        if (pathOnly.endsWith('.html') || pathOnly.endsWith('/')) return true;
+        if (/^(?:\.\/|\.\.\/|\/)/.test(pathOnly) && !/\.[a-z0-9]+$/i.test(pathOnly)) return true;
+        return false;
     }
 
     private escapeHtml(value: string): string {

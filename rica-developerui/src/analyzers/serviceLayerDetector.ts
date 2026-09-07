@@ -45,11 +45,14 @@ export class ServiceLayerAnalyzer {
         const isSpringManaged = this.isSpringManaged(cls);
 
         // Check field-level repository injection
+        const uninjectedDependencyFields = new Set<string>();
+        const roleLabel = this.componentRoleLabel(cls);
         for (const field of cls.attributes) {
           if (isSpringManaged && this.isRepositoryType(field.dataType) && !field.isInjected) {
+            uninjectedDependencyFields.add(field.name);
             violations.push({
               type: 'uninjected-repository-access',
-              message: `Service class '${cls.className}' has uninjected repository field '${field.name}' of type ${field.dataType}. Annotate with @Autowired/@Inject/@Resource.`,
+              message: `${roleLabel} '${cls.className}' has uninjected repository field '${field.name}' of type ${field.dataType}. Inject it with constructor injection, @Autowired, @Inject, or @Resource.`,
               className: cls.fullyQualifiedName,
               fieldName: field.name,
               severity: 'error',
@@ -58,7 +61,7 @@ export class ServiceLayerAnalyzer {
                 start: { line: field.startLine, character: field.startColumn || 0 },
                 end: { line: field.endLine || field.startLine, character: field.endColumn || (field.startColumn || 0) + 1 },
               } : undefined,
-              explanation: 'Your service class declares a repository field without injecting it through the framework. With dependency injection, the container provides the repository instance automatically; without it, you either get a null pointer at runtime or have to manage object creation yourself, which couples your service to concrete implementations and makes unit testing difficult.'
+              explanation: `${roleLabel} declares a repository field without injecting it through the framework. With dependency injection, the container provides the repository instance automatically; without it, you either get a null pointer at runtime or have to manage object creation yourself. For mapper classes, also consider whether database lookups belong in the service layer before mapping starts.`
             });
           }
         }
@@ -87,9 +90,12 @@ export class ServiceLayerAnalyzer {
 
             if (isSpringManaged && (isRepoByLayer || isRepoByName)) {
               if (!call.receiverIsInjected) {
+                if (call.receiverVariableName && uninjectedDependencyFields.has(call.receiverVariableName)) {
+                  continue;
+                }
                 violations.push({
                   type: 'uninjected-repository-access',
-                  message: `Service method '${method.name}' accesses repository '${targetFQCN}' via uninjected field/parameter. Use dependency injection.`,
+                  message: `${roleLabel} method '${method.name}' accesses repository '${targetFQCN}' via uninjected field/parameter. Use dependency injection.`,
                   className: cls.fullyQualifiedName,
                   methodName: method.name,
                   receiverVariable: call.receiverVariableName,
@@ -100,7 +106,7 @@ export class ServiceLayerAnalyzer {
                   } : undefined,
                   severity: 'error',
                   filePath: ast.filePath,
-                  explanation: 'Your service method accesses a repository through an uninjected field or parameter. The framework should supply this dependency so your service stays decoupled from how the repository is created or configured, and so you can easily swap in mocks during testing.'
+                  explanation: `${roleLabel} method accesses a repository through an uninjected field or parameter. The framework should supply this dependency so the component stays decoupled from how the repository is created or configured, and so you can easily swap in mocks during testing.`
                 });
               }
             } else if (isSpringManaged && isInfrastructure && !call.receiverIsInjected) {
@@ -262,6 +268,16 @@ export class ServiceLayerAnalyzer {
 
   private isServiceImplementationName(className: string): boolean {
     return /(Service|ServiceImpl|Manager|Handler)$/i.test(className);
+  }
+
+  private componentRoleLabel(cls: ClassInfo): string {
+    if (/(Mapper|Converter|Assembler|Translator)$/i.test(cls.className)) {
+      return 'Mapper component';
+    }
+    if (/(Handler|Processor)$/i.test(cls.className)) {
+      return 'Service component';
+    }
+    return 'Service class';
   }
 
   private isAccessor(method: Method): boolean {

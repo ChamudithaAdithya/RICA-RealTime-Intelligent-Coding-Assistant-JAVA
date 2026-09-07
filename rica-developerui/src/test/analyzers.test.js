@@ -80,6 +80,33 @@ public class MyService {
         assert.ok(uninjected, 'should detect uninjected repository access');
     });
 
+    it('should report mapper repository injection once with mapper-specific wording', () => {
+        const code = `package com.simlea.service.mapper;
+import com.simlea.repository.core.UserRepository;
+import org.springframework.stereotype.Component;
+@Component
+public class FormMapper {
+    private UserRepository userRepository;
+
+    public FormVM toViewModel(Form form) {
+        if (form.getCreatedBy() != null && userRepository != null) {
+            userRepository.findById(form.getCreatedBy());
+        }
+        if (form.getUpdatedBy() != null && userRepository != null) {
+            userRepository.findById(form.getUpdatedBy());
+        }
+        return new FormVM();
+    }
+}`;
+        const ast = parse(code, 'FormMapper.java');
+        const repoAst = parse(`package com.simlea.repository.core;
+public interface UserRepository {}`, 'UserRepository.java');
+        const violations = analyzer.analyze([ast, repoAst]);
+        const uninjected = violations.filter(v => v.type === 'uninjected-repository-access');
+        assert.strictEqual(uninjected.length, 1, 'field and method call duplicates should collapse into one finding');
+        assert.match(uninjected[0].message, /^Mapper component 'FormMapper'/);
+    });
+
     it('should NOT flag constructor-injected repository as uninjected', () => {
         const code = `package com.example;
 import org.springframework.stereotype.Service;

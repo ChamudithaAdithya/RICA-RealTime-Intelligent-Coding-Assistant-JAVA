@@ -21,6 +21,7 @@ import { FileAuditLogger } from './infrastructure/ai/fileAuditLogger';
 import { AiQuickFixCodeActionProvider, showFixGuidance } from './ui/codeActionProvider';
 import { DocumentationCodeActionProvider } from './ui/documentationCodeActionProvider';
 import { openRicaDocumentation } from './ui/documentation';
+import { ensureRicaWorkspaceGitignore } from './infrastructure/ricaWorkspaceArtifacts';
 
 let astManager: ASTManager;
 let sourceProvider: SourceProvider;
@@ -530,6 +531,7 @@ async function exportAnalysisSnapshot(): Promise<void> {
     }
 
     const root = workspaceFolders[0].uri.fsPath;
+    await ensureRicaWorkspaceGitignore(root);
     const snapshotRoot = vscode.Uri.file(path.join(root, '.rica', 'analysis-snapshot'));
     const astDir = vscode.Uri.joinPath(snapshotRoot, 'asts');
     await vscode.workspace.fs.createDirectory(astDir);

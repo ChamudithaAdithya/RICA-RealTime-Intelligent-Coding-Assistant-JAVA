@@ -604,15 +604,19 @@ export class DesignPatternAnalyzer {
 
           // Check if-else chain — extract variable name from conditions like "type == X"
           const ifPoints = dps.filter(d => d.type === 'if' || d.type === 'else-if');
-          if (ifPoints.length >= 4) {
-            const varNames = ifPoints
-              .map(d => d.condition ? d.condition.split(/==|!=|<=?|>=?|\s+/)[0].trim() : '')
-              .filter(Boolean);
-            const uniqueVarNames = new Set(varNames);
-            if (uniqueVarNames.size <= 2) {
+          const strategySelectors = ifPoints
+            .map(d => this.extractStrategySelector(d.condition || ''))
+            .filter((selector): selector is string => Boolean(selector));
+          if (strategySelectors.length >= 4) {
+            const selectorCounts = new Map<string, number>();
+            for (const selector of strategySelectors) {
+              selectorCounts.set(selector, (selectorCounts.get(selector) || 0) + 1);
+            }
+            const maxSelectorCount = Math.max(...selectorCounts.values(), 0);
+            if (maxSelectorCount >= 4) {
               violations.push(this.toViolation(
                 'missing-strategy',
-                `Method '${method.name}' has ${ifPoints.length} if-else branches evaluating the same variable. Replace with Strategy pattern.`,
+                `Method '${method.name}' has ${maxSelectorCount} decision branches selecting behavior from the same discriminator. Replace with Strategy pattern.`,
                 ast.filePath || '', method.startLine, undefined, method.name, undefined,
               ));
               continue;
@@ -638,6 +642,51 @@ export class DesignPatternAnalyzer {
   }
 
   // ─── V308 Leaking Construction Logic ─────────────────────────────
+
+  private extractStrategySelector(condition: string): string | null {
+    const cleaned = condition.trim();
+    if (!cleaned || this.isGuardOrValidationCondition(cleaned)) return null;
+
+    const equality = cleaned.match(/^(.+?)\s*(?:==|!=)\s*(.+)$/);
+    if (equality && this.looksLikeStrategyValue(equality[2])) {
+      return this.normalizeSelector(equality[1]);
+    }
+
+    const receiverEquals = cleaned.match(/^(.+?)\.equals(?:IgnoreCase)?\((.+)\)$/i);
+    if (receiverEquals && this.looksLikeStrategyValue(receiverEquals[2])) {
+      return this.normalizeSelector(receiverEquals[1]);
+    }
+
+    const objectEquals = cleaned.match(/^Objects\.equals\((.+?),\s*(.+)\)$/i);
+    if (objectEquals && this.looksLikeStrategyValue(objectEquals[2])) {
+      return this.normalizeSelector(objectEquals[1]);
+    }
+
+    return null;
+  }
+
+  private isGuardOrValidationCondition(condition: string): boolean {
+    return /\bnull\b/i.test(condition)
+      || /\bStringUtils\.(isNotEmpty|isEmpty|isNotBlank|isBlank)\s*\(/i.test(condition)
+      || /\bObjects\.(nonNull|isNull)\s*\(/i.test(condition)
+      || /\.(isPresent|isEmpty|isBlank|isValid)\s*\(/i.test(condition)
+      || /\.(size|length)\s*\(\)?\s*(?:[<>]=?|==|!=)\s*\d+/i.test(condition);
+  }
+
+  private looksLikeStrategyValue(value: string): boolean {
+    const trimmed = value.trim();
+    return /^["'][^"']+["']$/.test(trimmed)
+      || /^[A-Z][A-Z0-9_]*(?:\.[A-Z][A-Z0-9_]*)*$/.test(trimmed)
+      || /^[A-Z][A-Za-z0-9_]*\.[A-Z][A-Z0-9_]*$/.test(trimmed);
+  }
+
+  private normalizeSelector(selector: string): string {
+    return selector
+      .replace(/^!+/, '')
+      .replace(/^\(+|\)+$/g, '')
+      .replace(/\s+/g, '')
+      .trim();
+  }
 
   private readonly BUILDER_PATTERN_RE = /builder|\.with[A-Z]/i;
   private readonly CONSTRUCTION_INFRASTRUCTURE_TYPES = new Set([
@@ -1484,6 +1533,7 @@ export class DesignPatternAnalyzer {
       const parentCls = classByFqcn.get(parentFqcn);
       const parentAst = astByFqcn.get(parentFqcn);
       if (!parentCls || !parentAst) continue;
+      if (this.isFrameworkTemplateHierarchy(parentAst, parentCls, children)) continue;
 
       const dimDesc = hasCombinatorialExplosion
         ? prefixes.dimensions.map(d => `[${d.values.join('/')}]`).join(' × ')
@@ -1526,6 +1576,23 @@ export class DesignPatternAnalyzer {
     const repeatedSuffix = [...suffixes.values()].some(v => v >= 2);
     const repeatedPrefix = [...prefixes.values()].some(v => v >= 2);
     return repeatedSuffix && repeatedPrefix;
+  }
+
+  private isFrameworkTemplateHierarchy(parentAst: FullASTOutput, parentCls: ClassInfo, children: ClassInfo[]): boolean {
+    const parentName = parentCls.className;
+    const parentPackage = parentAst.packageInfo?.name || '';
+    const parentImports = parentAst.imports?.map(i => i.qualifiedName || i.simpleName).join(' ') || '';
+    const parentFieldTypes = parentCls.attributes?.map(field => field.dataType).join(' ') || '';
+    const childNames = children.map(child => child.className);
+
+    const isBaseClassName = /^(Base|Abstract).*(Service|Repository|Controller|Resource|Mapper|Handler|Processor|UseCase|Dao|DAO|Gateway|Client|Adapter|Factory)(Impl)?$/i.test(parentName);
+    const isSpringDataBacked = /(JpaRepository|CrudRepository|PagingAndSortingRepository|MongoRepository|ReactiveCrudRepository)/.test(`${parentImports} ${parentFieldTypes}`);
+    const isApplicationTemplate = /\.(service|services|repository|repositories|dao|controller|controllers|resource|resources|mapper|mappers|adapter|adapters)(\.|$)/i.test(parentPackage);
+    const mostlyNamedByFrameworkRole = childNames.length > 0
+      && childNames.filter(name => /(Service|ServiceImpl|Repository|Controller|Resource|Mapper|Adapter|Client|Handler|Processor|UseCase)$/i.test(name)).length / childNames.length >= 0.75;
+
+    return (isBaseClassName && (isApplicationTemplate || isSpringDataBacked))
+      || (isSpringDataBacked && mostlyNamedByFrameworkRole);
   }
 
   // --- V324 Missing Mediator -------------------------------------------------
