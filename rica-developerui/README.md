@@ -98,10 +98,10 @@ RICA can be configured from VS Code Settings or `settings.json`.
 | `javaAstAnalyzer.layerBoundaries` | Clean/Spring defaults | Custom package-to-layer mapping and allowed dependencies. |
 | `javaAstAnalyzer.backendUrl` | `http://localhost:8082` | Optional backend URL for the browser AST viewer. |
 | `javaAstAnalyzer.enableAiAdvisory` | `false` | Enables optional AI advisory findings. |
-| `javaAstAnalyzer.aiProvider` | `ollama` | AI provider: `off`, `ollama`, or `openai-compatible`. |
-| `javaAstAnalyzer.aiEndpoint` | `http://localhost:11434` | AI provider endpoint. |
-| `javaAstAnalyzer.aiApiKey` | empty | Optional API key for OpenAI-compatible providers. |
-| `javaAstAnalyzer.aiModel` | `qwen2.5-coder:7b` | Model name used by the AI provider. |
+| `javaAstAnalyzer.aiProvider` | `openai-compatible` | AI provider: `off`, `ollama`, or `openai-compatible`. |
+| `javaAstAnalyzer.aiEndpoint` | `https://api.openai.com` | AI provider endpoint. |
+| `javaAstAnalyzer.aiApiKey` | empty | Legacy settings fallback; use `RICA: Set OpenAI API Key` instead. |
+| `javaAstAnalyzer.aiModel` | `gpt-4o-mini` | Model name used by the AI provider. |
 | `javaAstAnalyzer.aiTrigger` | `onDemand` | AI trigger mode: `onDemand`, `onSave`, or `onFullScan`. |
 
 Example OpenAI-compatible AI setup:
@@ -111,13 +111,28 @@ Example OpenAI-compatible AI setup:
   "javaAstAnalyzer.enableAiAdvisory": true,
   "javaAstAnalyzer.aiProvider": "openai-compatible",
   "javaAstAnalyzer.aiEndpoint": "https://api.openai.com",
-  "javaAstAnalyzer.aiApiKey": "YOUR_API_KEY",
   "javaAstAnalyzer.aiModel": "gpt-4o-mini",
   "javaAstAnalyzer.aiTrigger": "onDemand"
 }
 ```
 
-Store private API keys in VS Code User Settings, not in committed workspace settings.
+Example Agent Router setup:
+
+```json
+{
+  "javaAstAnalyzer.enableAiAdvisory": true,
+  "javaAstAnalyzer.aiProvider": "openai-compatible",
+  "javaAstAnalyzer.aiEndpoint": "https://agentrouter.org",
+  "javaAstAnalyzer.aiModel": "glm-5.3",
+  "javaAstAnalyzer.aiTrigger": "onDemand"
+}
+```
+
+Run `RICA: Set OpenAI API Key` from the Command Palette to store the key in VS Code Secret Storage, then run `RICA: Run AI Advisory Review`. Use an OpenAI Platform API key; a ChatGPT subscription by itself is not an API credential.
+
+The AI pass receives only eligible deterministic findings plus a bounded execution path and source snippets. It returns a `VIOLATION`, `NO_VIOLATION`, or `AMBIGUOUS` verdict with confidence, reasoning, optional advisory findings, and an optional quick fix. Open the Architecture Violations panel to see those values in the **Analysis** column, or run `RICA: Open AI Advisory Audit Log` to inspect `.rica/ai-audit.jsonl`.
+
+An API request is sent only when AI Advisory is enabled, the provider is reachable, and RICA finds at least one eligible candidate. If there are no candidates, RICA reports that no model request was sent.
 
 ## Requirements
 

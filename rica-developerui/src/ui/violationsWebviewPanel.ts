@@ -74,6 +74,9 @@ export class ViolationsWebviewPanel {
                             await openRicaDocumentation(this._extensionUri, message.url);
                         }
                         break;
+                    case 'runAiReview':
+                        await vscode.commands.executeCommand('rica.aiReview');
+                        break;
                     case 'ignoreViolation':
                         if (message.id) {
                             violationManager.ignoreViolation(message.id);
@@ -166,6 +169,8 @@ tr.clickable{cursor:pointer}
 .confidence-low{background:#75beff;color:#000}
 .analysis-detail{display:block;color:var(--vscode-descriptionForeground);margin-top:2px}
 .analysis-label{opacity:.8;text-transform:uppercase;font-size:10px;margin-right:4px}
+.ai-analysis{display:block;border-top:1px solid var(--vscode-panel-border);margin-top:5px;padding-top:4px}
+.ai-verdict{font-weight:700;color:var(--vscode-textLink-foreground)}
 .file-cell{overflow:hidden;text-overflow:ellipsis;font-family:var(--vscode-editor-font-family);font-size:11px}
 .hint-cell{font-size:11px;color:var(--vscode-descriptionForeground);line-height:1.35;overflow-wrap:anywhere}
 .muted{opacity:.75;font-size:10px;text-transform:uppercase}
@@ -210,6 +215,7 @@ tr.clickable{cursor:pointer}
 <label style="font-size:12px;cursor:pointer"><input type="checkbox" id="showIgnored"> Show ignored</label>
 <span id="ignoredBadgeArea" style="display:none;font-size:12px;cursor:pointer" onclick="document.getElementById('showIgnored').checked=!document.getElementById('showIgnored').checked;renderTable()"></span>
 <button onclick="renderTable()">&#x21bb; Refresh</button>
+<button onclick="runAiReview()">&#x2728; AI Review</button>
 <button class="secondary" onclick="clearFilters()">Clear</button>
 <button class="secondary" onclick="openDocsHome()">&#x1f4d6; Docs</button>
 </div>
@@ -272,16 +278,34 @@ function hideNotif() {
 
 function renderAnalysis(v) {
     var meta = v.analysisMetadata || {};
-    if (!meta.confidence && !meta.evidence && !meta.reason && !meta.type) {
+    var ai = v.aiInsights || null;
+    if (!meta.confidence && !meta.evidence && !meta.reason && !meta.type && !ai) {
         return '<span class="muted">No analysis metadata</span>';
     }
-    var confidence = escapeAttr(meta.confidence || 'Unknown');
-    var cls = 'confidence confidence-' + String(confidence).toLowerCase();
-    var html = '<span class="' + cls + '">' + confidence + '</span>';
+    var html = '';
+    if (meta.confidence || meta.evidence || meta.reason || meta.type) {
+        var confidence = escapeAttr(meta.confidence || 'Unknown');
+        var cls = 'confidence confidence-' + String(confidence).toLowerCase();
+        html += '<span class="' + cls + '">' + confidence + '</span>';
+    }
     if (meta.type) html += '<span class="analysis-detail"><span class="analysis-label">Type</span>' + escapeAttr(meta.type) + '</span>';
     if (meta.evidence) html += '<span class="analysis-detail"><span class="analysis-label">Evidence</span>' + escapeAttr(meta.evidence) + '</span>';
     if (meta.reason) html += '<span class="analysis-detail"><span class="analysis-label">Reason</span>' + escapeAttr(meta.reason) + '</span>';
+    if (ai) {
+        var aiConfidence = Math.round((Number(ai.confidence) || 0) * 100) + '%';
+        html += '<span class="ai-analysis">';
+        html += '<span class="analysis-detail"><span class="analysis-label">AI verdict</span><span class="ai-verdict">' + escapeAttr(ai.verdict || 'AMBIGUOUS') + '</span> (' + aiConfidence + ')</span>';
+        if (ai.reasoning) html += '<span class="analysis-detail"><span class="analysis-label">AI reasoning</span>' + escapeAttr(ai.reasoning) + '</span>';
+        if (ai.findings && ai.findings.length) {
+            html += '<span class="analysis-detail"><span class="analysis-label">AI finding</span>' + escapeAttr(ai.findings[0].message || '') + '</span>';
+        }
+        html += '</span>';
+    }
     return html;
+}
+
+function runAiReview() {
+    _vscode.postMessage({ command: 'runAiReview' });
 }
 
 function renderTable() {
@@ -298,12 +322,21 @@ function renderTable() {
         if (sourceVal !== 'all' && v.detectorSource !== sourceVal) continue;
         if (severityVal !== 'all' && v.severity !== severityVal) continue;
         if (searchVal) {
+            var code = (v.code || '').toLowerCase();
+            var id = (v.id || '').toLowerCase();
             var m = (v.message || '').toLowerCase();
             var f = (v.filePath || '').toLowerCase();
             var r = (v.ruleName || '').toLowerCase();
+            var doc = (v.documentationUrl || '').toLowerCase();
+            var hint = (v.mitigationHint || '').toLowerCase();
+            var explanation = (v.explanation || '').toLowerCase();
+            var legacy = (v.legacyType || '').toLowerCase();
             var meta = v.analysisMetadata || {};
-            var a = ((meta.confidence || '') + ' ' + (meta.evidence || '') + ' ' + (meta.reason || '') + ' ' + (meta.type || '')).toLowerCase();
-            if (m.indexOf(searchVal) === -1 && f.indexOf(searchVal) === -1 && r.indexOf(searchVal) === -1 && a.indexOf(searchVal) === -1) continue;
+            var ai = v.aiInsights || {};
+            var aiFindings = Array.isArray(ai.findings) ? ai.findings.map(function(finding) { return finding.message || ''; }).join(' ') : '';
+            var a = ((meta.confidence || '') + ' ' + (meta.evidence || '') + ' ' + (meta.reason || '') + ' ' + (meta.type || '') + ' ' + (ai.verdict || '') + ' ' + (ai.reasoning || '') + ' ' + aiFindings).toLowerCase();
+            var searchable = [code, id, m, f, r, doc, hint, explanation, legacy, a].join(' ');
+            if (searchable.indexOf(searchVal) === -1) continue;
         }
         filteredRows.push(v);
     }

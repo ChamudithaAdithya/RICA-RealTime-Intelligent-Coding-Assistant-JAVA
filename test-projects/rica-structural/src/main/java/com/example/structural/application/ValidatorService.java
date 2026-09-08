@@ -3,6 +3,12 @@ public class ValidatorService {
     private Processor processor;
 
     // V319 long processing pipeline with several guards and real work
+    // RICA-V319 FIX:
+    // Split validation/processing steps into a Chain of Responsibility or pipeline.
+    // Each handler should own one guard or processing stage.
+    // Example fixed shape:
+    //   validationChain.handle(o);
+    //   processingPipeline.process(o);
     public void processPipeline(Order o) {
         if (o == null) {
             throw new IllegalArgumentException();

@@ -94,9 +94,10 @@ export class FileWatcher {
      * Uses debouncing to avoid excessive parsing.
      */
     onDocumentChanged(document: vscode.TextDocument): void {
-        const workspaceRoot = this.sourceProvider.getWorkspaceRoot();
-        const relativePath = path.relative(workspaceRoot, document.uri.fsPath);
-        this.violationManager.markFileDirty(relativePath);
+        // Keep the last valid diagnostics visible while the debounced parse runs.
+        // Removing them here caused whitespace-only edits (for example pressing
+        // Enter) to erase still-valid findings because the incremental analyzer
+        // correctly treats those edits as having no semantic impact.
         this.debouncedHandleDocumentChange(document);
     }
 

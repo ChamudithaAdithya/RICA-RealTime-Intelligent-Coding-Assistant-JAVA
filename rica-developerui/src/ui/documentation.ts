@@ -1,8 +1,7 @@
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { DocumentationWebviewPanel } from './documentationWebviewPanel';
 
-function markdownPathFromTarget(target?: string): string[] {
+function htmlRouteFromTarget(target?: string): string {
     let docPath = target || '/index.html';
 
     if (/^command:/i.test(docPath)) {
@@ -25,39 +24,41 @@ function markdownPathFromTarget(target?: string): string[] {
 
     const violationCode = docPath.match(/(?:^|[^A-Z0-9])(RICA-V\d{3})(?:[^A-Z0-9]|$)/i)?.[1];
     if (violationCode) {
-        docPath = `/violations/${violationCode.toUpperCase()}.html`;
+        return `violations/${violationCode.toUpperCase()}.html`;
     }
 
     if (/^https?:\/\//i.test(docPath)) {
         try {
             docPath = new URL(docPath).pathname;
         } catch {
-            return ['docs', 'index.md'];
+            return 'index.html';
         }
     }
 
     docPath = docPath.replace(/\\/g, '/').replace(/^\/+/, '');
     if (!docPath || docPath === 'index.html' || docPath === 'index.md') {
-        return ['docs', 'index.md'];
+        return 'index.html';
     }
 
-    docPath = docPath.replace(/\.html$/i, '.md');
-    if (!docPath.endsWith('.md')) {
-        docPath += '.md';
+    if (docPath.endsWith('/')) {
+        docPath += 'index.html';
+    } else if (docPath.endsWith('.md')) {
+        docPath = docPath.replace(/\.md$/i, '.html');
+    } else if (!docPath.endsWith('.html')) {
+        docPath += '.html';
     }
 
     const parts = docPath.split('/').filter(Boolean);
-    if (parts.includes('..') || parts.some(part => path.isAbsolute(part))) {
-        return ['docs', 'index.md'];
+    if (parts.includes('..') || parts.some(part => /^[A-Za-z]:$/.test(part))) {
+        return 'index.html';
     }
-    return ['docs', ...parts];
+    return parts.join('/');
 }
 
 export async function openRicaDocumentation(extensionUri: vscode.Uri, target?: string): Promise<void> {
-    const parts = markdownPathFromTarget(target);
-    const route = parts.slice(1).join('/').replace(/\.md$/i, '.html');
+    const route = htmlRouteFromTarget(target);
     const distRoot = vscode.Uri.joinPath(extensionUri, 'docs', '.vitepress', 'dist');
-    const routeUri = vscode.Uri.joinPath(distRoot, route || 'index.html');
+    const routeUri = vscode.Uri.joinPath(distRoot, ...route.split('/'));
     const fallbackUri = vscode.Uri.joinPath(distRoot, 'index.html');
 
     try {

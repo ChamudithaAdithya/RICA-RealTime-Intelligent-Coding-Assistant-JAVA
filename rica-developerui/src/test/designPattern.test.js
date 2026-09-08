@@ -241,16 +241,14 @@ class OrderService {
 
 describe('DesignPatternAnalyzer — V309 Fat Interface (ISP)', () => {
 
-    it('should flag a project interface with > limit methods', () => {
+    it('should NOT flag a large interface by method count alone', () => {
         const code = `package com.example;
 interface AllInOne {
     void a(); void b(); void c(); void d(); void e();
     void f(); void g(); void h(); void i(); void j(); void k();
 }`;
         const violations = analyze(code);
-        const v309 = violations.find(v => v.code === 'RICA-V309');
-        assert.ok(v309, 'should emit V309');
-        assert.strictEqual(v309.severity, 'warning');
+        assert.ok(!violations.some(v => v.code === 'RICA-V309'), 'size alone should not prove an ISP violation');
     });
 
     it('should NOT flag a small interface', () => {
@@ -286,13 +284,24 @@ interface UserRepository extends JpaRepository<User, Long> {
     });
 
     it('should honor fatInterfaceMethodLimit config', () => {
-        const code = `package com.example;
+        const iface = {
+            path: 'Iface.java',
+            code: `package com.example;
 interface Iface {
     void a(); void b(); void c();
-}`;
-        const strict = analyze(code, { fatInterfaceMethodLimit: 2 });
+}`,
+        };
+        const client = {
+            path: 'Client.java',
+            code: `package com.example;
+class Client {
+    private Iface iface;
+    void run() { iface.a(); }
+}`,
+        };
+        const strict = analyzeAll([iface, client], { fatInterfaceMethodLimit: 2 });
         assert.ok(strict.some(v => v.code === 'RICA-V309'), 'low limit should flag');
-        const lenient = analyze(code, { fatInterfaceMethodLimit: 10 });
+        const lenient = analyzeAll([iface, client], { fatInterfaceMethodLimit: 10 });
         assert.ok(!lenient.some(v => v.code === 'RICA-V309'), 'high limit should not flag');
     });
 
@@ -312,10 +321,10 @@ class OrderClient {
     public void a() { writer.writeOne(); }
 }`,
         };
-        const violations = analyzeAll([iface, client]);
+        const violations = analyzeAll([iface, client], { fatInterfaceMethodLimit: 4 });
         const v309 = violations.find(v => v.code === 'RICA-V309');
         assert.ok(v309, 'low usage ratio should flag');
-        assert.match(v309.message, /%\) are used/);
+        assert.match(v309.message, /observed clients use only 1 \(20%\)/);
     });
 
     it('should NOT flag an interface whose methods are mostly used by clients', () => {
@@ -368,6 +377,59 @@ class Checkout {
         };
         const violations = analyzeAll([iface, impl, client]);
         assert.ok(!violations.some(v => v.code === 'RICA-V309'), 'usage via impl-typed receiver (2/4 = 50%) should not flag');
+    });
+
+    it('should NOT flag a cohesive service interface when a client uses the full API surface', () => {
+        const iface = {
+            path: 'FormService.java',
+            code: `package com.simlea.service;
+interface FormService {
+    PageVM getFormsByPaged(Long userId, int page, int size, String sortOrder, String sortBy, String search, Date createdAt, Date updatedAt, String name, String formLabel, Integer version, String createdBy, String updatedBy, Integer production, Long eventId, Boolean deleted);
+    void restoreForm(Long id);
+    void permanentDeleteForm(Long id, String token);
+    List getFormsPickList(Long userId, Long userIdV2, Boolean production, Long eventId, Boolean deleted);
+    JsonNode getFormsPickListBulk(List userIds, String search, String sortOrder, Boolean deleted);
+    FormVM getFormByFormId(Long formId);
+    List getFormStructure(Long formId);
+    JsonNode changeProductionMode(Long id, Boolean production);
+    JsonNode saveFormConfig(SaveFormConfigDto configDto);
+    FormColumnsDto getFormConfig(Long formId);
+    JsonNode exportForm(Long formId);
+    JsonNode getFormFields(Long formId);
+    JsonNode updateFormPdfUrlPattern(Long formId, String pdfUrlPattern);
+    JsonNode getEmailTemplateFormFields();
+    void softDeleteForm(Long formId);
+    FormVM importForm(FormDto entity);
+}`,
+        };
+        const client = {
+            path: 'FormController.java',
+            code: `package com.simlea.controller;
+import com.simlea.service.FormService;
+class FormController {
+    private FormService formService;
+    void all() {
+        formService.getFormsByPaged(null, 0, 10, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        formService.restoreForm(1L);
+        formService.permanentDeleteForm(1L, "token");
+        formService.getFormsPickList(1L, 2L, true, 3L, false);
+        formService.getFormsPickListBulk(null, null, null, false);
+        formService.getFormByFormId(1L);
+        formService.getFormStructure(1L);
+        formService.changeProductionMode(1L, true);
+        formService.saveFormConfig(null);
+        formService.getFormConfig(1L);
+        formService.exportForm(1L);
+        formService.getFormFields(1L);
+        formService.updateFormPdfUrlPattern(1L, "x");
+        formService.getEmailTemplateFormFields();
+        formService.softDeleteForm(1L);
+        formService.importForm(null);
+    }
+}`,
+        };
+        const violations = analyzeAll([iface, client], { fatInterfaceMethodLimit: 4 });
+        assert.ok(!violations.some(v => v.code === 'RICA-V309'), 'cohesive API used by its client should not flag');
     });
 });
 
@@ -575,6 +637,28 @@ class Printer {
 }`;
         const violations = analyze(code);
         assert.ok(!violations.some(v => v.code === 'RICA-V314'), 'single instanceof is fine');
+    });
+
+    it('should NOT flag Jackson form schema traversal as a Composite opportunity', () => {
+        const code = `package com.simlea.service.impl;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+class FormServiceImpl {
+    private void extractFieldsFromElements(JsonNode elements) {
+        for (JsonNode element : elements) {
+            if (element instanceof ObjectNode) {
+                collectField(element);
+            }
+            if (element instanceof ArrayNode) {
+                extractFieldsFromElements(element);
+            }
+        }
+    }
+    private void collectField(JsonNode node) {}
+}`;
+        const violations = analyze(code);
+        assert.ok(!violations.some(v => v.code === 'RICA-V314'), 'framework JSON traversal should not be treated as domain Composite');
     });
 });
 

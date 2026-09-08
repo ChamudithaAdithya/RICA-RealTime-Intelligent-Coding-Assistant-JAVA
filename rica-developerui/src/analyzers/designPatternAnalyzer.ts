@@ -77,7 +77,7 @@ const DP_MITIGATIONS: Record<DesignPatternRuleType, string> = {
   'raw-thread': 'Use @Async or a TaskExecutor bean instead of managing threads directly — this gives lifecycle management and monitoring',
   'missing-abstraction': 'Either this abstraction is unnecessary (YAGNI — consider inlining), or add more implementations to justify the indirection',
   'leaking-construction': 'Extract complex object initialization into a Builder or Factory so business methods stay focused on orchestration',
-  'fat-interface': 'Split this interface by responsibility (ISP) — clients should depend only on the methods they actually use',
+  'fat-interface': 'Review the clients first. Split this interface only when callers depend on operations they do not use (ISP)',
   'missing-command': 'Encapsulate each multi-step write sequence as a Command object (or @Transactional boundary) to keep transactions explicit',
   'missing-prototype': 'Copy objects via clone()/copy constructors (Prototype) instead of manual field-by-field getter→setter copying',
   'fragmented-factories': 'Introduce an Abstract Factory interface so related product families are created through a unified hierarchy',
@@ -770,25 +770,18 @@ export class DesignPatternAnalyzer {
         const fqcn = cls.fullyQualifiedName || cls.className;
         const declaredMethods = cls.methods || [];
         const declared = declaredMethods.length;
-        if (declared > limit) {
-          violations.push(this.toViolation(
-            'fat-interface',
-            `Interface '${cls.className}' declares ${declared} methods (limit ${limit}). Consider splitting by responsibility (ISP).`,
-            ast.filePath || '', cls.startLine, undefined, undefined, undefined, fqcn,
-          ));
-          continue;
-        }
-        // Alternative trigger: clients use <50% of the declared methods. Requires a
-        // reasonable surface (>=4 methods) so tiny untouched interfaces are not flagged.
-        if (declared < 4) continue;
+        // ISP is about client dependency, not raw interface size. A large
+        // cohesive service API is acceptable when its clients use the surface.
+        if (declared <= limit) continue;
         const declNames = new Set(declaredMethods.map(m => m.name));
         const relatedTypes = this.collectImplementationTypeNames(allAsts, cls.className, fqcn);
         const used = this.collectUsedInterfaceMethods(allAsts, relatedTypes, declNames);
+        if (used.size === 0) continue;
         const ratio = used.size / declared;
         if (ratio < this.INTERFACE_USAGE_RATIO_THRESHOLD) {
           violations.push(this.toViolation(
             'fat-interface',
-            `Interface '${cls.className}' declares ${declared} methods but only ${used.size} (${Math.round(ratio * 100)}%) are used by clients (threshold ${Math.round(this.INTERFACE_USAGE_RATIO_THRESHOLD * 100)}%). Consider splitting by responsibility (ISP).`,
+            `Interface '${cls.className}' declares ${declared} methods and observed clients use only ${used.size} (${Math.round(ratio * 100)}%). Consider splitting only if clients depend on unused responsibilities (ISP).`,
             ast.filePath || '', cls.startLine, undefined, undefined, undefined, fqcn,
           ));
         }
@@ -992,6 +985,7 @@ export class DesignPatternAnalyzer {
           if (!hasLoop) continue;
           const instanceOfChecks = dps.filter(d => /instanceof/i.test(d.condition || ''));
           if (instanceOfChecks.length < 2) continue;
+          if (this.isFrameworkTreeTraversal(method, instanceOfChecks)) continue;
           if (!this.hasCompositeDomainSignal(ast, cls, method, instanceOfChecks)) continue;
           violations.push(this.toViolation(
             'missing-composite',
@@ -1019,6 +1013,27 @@ export class DesignPatternAnalyzer {
 
     return /(tree|node|child|children|parent|component|element|field|column|structure|hierarchy|recursive|nested|json|folder|directory)/i
       .test(context);
+  }
+
+  private isFrameworkTreeTraversal(
+    method: Method,
+    instanceOfChecks: Array<{ condition?: string }>,
+  ): boolean {
+    const methodText = [
+      method.name,
+      method.returnType,
+      ...method.parameters.map(parameter => parameter.dataType),
+      ...instanceOfChecks.map(check => check.condition || ''),
+      ...(method.calledMethods || []).map(call => `${call.receiverType || ''}.${call.calledMethodName}`),
+    ].join(' ');
+
+    const frameworkTreeTypes = /(JsonNode|ObjectNode|ArrayNode|ValueNode|TextNode|NumericNode|BooleanNode|ContainerNode|MissingNode|NullNode|Element|Elements|NodeList|Document|JsonElement|JsonObject|JsonArray)/i;
+    const traversalNames = /(extract|collect|columns?|fields?|structure|traverse|flatten|walk|parse|read|form)/i;
+    if (!frameworkTreeTypes.test(methodText)) return false;
+    if (!traversalNames.test(method.name)) return false;
+
+    const frameworkChecks = instanceOfChecks.filter(check => frameworkTreeTypes.test(check.condition || ''));
+    return frameworkChecks.length >= 2;
   }
 
   // ─── V315 Redundant Memory Footprint (allocations in loops) ──────

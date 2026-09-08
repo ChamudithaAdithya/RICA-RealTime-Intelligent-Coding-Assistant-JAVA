@@ -194,7 +194,7 @@ For clean screenshots:
 
 ## 12. AI API Key Setup
 
-RICA can use an OpenAI-compatible API instead of Ollama for optional AI advisory review.
+RICA can use the OpenAI API with `gpt-4o-mini` for optional AI advisory review.
 
 Add this in VS Code User Settings:
 
@@ -203,21 +203,47 @@ Add this in VS Code User Settings:
   "javaAstAnalyzer.enableAiAdvisory": true,
   "javaAstAnalyzer.aiProvider": "openai-compatible",
   "javaAstAnalyzer.aiEndpoint": "https://api.openai.com",
-  "javaAstAnalyzer.aiApiKey": "YOUR_API_KEY",
   "javaAstAnalyzer.aiModel": "gpt-4o-mini",
   "javaAstAnalyzer.aiTrigger": "onDemand"
 }
 ```
 
+For Agent Router, use the same OpenAI-compatible mode:
+
+```json
+{
+  "javaAstAnalyzer.enableAiAdvisory": true,
+  "javaAstAnalyzer.aiProvider": "openai-compatible",
+  "javaAstAnalyzer.aiEndpoint": "https://agentrouter.org",
+  "javaAstAnalyzer.aiModel": "glm-5.3",
+  "javaAstAnalyzer.aiTrigger": "onDemand"
+}
+```
+
+You can test the provider from PowerShell before using it in VS Code:
+
+```powershell
+$env:AI_PROVIDER="openai-compatible"
+$env:AI_ENDPOINT="https://agentrouter.org"
+$env:AI_MODEL="glm-5.3"
+$env:AI_API_KEY="YOUR_AGENT_ROUTER_API_KEY"
+npm run ai:smoke
+```
+
 Use `https://api.openai.com` or `https://api.openai.com/v1` for OpenAI-style APIs. RICA normalises the endpoint internally.
 
-Do not commit API keys into a project repository. Prefer VS Code User Settings for personal keys, and review privacy requirements before sending commercial source-code snippets to an external provider.
+Run `RICA: Set OpenAI API Key` from the Command Palette. RICA stores the key in VS Code Secret Storage and never writes it into the workspace settings file. Use an OpenAI Platform API key; ChatGPT subscriptions do not provide API credentials. Review privacy requirements before sending commercial source-code snippets to an external provider.
 
 Then:
 
 1. Run `Java AST: Analyze Full Project`.
-2. Run the AI review command from the Command Palette.
-3. Check the `Java AST Analyzer` output channel if the provider is unavailable.
+2. Run `RICA: Set OpenAI API Key` once.
+3. Run `RICA: Run AI Advisory Review` from the Command Palette.
+4. Open the Architecture Violations panel and read **AI verdict**, **AI confidence**, and **AI reasoning** in the Analysis column.
+5. Run `RICA: Open AI Advisory Audit Log` to inspect the complete decisions in `.rica/ai-audit.jsonl`.
+6. Check the `Java AST Analyzer` output channel for the model, candidate count, outcome, and provider errors.
+
+The AI reviews selected ambiguous architecture/design findings and mutating endpoint security probes. It can annotate an existing deterministic finding or add a separate `RICA-V000` advisory finding with a proposed quick fix. It never deletes a deterministic violation. If RICA finds zero eligible candidates, it does not call the model or use API tokens.
 
 ## 13. Recommended Marketplace Description
 

@@ -2,7 +2,7 @@
   "name": "rica-realtime-code-violations-analyzer",
   "displayName": "RICA - JAVA Code Analyzer",
   "description": "Real-time Java architecture, dependency, API boundary, and design-pattern analysis inside VS Code.",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "publisher": "Geeth-Chamuditha-Adithya-Herath",
   "license": "MIT",
   "repository": {
@@ -40,10 +40,14 @@
     "onCommand:javaAstAnalyzer.showViolationsView",
     "onCommand:javaAstAnalyzer.exportAnalysisSnapshot",
     "onCommand:javaAstAnalyzer.openDocumentation",
+    "onCommand:javaAstAnalyzer.ignoreViolation",
     "onCommand:javaAstAnalyzer.showFixGuidance",
     "onCommand:rica.analyzeProject",
     "onCommand:rica.quickScanFile",
     "onCommand:rica.aiReview",
+    "onCommand:rica.setOpenAiApiKey",
+    "onCommand:rica.clearOpenAiApiKey",
+    "onCommand:rica.openAiAuditLog",
     "onCommand:rica.showStatusSummary"
   ],
   "main": "./dist/extension.js",
@@ -80,6 +84,34 @@
       {
         "command": "javaAstAnalyzer.openDocumentation",
         "title": "Java AST: Open RICA Documentation"
+      },
+      {
+        "command": "rica.analyzeProject",
+        "title": "RICA: Analyze Project"
+      },
+      {
+        "command": "rica.quickScanFile",
+        "title": "RICA: Quick Scan Current Java File"
+      },
+      {
+        "command": "rica.aiReview",
+        "title": "RICA: Run AI Advisory Review"
+      },
+      {
+        "command": "rica.setOpenAiApiKey",
+        "title": "RICA: Set OpenAI API Key"
+      },
+      {
+        "command": "rica.clearOpenAiApiKey",
+        "title": "RICA: Clear OpenAI API Key"
+      },
+      {
+        "command": "rica.openAiAuditLog",
+        "title": "RICA: Open AI Advisory Audit Log"
+      },
+      {
+        "command": "rica.showStatusSummary",
+        "title": "RICA: Show Audit Summary"
       }
     ],
     "configuration": {
@@ -144,7 +176,7 @@
           "default": 10,
           "minimum": 2,
           "maximum": 100,
-          "description": "V309: maximum declared methods on a project interface before flagging a fat interface / ISP violation"
+          "description": "V309: minimum declared methods before checking whether clients use too little of an interface surface (ISP candidate)"
         },
         "javaAstAnalyzer.missingCommandComplexityThreshold": {
           "type": "number",
@@ -284,30 +316,31 @@
             "ollama",
             "openai-compatible"
           ],
-          "default": "ollama",
+          "default": "openai-compatible",
           "description": "AI provider. 'ollama' targets an Ollama server (e.g. hosted on Google Colab); 'openai-compatible' targets any OpenAI-compatible /chat/completions API"
         },
         "javaAstAnalyzer.aiEndpoint": {
           "type": "string",
-          "default": "http://localhost:11434",
+          "default": "https://api.openai.com",
           "description": "AI provider endpoint. For OpenAI-compatible APIs, use the provider base URL such as https://api.openai.com or https://api.openai.com/v1"
         },
         "javaAstAnalyzer.aiApiKey": {
           "type": "string",
           "default": "",
-          "description": "Optional API key for openai-compatible AI providers. Prefer storing this in User Settings, not workspace settings, when using private keys."
+          "scope": "window",
+          "markdownDescription": "Legacy API-key setting for OpenAI-compatible providers. Prefer **RICA: Set OpenAI API Key**, which stores the key in VS Code Secret Storage."
         },
         "javaAstAnalyzer.aiModel": {
           "type": "string",
-          "default": "qwen2.5-coder:7b",
-          "description": "Model name/tag served by the configured provider (e.g. qwen2.5-coder:7b, llama3.1:8b)"
+          "default": "gpt-4o-mini",
+          "description": "Model name served by the configured provider. RICA's OpenAI default is gpt-4o-mini."
         },
         "javaAstAnalyzer.aiMaxTokensPerRequest": {
           "type": "number",
-          "default": 2000,
+          "default": 4096,
           "minimum": 256,
           "maximum": 8192,
-          "description": "Maximum output tokens per AI reasoning request"
+          "description": "Maximum output tokens per AI reasoning request. RICA automatically retries truncated multi-candidate reviews in smaller batches."
         },
         "javaAstAnalyzer.aiTimeoutMs": {
           "type": "number",
@@ -354,6 +387,7 @@
     "test:analyzers": "npm run compile && mocha --grep 'LayerAnalyzer|Multi-layer' src/test/analyzers.test.js",
     "test:crossfile": "npm run compile && mocha --grep 'CrossFile' src/test/crossFile.test.js",
     "test:projects": "npm run compile && node scripts/verify-test-projects.js",
+    "test:java-projects": "node scripts/verify-java-test-projects.cjs",
     "rica:check": "npm run compile && node dist/tooling/ricaLayerCheck.js",
     "rica:check:self": "npm run compile && node dist/tooling/ricaLayerCheck.js && node scripts/manual/test-lms-analyzer.js",
     "ai:smoke": "npm run compile && node scripts/aiSmokeTest.js",

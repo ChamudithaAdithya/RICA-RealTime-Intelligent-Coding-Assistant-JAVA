@@ -281,8 +281,8 @@ export class ViolationManager {
     }
 
     /**
-     * Clears stale diagnostics for the file currently being edited. Fresh
-     * violations are restored by the debounced parse/save analysis.
+     * Clears diagnostics only when the file no longer has a valid parseable AST.
+     * Ordinary edits retain the last valid findings until re-analysis completes.
      */
     public markFileDirty(filePath: string): void {
         this.activeViolations = this.activeViolations.filter(v => v.filePath !== filePath);

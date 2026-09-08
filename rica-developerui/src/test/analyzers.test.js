@@ -200,6 +200,37 @@ public class ThinService {
         assert.ok(!anemic, 'repository delegation alone is not an anemic-service violation');
     });
 
+    it('should NOT treat a get-prefixed service workflow method as an accessor', () => {
+        const code = `package com.simlea.service;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.simlea.model.Role;
+import com.simlea.repository.core.RoleRepository;
+import lombok.AllArgsConstructor;
+import org.springframework.stereotype.Service;
+import java.util.List;
+@Service
+@AllArgsConstructor
+public class RoleService {
+    private final RoleRepository roleRepository;
+    public List<ObjectNode> getAllRoles() {
+        List<Role> roles = roleRepository.findAll();
+        ObjectMapper mapper = new ObjectMapper();
+        return roles.stream().map(role -> {
+            ObjectNode node = mapper.createObjectNode();
+            node.put("id", role.getId());
+            node.put("name", role.getName());
+            node.put("description", role.getDescription());
+            return node;
+        }).toList();
+    }
+}`;
+        const ast = parse(code, 'RoleService.java');
+        const violations = analyzer.analyze([ast]);
+        const anemic = violations.find(v => v.type === 'anemic-service');
+        assert.ok(!anemic, 'get-prefixed workflow methods with calls, object creation, or mapping are not accessors');
+    });
+
     it('should detect an empty service as anemic', () => {
         const code = `package com.example;
 import org.springframework.stereotype.Service;
@@ -276,6 +307,88 @@ public class MyController {
         const violations = analyzer.analyze([ast]);
         const bizLogic = violations.find(v => v.type === 'business-logic');
         assert.ok(bizLogic, 'should detect business logic in controller');
+    });
+
+    it('should NOT flag file response assembly as controller business logic', () => {
+        const code = `package com.simlea.controller;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+@RestController
+public class FileStorageController {
+    private FileStorageService fileStorageService;
+    private CommonFileService commonFileService;
+
+    private ResponseEntity<Resource> getResourceResponseEntity(Resource file, String originalFileName) throws IOException {
+        if (file == null || !file.exists()) {
+            return ResponseEntity.notFound().build();
+        }
+        String fileName = originalFileName;
+        if (fileName == null || fileName.trim().isEmpty()) {
+            fileName = file.getFilename();
+        }
+        if (fileName == null || fileName.trim().isEmpty()) {
+            fileName = "file";
+        }
+        String contentType = Files.probeContentType(file.getFile().toPath());
+        if (contentType == null) {
+            String lowerName = fileName.toLowerCase();
+            if (lowerName.endsWith(".pdf")) {
+                contentType = "application/pdf";
+            } else if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+                contentType = "image/jpeg";
+            } else if (lowerName.endsWith(".png")) {
+                contentType = "image/png";
+            } else {
+                contentType = "application/octet-stream";
+            }
+        }
+        return ResponseEntity.ok()
+            .contentType(MediaType.parseMediaType(contentType))
+            .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\\"" + fileName + "\\"")
+            .body(file);
+    }
+
+    @GetMapping("/uploads/**")
+    public ResponseEntity<Resource> getFileWithSignatureGeneric(HttpServletRequest request, Long expires, String signature) throws IOException {
+        String requestURI = request.getRequestURI();
+        String basePath = "/api/v1/mobile/file-storage/uploads/";
+        String filePath = requestURI.substring(requestURI.indexOf(basePath) + basePath.length());
+        String decodedPath = URLDecoder.decode(filePath, StandardCharsets.UTF_8.name());
+        decodedPath = decodedPath.replace("\\\\", "/");
+        String normalizedPath = commonFileService.normalizeFilePath(decodedPath);
+        if (!normalizedPath.startsWith("/")) {
+            normalizedPath = "/" + normalizedPath;
+        }
+        String pathToLoad;
+        if (normalizedPath.matches("^/?[A-Za-z]:/.*")) {
+            pathToLoad = normalizedPath.startsWith("/") ? normalizedPath.substring(1) : normalizedPath;
+        } else {
+            pathToLoad = normalizedPath;
+        }
+        Resource file = fileStorageService.loadImageByPath(pathToLoad);
+        if (file == null || !file.exists()) {
+            return ResponseEntity.notFound().build();
+        }
+        String originalFileName = pathToLoad.substring(pathToLoad.lastIndexOf("/") + 1);
+        return getResourceResponseEntity(file, originalFileName);
+    }
+}`;
+        const ast = parse(code, 'FileStorageController.java');
+        const violations = analyzer.analyze([ast]);
+        const businessLogicMethods = violations
+            .filter(v => v.type === 'business-logic')
+            .map(v => v.methodName);
+        assert.ok(!businessLogicMethods.includes('getResourceResponseEntity'), 'file response helper is transport assembly');
+        assert.ok(!businessLogicMethods.includes('getFileWithSignatureGeneric'), 'file download endpoint is boundary orchestration');
     });
 
     it('should NOT flag delegation-only controller methods', () => {

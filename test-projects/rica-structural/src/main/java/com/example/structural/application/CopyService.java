@@ -2,6 +2,13 @@ package com.example.structural.application;
 
 public class CopyService {
     // V311 prototype — 3 getter->setter pairs same type
+    // RICA-V311 FIX:
+    // Replace manual field copying with a copy constructor, clone method, or mapper.
+    // Keep copy rules in one place so new fields are not accidentally missed.
+    // Example fixed shape:
+    //   Order to = Order.copyOf(from);
+    // or:
+    //   Order to = orderMapper.copy(from);
     public void copy(Order from){
         Order to = new Order();
         to.setId(from.getId());

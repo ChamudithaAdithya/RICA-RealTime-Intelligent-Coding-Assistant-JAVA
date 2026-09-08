@@ -267,13 +267,14 @@ d({
   detector: 'ControllerLayerAnalyzer / EntityLayerAnalyzer',
   layer: 'controller / entity',
   trigger:
-    'A Controller or Entity method has a business-logic score at or above the configured threshold (default 3). The score grows with the number of loops, conditionals, comparisons, and data-manipulation operators in the method body.',
+    'A Controller or Entity method has a business-logic score at or above the configured threshold (default 3). The score grows with the number of loops, conditionals, comparisons, and data-manipulation operators in the method body. Controller methods that only assemble HTTP/file responses, content types, filenames, or request paths are treated as transport-boundary code rather than business logic.',
   whyItMatters:
     'Controllers should only orchestrate HTTP concerns (parse input, call services, shape responses) and entities should only guard their own invariants. Complex decision-making and data manipulation in these layers makes the logic untestable without HTTP/persistence infrastructure and scatters business rules away from the service layer where they belong.',
   howToFix: [
     'Extract the branches/loops/calculations into a service method.',
     'Call that service from the controller/entity.',
     'Keep the controller and entity thin enough that their bodies are mostly delegation.',
+    'If the method only builds a `ResponseEntity`, resolves filenames, checks a missing `Resource`, detects content type, or normalizes request paths for file serving, it can remain in the controller boundary.',
   ],
   beforeCode: `@RestController
 public class OrderController {
@@ -297,7 +298,7 @@ public class OrderController {
         return orderService.calculateTotal(req.toOrder());
     }
 }`,
-  mitigationHint: 'Business logic should be in the Service layer, not in Controllers or Entities',
+  mitigationHint: 'Business logic should be in the Service layer; HTTP/file response assembly can remain at the controller boundary',
   configKey: 'enableBusinessLogicChecks',
   relatedRules: ['RICA-V104', 'RICA-V204'],
   sourceRef: 'src/analyzers/controllerLayerDetector.ts:347',
@@ -1472,15 +1473,16 @@ d({
   detector: 'checkFatInterface',
   layer: 'interface',
   trigger:
-    'An interface declares more methods than the configured limit, or clients use less than half of a reasonably sized interface surface.',
+    'An interface is larger than the configured candidate limit and observed clients use less than half of its declared methods. Method count alone does not trigger this rule.',
   whyItMatters:
     'Large interfaces force clients to depend on operations they do not use. This violates the Interface Segregation Principle and makes changes ripple through unrelated callers.',
   howToFix: [
-    'Split the interface by cohesive responsibilities.',
-    'Point each client at the smallest interface it actually needs.',
+    'Check which clients use which methods before changing the interface.',
+    'Split the interface only when clients depend on unrelated operations they do not use.',
+    'Point each client at the smallest interface it actually needs after the split.',
     'Keep broad facade contracts separate from focused domain ports.',
   ],
-  mitigationHint: 'Split this interface by responsibility (ISP) - clients should depend only on the methods they actually use',
+  mitigationHint: 'Review client usage before splitting. ISP applies when clients depend on methods they do not actually use.',
   configKey: 'enableDesignPatternChecks',
   relatedRules: ['RICA-V307', 'RICA-V302'],
   sourceRef: 'src/analyzers/designPatternAnalyzer.ts:588',
@@ -1597,10 +1599,11 @@ d({
   detector: 'checkMissingComposite',
   layer: 'domain / service',
   trigger:
-    'A loop branches on multiple `instanceof` checks to handle leaf and container-like objects differently.',
+    'A loop branches on multiple `instanceof` checks to handle domain-owned leaf and container-like objects differently. Framework tree traversal such as Jackson `JsonNode`, DOM `Element`, or `NodeList` walking is excluded.',
   whyItMatters:
     'Repeated type checks make tree-like structures hard to extend. A Composite interface lets leaves and containers expose one operation so clients stop branching on concrete types.',
   howToFix: [
+    'First confirm the checked types are project/domain types, not framework parser node types.',
     'Extract a shared component interface.',
     'Move type-specific behavior behind polymorphic implementations.',
     'Iterate over the component abstraction instead of branching with `instanceof`.',

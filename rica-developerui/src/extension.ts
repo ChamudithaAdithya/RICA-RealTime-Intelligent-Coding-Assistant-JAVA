@@ -22,6 +22,9 @@ import { AiQuickFixCodeActionProvider, showFixGuidance } from './ui/codeActionPr
 import { DocumentationCodeActionProvider } from './ui/documentationCodeActionProvider';
 import { openRicaDocumentation } from './ui/documentation';
 import { ensureRicaWorkspaceGitignore } from './infrastructure/ricaWorkspaceArtifacts';
+import { AiConfig, DEFAULT_AI_CONFIG } from './domain/analyzerConfig';
+
+const OPENAI_API_KEY_SECRET = 'rica.openaiApiKey';
 
 let astManager: ASTManager;
 let sourceProvider: SourceProvider;
@@ -33,6 +36,7 @@ let outputChannel: vscode.OutputChannel;
 let violationManager: ViolationManager;
 let aiCoordinator: AiAdvisoryCoordinator | undefined;
 let workspaceRoot: string;
+let currentAiConfig: AiConfig = { ...DEFAULT_AI_CONFIG };
 
 export async function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel('Java AST Analyzer');
@@ -71,7 +75,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // AI Reasoning advisory wiring — pipeline (M5) + M6 quick-fix surface
     workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? context.globalStorageUri.fsPath;
-    aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
+    aiCoordinator = await createAiCoordinator(
+        vscode.workspace.getConfiguration('javaAstAnalyzer'),
+        context.secrets,
+    );
 
     // AI Quick-Fix lightbulb actions (M6): reads violation.quickFix edits
     context.subscriptions.push(
@@ -94,6 +101,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('javaAstAnalyzer.openDocumentation', (url?: string) => {
             return openRicaDocumentation(context.extensionUri, url);
         }),
+        vscode.commands.registerCommand('javaAstAnalyzer.ignoreViolation', ignoreViolationWithConfirmation),
         vscode.commands.registerCommand('javaAstAnalyzer.showFixGuidance', showFixGuidance),
         vscode.window.registerUriHandler({
             handleUri: (uri: vscode.Uri) => {
@@ -107,15 +115,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Re-run analysis when relevant settings change
     context.subscriptions.push(
-        vscode.workspace.onDidChangeConfiguration(e => {
+        vscode.workspace.onDidChangeConfiguration(async e => {
             if (e.affectsConfiguration('javaAstAnalyzer')) {
                 outputChannel.appendLine('Configuration changed — re-analyzing...');
                 astManager.setExcludePatterns(
                     vscode.workspace.getConfiguration('javaAstAnalyzer').get<string[]>('excludePatterns', [])
                 );
-                aiCoordinator = createAiCoordinator(vscode.workspace.getConfiguration('javaAstAnalyzer'));
+                aiCoordinator = await createAiCoordinator(
+                    vscode.workspace.getConfiguration('javaAstAnalyzer'),
+                    context.secrets,
+                );
                 violationManager.update();
-                runAiAdvisory();
                 updateStatusBar('ready');
             }
         })
@@ -203,8 +213,8 @@ export async function activate(context: vscode.ExtensionContext) {
                     workspaceFolders[0].uri.fsPath,
                     activeEditor.document.uri.fsPath
                 );
-                await violationManager.onFileSaved(relativePath, activeEditor.document.getText());
-                runAiAdvisory();
+                violationManager.onFileSaved(relativePath, activeEditor.document.getText());
+                await runAiAdvisory('onSave');
                 updateStatusBar('ready');
             } else {
                 vscode.window.showWarningMessage('No Java file is currently open');
@@ -213,6 +223,46 @@ export async function activate(context: vscode.ExtensionContext) {
 
         vscode.commands.registerCommand('rica.aiReview', async () => {
             await runAiAdvisory('onDemand');
+        }),
+
+        vscode.commands.registerCommand('rica.setOpenAiApiKey', async () => {
+            const apiKey = await vscode.window.showInputBox({
+                title: 'RICA: Set OpenAI API Key',
+                prompt: 'Enter an OpenAI Platform API key. It will be stored in VS Code Secret Storage.',
+                placeHolder: 'sk-...',
+                password: true,
+                ignoreFocusOut: true,
+                validateInput: value => value.trim() ? undefined : 'An API key is required.',
+            });
+            if (apiKey === undefined) return;
+            await context.secrets.store(OPENAI_API_KEY_SECRET, apiKey.trim());
+            aiCoordinator = await createAiCoordinator(
+                vscode.workspace.getConfiguration('javaAstAnalyzer'),
+                context.secrets,
+            );
+            vscode.window.showInformationMessage('RICA stored the OpenAI API key securely. Run “RICA: Run AI Advisory Review” to test it.');
+        }),
+
+        vscode.commands.registerCommand('rica.clearOpenAiApiKey', async () => {
+            await context.secrets.delete(OPENAI_API_KEY_SECRET);
+            aiCoordinator = await createAiCoordinator(
+                vscode.workspace.getConfiguration('javaAstAnalyzer'),
+                context.secrets,
+            );
+            vscode.window.showInformationMessage('RICA removed the API key from VS Code Secret Storage.');
+        }),
+
+        vscode.commands.registerCommand('rica.openAiAuditLog', async () => {
+            const auditUri = vscode.Uri.file(path.join(workspaceRoot, '.rica', 'ai-audit.jsonl'));
+            try {
+                await vscode.workspace.fs.stat(auditUri);
+                const document = await vscode.workspace.openTextDocument(auditUri);
+                await vscode.window.showTextDocument(document, { preview: false });
+            } catch {
+                vscode.window.showInformationMessage(
+                    'No AI audit log exists yet. A log is created after a review has eligible candidates and AI audit logging is enabled.'
+                );
+            }
         }),
 
         vscode.commands.registerCommand('rica.showStatusSummary', () => {
@@ -237,9 +287,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Watch for document saves
     context.subscriptions.push(
-        vscode.workspace.onDidSaveTextDocument(document => {
+        vscode.workspace.onDidSaveTextDocument(async document => {
             if (document.languageId === 'java') {
-                fileWatcher.onDocumentSaved(document);
+                await fileWatcher.onDocumentSaved(document);
+                await runAiAdvisory('onSave');
             }
         })
     );
@@ -310,7 +361,7 @@ async function analyzeFullProject() {
 
             // Run analysis
             violationManager.update();
-            runAiAdvisory('onFullScan');
+            await runAiAdvisory('onFullScan');
             updateStatusBar('ready', result.fileCount, violationManager.getActiveViolations().length);
             vscode.window.showInformationMessage(
                 `Java AST: Analyzed ${result.fileCount} files (${result.nodeCount} nodes) in ${result.duration}ms`
@@ -323,49 +374,168 @@ async function analyzeFullProject() {
     });
 }
 
-/**
- * Fire-and-forget advisory pass. Config off, provider off, or events below the
- * configured trigger yield a no-op; every failure is logged and never throws.
- */
+async function ignoreViolationWithConfirmation(id?: string): Promise<void> {
+    if (!id) return;
+    const violation = violationManager.getActiveViolations().find(v => v.id === id);
+    const label = violation?.code ? `${violation.code}: ${violation.message}` : id;
+    const first = await vscode.window.showWarningMessage(
+        `Ignore this RICA finding as a false positive?\n\n${label}`,
+        { modal: true },
+        'Continue',
+    );
+    if (first !== 'Continue') return;
+
+    const second = await vscode.window.showWarningMessage(
+        'This will hide only this exact finding in this workspace. You can show and restore ignored findings from the Architecture Violations panel.',
+        { modal: true },
+        'Ignore Finding',
+    );
+    if (second !== 'Ignore Finding') return;
+
+    violationManager.ignoreViolation(id);
+    vscode.window.showInformationMessage(`RICA ignored ${violation?.code || 'the selected finding'} as a false positive.`);
+}
+
+/** Run the optional advisory pass without allowing provider failures to break analysis. */
 async function runAiAdvisory(trigger: 'onDemand' | 'onSave' | 'onFullScan' = 'onSave'): Promise<void> {
     if (!aiCoordinator) return;
-    const ai = aiCoordinator['deps'].config.ai as { enableAiAdvisory: boolean; aiProvider: string; aiTrigger: string };
-    if (!ai.enableAiAdvisory || ai.aiProvider === 'off') return;
-    if (trigger === 'onDemand' || triggerRank(trigger) >= triggerRank(ai.aiTrigger as 'onDemand' | 'onSave' | 'onFullScan')) {
-        try {
-            const result = await aiCoordinator.run(violationManager.getDeterministicViolations());
-            violationManager.setAdvisoryViolations(result.advisoryViolations);
-            if (ai.aiTrigger === 'onDemand' && trigger === 'onDemand') {
-                outputChannel.appendLine(
-                    `AI Review: ${result.annotatedCount} annotated, ${result.advisoryCount} advisory findings (${result.outcome})`
-                );
+    const ai = currentAiConfig;
+    const manual = trigger === 'onDemand';
+
+    if (!ai.enableAiAdvisory || ai.aiProvider === 'off') {
+        if (manual) {
+            const choice = await vscode.window.showWarningMessage(
+                'RICA AI Advisory is disabled. Enable it and select the OpenAI-compatible provider in Settings.',
+                'Open Settings',
+            );
+            if (choice === 'Open Settings') {
+                await vscode.commands.executeCommand('workbench.action.openSettings', 'javaAstAnalyzer.enableAiAdvisory');
             }
-        } catch (error: any) {
-            outputChannel.appendLine(`AI advisory pass failed: ${error.message}`);
         }
+        return;
+    }
+
+    // Automated runs must match the selected trigger exactly. Manual review is
+    // always allowed; selecting onDemand must not accidentally run on every save.
+    if (!manual && trigger !== ai.aiTrigger) return;
+
+    if (usesOfficialOpenAiEndpoint(ai) && !ai.aiApiKey?.trim()) {
+        if (manual) {
+            const choice = await vscode.window.showWarningMessage(
+                'RICA needs an OpenAI API key before it can run the AI Advisory review.',
+                'Set API Key',
+            );
+            if (choice === 'Set API Key') {
+                await vscode.commands.executeCommand('rica.setOpenAiApiKey');
+            }
+        }
+        return;
+    }
+
+    if (manual && Object.keys(violationManager.getFilesMap()).length === 0) {
+        const choice = await vscode.window.showInformationMessage(
+            'RICA needs a project analysis before the AI Advisory review.',
+            'Analyze Project',
+        );
+        if (choice !== 'Analyze Project') return;
+        await analyzeFullProject();
+    }
+
+    try {
+        outputChannel.appendLine(
+            `AI Review starting: provider=${ai.aiProvider}, model=${ai.aiModel}, trigger=${trigger}`
+        );
+        const executeReview = () => aiCoordinator!.run(violationManager.getDeterministicViolations());
+        const result = manual
+            ? await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `RICA AI Advisory — ${ai.aiModel}`,
+                    cancellable: false,
+                },
+                async progress => {
+                    progress.report({ message: 'Checking provider and reviewing eligible findings...' });
+                    return executeReview();
+                },
+            )
+            : await executeReview();
+        violationManager.setAdvisoryViolations(result.advisoryViolations);
+        outputChannel.appendLine(
+            `AI Review: model=${ai.aiModel}, candidates=${result.candidateCount}, annotated=${result.annotatedCount}, advisory=${result.advisoryCount}, outcome=${result.outcome}, latency=${result.latencyMs}ms`
+        );
+
+        if (!manual) return;
+        if (result.outcome === 'ai') {
+            const choice = await vscode.window.showInformationMessage(
+                `${ai.aiModel} reviewed ${result.candidateCount} candidate(s): ${result.annotatedCount} annotated and ${result.advisoryCount} advisory findings added.`,
+                'Open Violations',
+                'Open AI Audit Log',
+            );
+            if (choice === 'Open Violations') await vscode.commands.executeCommand('javaAstAnalyzer.showViolationsView');
+            if (choice === 'Open AI Audit Log') await vscode.commands.executeCommand('rica.openAiAuditLog');
+        } else if (result.outcome === 'heuristic' || result.outcome === 'offline') {
+            if (ai.aiProvider === 'openai-compatible') {
+                const choice = await vscode.window.showWarningMessage(
+                    'The OpenAI-compatible provider could not be reached or authenticated. RICA completed only its local heuristic review.',
+                    'Set API Key',
+                    'Show Output',
+                );
+                if (choice === 'Set API Key') await vscode.commands.executeCommand('rica.setOpenAiApiKey');
+                if (choice === 'Show Output') outputChannel.show(true);
+            } else {
+                const choice = await vscode.window.showWarningMessage(
+                    'Ollama could not be reached. RICA completed only its local heuristic review.',
+                    'Show Output',
+                );
+                if (choice === 'Show Output') outputChannel.show(true);
+            }
+        } else if (result.outcome === 'error') {
+            const choice = await vscode.window.showErrorMessage(
+                `RICA AI review failed: ${result.error ?? 'Unknown provider error'}`,
+                'Show Output',
+            );
+            if (choice === 'Show Output') outputChannel.show(true);
+        } else {
+            vscode.window.showInformationMessage(
+                'RICA found no eligible AI Advisory candidates. No model request was sent and no API tokens were used.'
+            );
+        }
+    } catch (error: any) {
+        outputChannel.appendLine(`AI advisory pass failed: ${error.message}`);
+        if (manual) vscode.window.showErrorMessage(`RICA AI advisory failed: ${error.message}`);
     }
 }
 
-/** event hierarchy: manual (0) < onSave (1) < onFullScan (2). */
-function triggerRank(t: 'onDemand' | 'onSave' | 'onFullScan'): number {
-    return t === 'onDemand' ? 0 : t === 'onSave' ? 1 : 2;
+function usesOfficialOpenAiEndpoint(ai: AiConfig): boolean {
+    if (ai.aiProvider !== 'openai-compatible') return false;
+    try {
+        const hostname = new URL(ai.aiEndpoint).hostname.toLowerCase();
+        return hostname === 'api.openai.com' || hostname.endsWith('.api.openai.com');
+    } catch {
+        return false;
+    }
 }
 
 /** Rebuild the AI coordinator from the current 'javaAstAnalyzer' workspace config. */
-function createAiCoordinator(cfg: vscode.WorkspaceConfiguration): AiAdvisoryCoordinator {
+async function createAiCoordinator(
+    cfg: vscode.WorkspaceConfiguration,
+    secrets: vscode.SecretStorage,
+): Promise<AiAdvisoryCoordinator> {
     const resolved = new VscodeConfigProvider().getConfig();
-    const aiConfig = {
-        enableAiAdvisory: cfg.get<boolean>('enableAiAdvisory', false),
-        aiProvider: cfg.get<'off' | 'ollama' | 'openai-compatible'>('aiProvider', 'ollama'),
-        aiEndpoint: cfg.get<string>('aiEndpoint', 'http://localhost:11434'),
-        aiApiKey: cfg.get<string>('aiApiKey', ''),
-        aiModel: cfg.get<string>('aiModel', 'qwen2.5-coder:7b'),
-        aiMaxTokensPerRequest: cfg.get<number>('aiMaxTokensPerRequest', 2000),
-        aiTimeoutMs: cfg.get<number>('aiTimeoutMs', 30000),
-        aiMaxCandidatesPerRun: cfg.get<number>('aiMaxCandidatesPerRun', 8),
-        aiTrigger: cfg.get<'onDemand' | 'onSave' | 'onFullScan'>('aiTrigger', 'onDemand'),
-        aiAuditLogEnabled: cfg.get<boolean>('aiAuditLogEnabled', true),
+    const secretApiKey = await secrets.get(OPENAI_API_KEY_SECRET);
+    const aiConfig: AiConfig = {
+        enableAiAdvisory: cfg.get<boolean>('enableAiAdvisory', DEFAULT_AI_CONFIG.enableAiAdvisory),
+        aiProvider: cfg.get<AiConfig['aiProvider']>('aiProvider', DEFAULT_AI_CONFIG.aiProvider),
+        aiEndpoint: cfg.get<string>('aiEndpoint', DEFAULT_AI_CONFIG.aiEndpoint).trim(),
+        aiApiKey: (secretApiKey || cfg.get<string>('aiApiKey', DEFAULT_AI_CONFIG.aiApiKey ?? '')).trim(),
+        aiModel: cfg.get<string>('aiModel', DEFAULT_AI_CONFIG.aiModel).trim(),
+        aiMaxTokensPerRequest: cfg.get<number>('aiMaxTokensPerRequest', DEFAULT_AI_CONFIG.aiMaxTokensPerRequest),
+        aiTimeoutMs: cfg.get<number>('aiTimeoutMs', DEFAULT_AI_CONFIG.aiTimeoutMs),
+        aiMaxCandidatesPerRun: cfg.get<number>('aiMaxCandidatesPerRun', DEFAULT_AI_CONFIG.aiMaxCandidatesPerRun),
+        aiTrigger: cfg.get<AiConfig['aiTrigger']>('aiTrigger', DEFAULT_AI_CONFIG.aiTrigger),
+        aiAuditLogEnabled: cfg.get<boolean>('aiAuditLogEnabled', DEFAULT_AI_CONFIG.aiAuditLogEnabled),
     };
+    currentAiConfig = aiConfig;
     const timeout = {
         timeoutMs: aiConfig.aiTimeoutMs,
         maxTokensPerRequest: aiConfig.aiMaxTokensPerRequest,
@@ -475,6 +645,9 @@ async function showStatusInfo() {
         { label: '$(json) Export Analysis Snapshot', description: 'Write ASTs, graph, violations, incremental maps, stats, and config as JSON' },
         { label: '$(browser) Open Browser Viewer', description: 'View AST in browser' },
         { label: '$(warning) Open Violations Panel', description: 'View architecture violations' },
+        { label: '$(sparkle) Run AI Advisory Review', description: `Use ${currentAiConfig.aiModel} to review eligible findings` },
+        { label: '$(key) Set OpenAI API Key', description: 'Store the key securely in VS Code Secret Storage' },
+        { label: '$(output) Open AI Audit Log', description: 'Inspect model decisions and reasoning from previous reviews' },
         { label: '$(trash) Reset Backend Data', description: 'Clear all stored AST data' }
     ];
 
@@ -502,6 +675,15 @@ async function showStatusInfo() {
             break;
         case '$(warning) Open Violations Panel':
             vscode.commands.executeCommand('javaAstAnalyzer.showViolationsView');
+            break;
+        case '$(sparkle) Run AI Advisory Review':
+            vscode.commands.executeCommand('rica.aiReview');
+            break;
+        case '$(key) Set OpenAI API Key':
+            vscode.commands.executeCommand('rica.setOpenAiApiKey');
+            break;
+        case '$(output) Open AI Audit Log':
+            vscode.commands.executeCommand('rica.openAiAuditLog');
             break;
         case '$(trash) Reset Backend Data':
             vscode.commands.executeCommand('javaAstAnalyzer.resetBackend');

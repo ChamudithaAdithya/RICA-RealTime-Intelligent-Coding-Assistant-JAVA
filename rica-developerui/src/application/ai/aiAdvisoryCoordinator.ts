@@ -11,6 +11,8 @@ import { runHeuristicAdvisor } from './heuristicAdvisor';
 import { hasSecurityAnnotation } from './triage';
 
 export interface AdvisoryRunResult {
+  /** Number of deterministic/advisory candidates considered in this run. */
+  candidateCount: number;
   /** Deterministic violations that received advisory annotations (same object refs). */
   annotatedCount: number;
   /** Net-new advisory violations (from missingCheck probes). */
@@ -52,7 +54,7 @@ export class AiAdvisoryCoordinator {
     const start = Date.now();
     const { config } = this.deps;
     const noop = (outcome: AdvisoryRunResult['outcome'], latencyMs: number): AdvisoryRunResult => ({
-      annotatedCount: 0, advisoryCount: 0, advisoryViolations: [], outcome, latencyMs,
+      candidateCount: 0, annotatedCount: 0, advisoryCount: 0, advisoryViolations: [], outcome, latencyMs,
     });
 
     if (!config.ai.enableAiAdvisory || config.ai.aiProvider === 'off') {
@@ -95,13 +97,13 @@ export class AiAdvisoryCoordinator {
       candidates,
       heuristicDecisions,
       useAi ? aiDecisions : [],
-      !useAi,
     );
 
     const latencyMs = Date.now() - start;
     this.writeAuditEntry(candidates, context, heuristicDecisions, aiDecisions, useAi, error, latencyMs);
 
     return {
+      candidateCount: candidates.length,
       annotatedCount: annotated,
       advisoryCount: advisory.length,
       advisoryViolations: advisory,
@@ -149,44 +151,39 @@ function merge(
   candidates: AiCandidate[],
   heuristic: AiDecision[],
   ai: AiDecision[],
-  aiOffline: boolean,
 ): MergedResult {
-  // Rank decision sources: AI (when available) over heuristic; keep first per candidate.
-  const ranked: AiDecision[] = [];
-  const seen = new Set<string>();
-  for (const d of [...heuristic, ...ai]) {
-    const key = d.violationId || `probe:${probeIndex(d, ranked)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    ranked.push(d);
-  }
-
-  const probes = candidates.filter(c => !c.violationId);
-
   let annotated = 0;
   const advisory: Violation[] = [];
-  for (const d of ranked) {
-    if (d.violationId) {
-      const violation = violations.find(v => v.id === d.violationId);
+  const aiByViolation = new Map(ai.filter(d => d.violationId).map(d => [d.violationId, d]));
+  const heuristicByViolation = new Map(heuristic.filter(d => d.violationId).map(d => [d.violationId, d]));
+  const aiProbeDecisions = ai.filter(d => !d.violationId);
+  const heuristicProbeDecisions = heuristic.filter(d => !d.violationId);
+  let aiProbeIndex = 0;
+  let heuristicProbeIndex = 0;
+
+  // Walk candidates, not raw decisions, so each candidate is merged once and
+  // provider decisions correctly take precedence over heuristic fallbacks.
+  for (const candidate of candidates) {
+    if (candidate.violationId) {
+      const decision = aiByViolation.get(candidate.violationId)
+        ?? heuristicByViolation.get(candidate.violationId);
+      if (!decision) continue;
+      const violation = violations.find(v => v.id === candidate.violationId);
       if (!violation) continue;
-      attachInsights(violation, d);
+      attachInsights(violation, decision);
       annotated++;
       continue;
     }
-    const probe = probes.shift();
-    if (!probe && d.findings.length > 0) continue;
-    const source = probe ?? candidates[candidates.length - 1];
-    if (!source) continue;
-    for (const finding of d.findings) {
-      advisory.push(advisoryViolation(source, d, finding));
+
+    const decision = aiProbeDecisions[aiProbeIndex++]
+      ?? heuristicProbeDecisions[heuristicProbeIndex++];
+    if (!decision) continue;
+    for (const finding of decision.findings) {
+      advisory.push(advisoryViolation(candidate, decision, finding));
     }
   }
 
   return { annotated, advisory };
-}
-
-function probeIndex(d: AiDecision, ranked: AiDecision[]): number {
-  return ranked.length;
 }
 
 function advisoryViolation(

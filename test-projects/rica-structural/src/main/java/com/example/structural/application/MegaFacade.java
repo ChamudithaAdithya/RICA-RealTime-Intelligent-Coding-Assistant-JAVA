@@ -1,6 +1,14 @@
 package com.example.structural.application;
 
 public class MegaFacade {
+    // V302 god facade
+    // RICA-V302 FIX:
+    // Split this large facade into smaller cohesive facades or application services.
+    // Keep orchestration close to the domain capability it belongs to.
+    // Example fixed shape:
+    //   billingFacade.runBilling();
+    //   notificationFacade.sendNotifications();
+    // instead of one class delegating every unrelated subsystem.
     private Dependency1 dependency1;
     private Dependency2 dependency2;
     private Dependency3 dependency3;

@@ -11,7 +11,6 @@ const {
 const { buildContext, buildCandidatePath } = require('../../dist/application/ai/contextBuilder');
 const { runHeuristicAdvisor } = require('../../dist/application/ai/heuristicAdvisor');
 const { AiAdvisoryCoordinator } = require('../../dist/application/ai/aiAdvisoryCoordinator');
-const { FileAuditLogger } = require('../../dist/infrastructure/ai/fileAuditLogger');
 const { parseDecisions } = require('../../dist/infrastructure/ai/parseDecisions');
 
 // ---------------------------------------------------------------------------
@@ -369,6 +368,23 @@ describe('AiAdvisory â€” coordinator', () => {
     assert.strictEqual(violation.id, before.id, 'nothing deleted or replaced');
   });
 
+  it('should prefer the AI decision over the heuristic decision for the same violation', async () => {
+    const violation = sampleViolation({ code: 'RICA-V106' });
+    const { coordinator } = makeCoordinator({
+      decisions: [{
+        violationId: violation.id,
+        verdict: 'NO_VIOLATION',
+        confidence: 0.92,
+        reasoning: 'OpenAI found the business rule is only boundary orchestration.',
+        findings: [],
+      }],
+    });
+    await coordinator.run([violation]);
+    assert.strictEqual(violation.aiInsights.verdict, 'NO_VIOLATION');
+    assert.strictEqual(violation.aiInsights.confidence, 0.92);
+    assert.ok(violation.aiInsights.reasoning.startsWith('OpenAI found'));
+  });
+
   it('should surface net-new advisory violations with detectorSource AiAdvisory', async () => {
     const { coordinator } = makeCoordinator({ available: false });
     const result = await coordinator.run([sampleViolation()]);
@@ -411,6 +427,12 @@ describe('AiAdvisory â€” coordinator', () => {
 });
 
 describe('AiAdvisory â€” parseDecisions', () => {
+  it('should parse the JSON-mode decisions object returned by OpenAI', () => {
+    const out = parseDecisions('{"decisions":[{"violationId":"a","verdict":"VIOLATION","confidence":0.9,"reasoning":"x","findings":[]}]}');
+    assert.strictEqual(out[0].verdict, 'VIOLATION');
+    assert.strictEqual(out[0].violationId, 'a');
+  });
+
   it('should parse fenced JSON arrays', () => {
     const out = parseDecisions('```json\n[{"violationId":"a","verdict":"NO_VIOLATION","confidence":0.7,"reasoning":"x","findings":[]}]\n```');
     assert.strictEqual(out[0].verdict, 'NO_VIOLATION');

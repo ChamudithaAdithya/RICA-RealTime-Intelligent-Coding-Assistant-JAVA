@@ -1,29 +1,45 @@
 import { AiDecision } from '../../domain/ai';
 
 /**
- * Robustly extract a JSON array of AiDecision from LLM output.
- * Tolerates code fences, prose around the JSON, and stray characters.
+ * Extract AiDecision values from either the OpenAI JSON-mode object
+ * ({"decisions": [...]}) or the legacy top-level array response.
  */
 export function parseDecisions(raw: string): AiDecision[] {
   const cleaned = raw
     .replace(/```json/gi, '')
     .replace(/```/g, '')
     .trim();
-  const start = cleaned.indexOf('[');
-  const end = cleaned.lastIndexOf(']');
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error('AI response did not contain a JSON array of decisions');
-  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(cleaned.slice(start, end + 1));
+    parsed = JSON.parse(cleaned);
   } catch (e) {
-    throw new Error(`AI response was not valid JSON: ${(e as Error).message}`);
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error(`AI response was not valid JSON: ${(e as Error).message}`);
+    }
+    try {
+      parsed = JSON.parse(cleaned.slice(start, end + 1));
+    } catch (nested) {
+      throw new Error(`AI response was not valid JSON: ${(nested as Error).message}`);
+    }
   }
-  if (!Array.isArray(parsed)) {
-    throw new Error('AI response was not a JSON array');
+
+  const decisions = Array.isArray(parsed)
+    ? parsed
+    : isRecord(parsed) && Array.isArray(parsed.decisions)
+      ? parsed.decisions
+      : undefined;
+  if (!decisions) {
+    throw new Error('AI response did not contain a decisions array');
   }
-  return parsed.map((item) => normalizeDecision(item as Record<string, unknown>));
+  return decisions
+    .filter(isRecord)
+    .map(normalizeDecision);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function normalizeDecision(item: Record<string, unknown>): AiDecision {

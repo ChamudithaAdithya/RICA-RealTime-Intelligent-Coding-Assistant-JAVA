@@ -39,6 +39,8 @@ simlea-full.json
 artifacts/**
 engine/**
 releases/**
+outputs/**
+DEMONSTRATION_GUIDE.md
 scripts/**
 src/**
 temp-test/**

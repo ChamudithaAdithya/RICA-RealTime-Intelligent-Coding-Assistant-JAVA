@@ -1,4 +1,4 @@
-import { FullASTOutput, ClassInfo, MethodCall, ObjectCreation, ImportInfo } from '../astTypes';
+import { FullASTOutput, ClassInfo, Method, MethodCall, ObjectCreation, ImportInfo } from '../astTypes';
 import { DiagnosticRange } from '../types/violations';
 
 export interface ControllerLayerViolation {
@@ -346,7 +346,7 @@ export class ControllerLayerAnalyzer {
           // Require a minimum method size (LOC) so simple validation like
           // `if (input == null) throw` is not flagged as business logic.
           const methodLoc = (method.endLine || method.startLine || 0) - (method.startLine || 0);
-          if (businessLogicScore >= this.businessLogicThreshold && methodLoc >= 5) { // Threshold for significant business logic
+          if (businessLogicScore >= this.businessLogicThreshold && methodLoc >= 5 && !this.isControllerBoundaryAdapterMethod(method)) { // Threshold for significant business logic
             violations.push({
               type: 'business-logic',
               message: `Controller method '${method.name}' contains significant business logic (score: ${businessLogicScore}). Consider moving logic to service layer.`,
@@ -529,5 +529,86 @@ export class ControllerLayerAnalyzer {
   private isRawSQLType(typeName: string): boolean {
     const raw = typeName.replace(/<.*>/g, '').replace(/\[\]/g, '').trim();
     return this.rawSQLPatterns.some(p => raw === p || raw.endsWith('.' + p));
+  }
+
+  private isControllerBoundaryAdapterMethod(method: Method): boolean {
+    const returnType = method.returnType.replace(/\s+/g, '');
+    const methodName = method.name.toLowerCase();
+    const calls = method.calledMethods ?? [];
+    const decisions = method.complexityMetrics?.decisionPoints ?? method.body?.complexityMetrics?.decisionPoints ?? [];
+
+    const returnsHttpResource =
+      /ResponseEntity<.*Resource.*>|ResponseEntity<Resource>|Resource/.test(returnType);
+    const nameLooksLikeFileResponse =
+      /(file|resource|image|download|upload|responseentity|contenttype|signature)/i.test(method.name);
+    const hasResponseAssembly = calls.some(call =>
+      call.targetClass === 'ResponseEntity' ||
+      call.receiverType === 'ResponseEntity' ||
+      ['ok', 'notFound', 'status', 'header', 'contentType', 'body', 'build'].includes(call.calledMethodName)
+    );
+    const boundaryCallCount = calls.filter(call => this.isBoundaryAdapterCall(call)).length;
+
+    if (!returnsHttpResource || !nameLooksLikeFileResponse || !hasResponseAssembly || boundaryCallCount < 3) {
+      return false;
+    }
+
+    // File-serving controllers often need defensive transport checks:
+    // missing resource, default filename, content type fallback, and OS path normalization.
+    // These are adapter concerns, not domain/business rules.
+    if (decisions.length === 0) {
+      return true;
+    }
+
+    return decisions.every(decision => this.isBoundaryAdapterCondition(decision.condition ?? '')) ||
+      (methodName.includes('resource') && boundaryCallCount >= 5);
+  }
+
+  private isBoundaryAdapterCall(call: MethodCall): boolean {
+    const methodName = call.calledMethodName;
+    const typeName = call.receiverType || call.targetClass || '';
+    const variableName = call.receiverVariableName || '';
+
+    return (
+      typeName === 'ResponseEntity' ||
+      typeName === 'Resource' ||
+      typeName === 'Files' ||
+      typeName === 'Path' ||
+      typeName === 'Paths' ||
+      typeName === 'URLDecoder' ||
+      typeName === 'StandardCharsets' ||
+      typeName === 'MediaType' ||
+      typeName === 'HttpHeaders' ||
+      typeName === 'HttpServletRequest' ||
+      typeName === 'String' ||
+      variableName === 'request' ||
+      this.isAllowedFileMethod(methodName) ||
+      [
+        'ok', 'notFound', 'status', 'header', 'contentType', 'body', 'build',
+        'getRequestURI', 'decode', 'replace', 'substring', 'indexOf', 'lastIndexOf',
+        'length', 'startsWith', 'matches', 'trim', 'isEmpty', 'toLowerCase',
+        'endsWith', 'parseMediaType', 'println',
+      ].includes(methodName)
+    );
+  }
+
+  private isBoundaryAdapterCondition(condition: string): boolean {
+    const normalized = condition.replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+      return true;
+    }
+
+    return (
+      /\bnull\b/.test(normalized) ||
+      /\.exists\s*\(/.test(normalized) ||
+      /\.isEmpty\s*\(/.test(normalized) ||
+      /\.trim\s*\(/.test(normalized) ||
+      /\.endsWith\s*\(/.test(normalized) ||
+      /\.startsWith\s*\(/.test(normalized) ||
+      /\.matches\s*\(/.test(normalized) ||
+      /\bcontentType\b/.test(normalized) ||
+      /\bfileName\b/.test(normalized) ||
+      /\bpathToLoad\b/.test(normalized) ||
+      /\bnormalizedPath\b/.test(normalized)
+    );
   }
 }

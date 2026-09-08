@@ -9,4 +9,5 @@ public class OrderRepository {
     public OrderEntity findById(Long id){ return new OrderEntity(); }
     public List<OrderEntity> findAll(){ return List.of(); }
     public void save(OrderEntity e){}
+    public long count(){ return 0; }
 }

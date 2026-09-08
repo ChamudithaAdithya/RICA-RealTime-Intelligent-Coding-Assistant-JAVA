@@ -285,6 +285,34 @@ export class ServiceLayerAnalyzer {
       method.parameters.length === 0 && !method.returnType.startsWith('void');
     const isSetter = method.name.startsWith('set') && method.name.length > 3 &&
       method.parameters.length === 1 && method.returnType.startsWith('void');
-    return isGetter || isSetter;
+    if (!isGetter && !isSetter) {
+      return false;
+    }
+
+    return this.hasTrivialAccessorBody(method);
+  }
+
+  private hasTrivialAccessorBody(method: Method): boolean {
+    const body = method.body;
+    const calledMethods = method.calledMethods ?? [];
+    const createdObjects = method.createdObjects ?? [];
+    const decisionPoints = method.complexityMetrics?.decisionPoints ?? body?.complexityMetrics?.decisionPoints ?? [];
+    const localVariables = body?.localVariables ?? [];
+    const persistenceWrites = body?.persistenceWrites ?? [];
+    const writtenVariables = body?.writtenVariables ?? [];
+
+    if (calledMethods.length > 0 || createdObjects.length > 0 || decisionPoints.length > 0 || persistenceWrites.length > 0) {
+      return false;
+    }
+
+    if (localVariables.length > 0) {
+      return false;
+    }
+
+    if (method.name.startsWith('get')) {
+      return writtenVariables.length === 0;
+    }
+
+    return writtenVariables.length <= 1;
   }
 }

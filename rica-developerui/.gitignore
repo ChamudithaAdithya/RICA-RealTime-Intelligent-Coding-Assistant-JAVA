@@ -21,6 +21,7 @@ target/
 *.txt
 !README.md
 !USER_MANUAL.md
+!DEMONSTRATION_GUIDE.md
 !CHANGELOG.md
 !LICENSE.md
 !LICENSE.txt

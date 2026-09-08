@@ -39,11 +39,11 @@ export interface AnalyzerConfig {
 
 export const DEFAULT_AI_CONFIG: AiConfig = {
   enableAiAdvisory: false,
-  aiProvider: 'ollama',
-  aiEndpoint: 'http://localhost:11434',
+  aiProvider: 'openai-compatible',
+  aiEndpoint: 'https://api.openai.com',
   aiApiKey: '',
-  aiModel: 'qwen2.5-coder:7b',
-  aiMaxTokensPerRequest: 2000,
+  aiModel: 'gpt-4o-mini',
+  aiMaxTokensPerRequest: 4096,
   aiTimeoutMs: 30000,
   aiMaxCandidatesPerRun: 8,
   aiTrigger: 'onDemand',

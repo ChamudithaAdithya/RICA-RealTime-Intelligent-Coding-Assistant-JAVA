@@ -4,6 +4,11 @@ import javax.annotation.Resource;
 
 @Resource
 public class JaxOrderResource {
+    // RICA-V204 FIX:
+    // Move discount rules and loops to a service method.
+    // The resource should only accept input and return the service result.
+    // Example fixed shape:
+    //   return orderPricingService.calculateDiscount(dto);
     public double calculateDiscount(OrderDto dto) {
         double price = 100;
         if (dto.vip) price = price * 0.8;

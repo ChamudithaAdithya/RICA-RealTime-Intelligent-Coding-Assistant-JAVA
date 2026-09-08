@@ -28,6 +28,18 @@ export class AiQuickFixCodeActionProvider implements vscode.CodeActionProvider {
       const violation = this.getViolations().find(v => v.id === diagnosticCode(diag));
       if (!violation) continue;
 
+      const ignoreAction = new vscode.CodeAction(
+        `RICA: Ignore ${violation.code || 'this finding'} as false positive`,
+        vscode.CodeActionKind.QuickFix,
+      );
+      ignoreAction.diagnostics = [diag];
+      ignoreAction.command = {
+        title: 'Ignore as false positive',
+        command: 'javaAstAnalyzer.ignoreViolation',
+        arguments: [violation.id],
+      };
+      actions.push(ignoreAction);
+
       for (const remediation of violation.remediationSuggestions || []) {
         const action = new vscode.CodeAction(
           remediation.edits?.length

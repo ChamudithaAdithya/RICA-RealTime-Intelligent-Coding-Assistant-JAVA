@@ -9,6 +9,12 @@ public class DecoratedService {
     private PaymentGateway paymentGateway;
     private AuditSink auditSink;
     // V313 missing decorator — logger interleaved
+    // RICA-V313 FIX:
+    // Move cross-cutting logging/auditing into a decorator, interceptor, or aspect.
+    // Keep this method focused on business work instead of repeated support calls.
+    // Example fixed shape:
+    //   OrderService service = new LoggingOrderServiceDecorator(coreOrderService);
+    // and keep save() focused on validate, authorize, and persist.
     public void save(Order o) {
         logger.info("start");
         if (o == null) {

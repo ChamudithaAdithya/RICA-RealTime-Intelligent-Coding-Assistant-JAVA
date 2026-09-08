@@ -1,32 +1,41 @@
 'use strict';
 
 /**
- * Live smoke test for the AI Reasoning adapter.
- * Validates the full round-trip against a REAL Ollama endpoint:
- *   1. isAvailable() ping
- *   2. buildMessages() -> evaluate() over a canned OrderResource context
- *   3. parseDecisions() -> normalized AiDecision[]
- * No VS Code required — runs from plain Node against compiled src output.
+ * Live smoke test for the AI advisory adapter.
  *
- * Usage:
- *   node scripts/aiSmokeTest.js [endpoint] [model]
- *   OLLAMA_ENDPOINT=http://<tunnel-or-host>:11434 node scripts/aiSmokeTest.js
- * Defaults: endpoint http://localhost:11434, model qwen2.5-coder:7b
+ * It validates a real provider round trip without starting VS Code:
+ *   1. provider reachability check
+ *   2. chat completion over a small RICA diagnostic context
+ *   3. parsed AiDecision[] output
  *
- * Exit code 0 = full round-trip OK; 1 = ping/reachable failed; 2 = evaluate failed.
+ * Ollama:
+ *   npm run compile
+ *   node scripts/aiSmokeTest.js
+ *   OLLAMA_ENDPOINT=http://localhost:11434 OLLAMA_MODEL=qwen2.5-coder:7b node scripts/aiSmokeTest.js
+ *
+ * OpenAI with gpt-4o-mini:
+ *   npm run compile
+ *   AI_PROVIDER=openai-compatible AI_ENDPOINT=https://api.openai.com AI_MODEL=gpt-4o-mini AI_API_KEY=<key> node scripts/aiSmokeTest.js
+ *
+ * Exit code 0 = full round trip OK.
+ * Exit code 1 = provider health/reachability failed.
+ * Exit code 2 = model response/parsing failed.
  */
 
 const { OllamaAiAdapter } = require('../dist/infrastructure/ai/ollamaAiAdapter');
 const { OpenAICompatibleAiAdapter } = require('../dist/infrastructure/ai/openaiCompatibleAiAdapter');
-const { httpRequest } = require('../dist/infrastructure/ai/httpJson');
 
-const endpoint = (process.argv[2] || process.env.OLLAMA_ENDPOINT || 'http://localhost:11434').replace(/\/+$/, '');
-const model = process.argv[3] || process.env.OLLAMA_MODEL || 'qwen2.5-coder:7b';
 const providerKind = process.env.AI_PROVIDER === 'openai-compatible' ? 'openai-compatible' : 'ollama';
+const defaultEndpoint = providerKind === 'openai-compatible'
+  ? (process.env.AI_ENDPOINT || 'https://api.openai.com')
+  : (process.env.OLLAMA_ENDPOINT || 'http://localhost:11434');
+const endpoint = (process.argv[2] || defaultEndpoint).replace(/\/+$/, '');
+const defaultModel = providerKind === 'openai-compatible' ? 'gpt-4o-mini' : 'qwen2.5-coder:7b';
+const model = process.argv[3] || process.env.AI_MODEL || process.env.OLLAMA_MODEL || defaultModel;
+const timeoutMs = Number(process.env.AI_TIMEOUT_MS || process.env.OLLAMA_TIMEOUT_MS || 60000);
+const maxTokensPerRequest = Number(process.env.AI_MAX_TOKENS || 4096);
+const apiKey = process.env.AI_API_KEY || '';
 
-const timeoutMs = Number(process.env.OLLAMA_TIMEOUT_MS || 60000);
-
-// Minimal but realistic bounded context mirroring aiAdvisory.test.js fixtures.
 const context = {
   language: 'java',
   boundary: 'controller -> service -> repository; entity/dto never cross the API boundary',
@@ -38,7 +47,7 @@ const context = {
       filePath: 'src/main/java/com/example/api/OrderResource.java',
       lineNumber: 14,
       severity: 'warning',
-      reason: 'Endpoint returns internal domain object (OrderSaveResult) instead of a DTO (ambiguous)',
+      reason: 'Endpoint returns internal domain object instead of a DTO.',
       featureType: 'ambiguity',
       evidence: 'OrderResource.placeOrder',
     },
@@ -49,7 +58,7 @@ const context = {
       filePath: 'src/main/java/com/example/api/OrderResource.java',
       lineNumber: 12,
       severity: 'warning',
-      reason: 'Mutating endpoint (POST) with no authorization annotation on the method or its call chain (semantic probe)',
+      reason: 'Mutating endpoint with no visible authorization annotation.',
       featureType: 'missingCheck',
       evidence: 'OrderResource.placeOrder(OrderRequest)',
     },
@@ -94,8 +103,8 @@ const context = {
     },
   ],
   riskNotes: [
-    'Authentication is judged from method/class annotations only; framework-level security filters are not visible to RICA.',
-    'Dynamic dispatch beyond simple-name/interface OR-branch expansion is not resolved in v1.',
+    'Authentication is judged from method/class annotations only.',
+    'Framework-level filters may exist outside the visible source slice.',
   ],
 };
 
@@ -104,46 +113,39 @@ async function main() {
   console.log(`[1/4] Endpoint : ${endpoint}`);
   console.log(`[1/4] Model    : ${model}`);
   console.log(`[1/4] Timeout  : ${timeoutMs}ms`);
+  console.log(`[1/4] API key  : ${providerKind === 'openai-compatible' ? (apiKey ? 'set' : 'missing') : 'not required'}`);
   console.log('');
 
-  const timeout = { timeoutMs, maxTokensPerRequest: 2000 };
+  const adapterOptions = { timeoutMs, maxTokensPerRequest, apiKey };
   const adapter = providerKind === 'openai-compatible'
-    ? new OpenAICompatibleAiAdapter(endpoint, model, timeout)
-    : new OllamaAiAdapter(endpoint, model, timeout);
+    ? new OpenAICompatibleAiAdapter(endpoint, model, adapterOptions)
+    : new OllamaAiAdapter(endpoint, model, adapterOptions);
 
   const t0 = Date.now();
   const available = await adapter.isAvailable();
-  console.log(`[2/4] isAvailable() -> ${available}  (${Date.now() - t0}ms)`);
+  console.log(`[2/4] isAvailable() -> ${available} (${Date.now() - t0}ms)`);
   if (!available) {
     console.error('');
-    console.error(`ERROR: ${endpoint} is not reachable or does not answer /api/tags (ollama) or /models (openai-compatible).`);
-    console.error('  - Local:  ensure `ollama serve` is running, then `ollama pull <model>`.');
-    console.error('  - Colab:  paste your ngrok/cloudflared/Colab public URL as the endpoint.');
-    console.error('  - Verify: curl ' + (providerKind === 'openai-compatible'
-      ? `${endpoint}/models`
-      : `${endpoint}/api/tags`));
+    console.error(`ERROR: ${endpoint} is not reachable or did not accept the configured credentials.`);
+    if (providerKind === 'openai-compatible') {
+      console.error('  - Check AI_ENDPOINT, for example: https://agentrouter.org');
+      console.error('  - Check AI_MODEL, for example: glm-5.3');
+      console.error('  - Check AI_API_KEY is set in this terminal session.');
+    } else {
+      console.error('  - Ensure `ollama serve` is running.');
+      console.error('  - Ensure the model is pulled, for example: ollama pull qwen2.5-coder:7b');
+    }
     process.exit(1);
   }
 
-  console.log('   context: ' + JSON.stringify(context).length + ' chars, ' +
-    context.candidates.length + ' candidates, ' + context.executionPath.length + ' path steps');
+  console.log(`   context: ${JSON.stringify(context).length} chars, ${context.candidates.length} candidates, ${context.executionPath.length} path steps`);
   console.log('');
+  console.log('[3/4] Provider reachable; sending advisory context...');
 
-  const tw = Date.now();
-  console.log('[3/4] warming model (loads weights into VRAM with a tiny request)...');
-  try {
-    await adapter.warmUp({ timeoutMs, numPredict: 8 });
-    console.log(`   warm-up OK (${Date.now() - tw}ms)`);
-  } catch (e) {
-    console.error(`   warm-up failed (${Date.now() - tw}ms) — continuing anyway: ${e.message}`);
-  }
-  console.log('');
-
-  console.log('[4/4] evaluate() -> sending to model...');
   try {
     const decisions = await adapter.evaluate(context);
     const latency = Date.now() - t0;
-    console.log(`   OK (${latency}ms). Parsed ${decisions.length} decision(s):`);
+    console.log(`[4/4] OK (${latency}ms). Parsed ${decisions.length} decision(s):`);
     for (const d of decisions) {
       console.log(`   - ${d.violationId || '(probe)'} : ${d.verdict} conf=${d.confidence} findings=${d.findings.length}`);
       console.log(`     reasoning: ${d.reasoning}`);
@@ -152,14 +154,18 @@ async function main() {
       }
     }
     console.log('');
-    console.log('[5/4] DONE — full LLM round-trip OK.');
+    console.log('DONE - full AI advisory round trip OK.');
     process.exit(0);
   } catch (e) {
     console.error('');
     console.error(`ERROR during evaluate(): ${e.message}`);
-    console.error('  - Model not pulled?    `ollama pull ' + model + '`  (or your Colab notebook did not pull it).');
-    console.error('  - Wrong schema reply?  Some models ignore "format":"json"; the response may need stricter prompting.');
-    console.error('  - Tunnel down?        Check the Colab notebook is still running and the tunnel URL is current.');
+    if (providerKind === 'openai-compatible') {
+      console.error('  - Check that the model is available to your account.');
+      console.error('  - Some routed models ignore JSON-only instructions; try a stronger coding model if parsing fails.');
+      console.error('  - If authentication failed, regenerate the key and set AI_API_KEY again.');
+    } else {
+      console.error('  - Check the Ollama model name and server status.');
+    }
     process.exit(2);
   }
 }
